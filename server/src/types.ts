@@ -55,6 +55,21 @@ export interface ActivityItem {
   timestamp: string
 }
 
+export interface DashboardStats {
+  total: number
+  compliant: number
+  nonCompliant: number
+  warning: number
+  windows: number
+  mac: number
+  sources: {
+    intune: number
+    kandji: number
+    manageEngine: number
+  }
+  mock: boolean
+}
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T
