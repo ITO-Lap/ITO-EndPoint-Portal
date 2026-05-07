@@ -21,25 +21,30 @@ export function ComplianceDonut({ segments }: ComplianceDonutProps) {
 
   return (
     <DashboardCard title="Compliance Status Overview">
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr] grid-cols-1 w-full">
-        <div className="flex items-center justify-center min-w-0">
-          <div className="relative flex h-40 w-40 md:h-48 md:w-48 items-center justify-center rounded-full bg-slate-100 shadow-inner shadow-slate-900/10 flex-shrink-0">
+      <div className="flex items-center gap-5 w-full min-w-0">
+        {/* Donut chart */}
+        <div className="flex-shrink-0 flex items-center justify-center">
+          <div className="relative flex h-[140px] w-[140px] items-center justify-center rounded-full bg-slate-100 shadow-inner shadow-slate-900/10">
             <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${gradient})` }} />
-            <div className="relative flex h-24 w-24 md:h-32 md:w-32 items-center justify-center rounded-full bg-white text-center shadow-lg shadow-slate-900/10">
+            <div className="relative flex h-[76px] w-[76px] items-center justify-center rounded-full bg-white text-center shadow-lg shadow-slate-900/10">
               <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Total</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">12,842</p>
+                <p className="text-[0.55rem] uppercase tracking-wider text-slate-400">Total</p>
+                <p className="mt-0.5 text-sm font-bold text-slate-900">12,842</p>
               </div>
             </div>
           </div>
         </div>
-        <div className="space-y-4 min-w-0 w-full">
+
+        {/* Legend */}
+        <div className="flex-1 space-y-2.5 min-w-0">
           {segmentsWithPercent.map((segment) => (
-            <div key={segment.label} className="flex items-center gap-3 rounded-3xl border border-slate-200/80 bg-slate-50 p-4 min-w-0">
-              <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: segment.color }} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900 truncate">{segment.label}</p>
-                <p className="text-sm text-slate-500 truncate">{segment.value.toLocaleString()} ({segment.percent})</p>
+            <div key={segment.label} className="flex items-start gap-2.5 min-w-0">
+              <span className="mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: segment.color }} />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-900 leading-tight">{segment.label}</p>
+                <p className="text-[0.65rem] text-slate-500 mt-0.5">
+                  {segment.value.toLocaleString()} <span className="text-slate-400">·</span> {segment.percent}
+                </p>
               </div>
             </div>
           ))}

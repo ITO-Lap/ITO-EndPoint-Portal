@@ -26,7 +26,7 @@ export interface ConnectedSource {
   icon: LucideIcon
 }
 
-export interface DeviceSummaryData {
+export interface DeviceData {
   deviceName: string
   user: string
   serialNumber: string
@@ -34,10 +34,23 @@ export interface DeviceSummaryData {
   osVersion: string
   managementSource: string
   lastCheckIn: string
-  complianceState: string
+  complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
   encryptionStatus: string
-  badgeState: string
+  primaryIssue: string
+  policyFailed: string
+  severity: 'Low' | 'Medium' | 'High'
+  confidence: string
+  firstDetected: string
+  lastDetected: string
+  issueSource: string
+  recommendedRunbook: string
+  nextSteps: string[]
+  issueCategory: string
+  hasOpenIssue: boolean
+  badgeState?: string
 }
+
+export type DeviceSummaryData = DeviceData
 
 export interface ComplianceDetailRow {
   label: string
@@ -75,4 +88,19 @@ export interface ActivityItem {
   message: string
   time: string
   color: 'green' | 'yellow' | 'red'
+}
+
+export interface NotificationItem {
+  id: string
+  message: string
+  read: boolean
+}
+
+export type ToastType = 'success' | 'error' | 'info'
+
+export interface ToastItem {
+  id: string
+  type: ToastType
+  title: string
+  message: string
 }

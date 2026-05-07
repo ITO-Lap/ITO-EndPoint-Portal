@@ -17,7 +17,7 @@ interface BadgeProps {
 
 export function Badge({ label, variant = 'gray', className = '' }: BadgeProps) {
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[0.78rem] font-semibold ${styles[variant]} ${className}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-semibold ${styles[variant]} ${className}`}>
       {label}
     </span>
   )
