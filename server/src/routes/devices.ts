@@ -5,21 +5,22 @@ import { mockDevices } from '../data/mockDevices.js'
 import { getIntuneDevices, isIntuneConfigured } from '../services/intune.js'
 import { getKandjiDevices, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
+import { recordFetchResult } from '../store/integrationStore.js'
 import type { Device, DashboardStats } from '../types.js'
 
 const router = Router()
 
 const listSchema = z.object({
-  q: z.string().optional(),
-  source: z.enum(['intune', 'kandji', 'manageengine', 'all']).optional().default('all'),
+  q:          z.string().optional(),
+  source:     z.enum(['intune', 'kandji', 'manageengine', 'all']).optional().default('all'),
   compliance: z.enum(['Compliant', 'Non-Compliant', 'Warning']).optional(),
-  platform: z.enum(['Windows', 'macOS', 'Linux']).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional().default(100),
+  platform:   z.enum(['Windows', 'macOS', 'Linux']).optional(),
+  limit:      z.coerce.number().int().min(1).max(200).optional().default(100),
 })
 
 const sourceLabel: Record<string, Device['managementSource']> = {
-  intune: 'Microsoft Intune',
-  kandji: 'Kandji',
+  intune:       'Microsoft Intune',
+  kandji:       'Kandji',
   manageengine: 'ManageEngine',
 }
 
@@ -28,21 +29,32 @@ async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> 
   if (!anyConfigured) return { devices: mockDevices, mock: true }
 
   const [intuneResult, kandjiResult, meResult] = await Promise.allSettled([
-    isIntuneConfigured() ? getIntuneDevices() : Promise.resolve([]),
-    isKandjiConfigured() ? getKandjiDevices() : Promise.resolve([]),
-    isManageEngineConfigured() ? getManageEngineDevices() : Promise.resolve([]),
+    isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await getIntuneDevices();       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
+    isKandjiConfigured()       ? (async () => { const t0 = Date.now(); const d = await getKandjiDevices();       recordFetchResult('kandji',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
+    isManageEngineConfigured() ? (async () => { const t0 = Date.now(); const d = await getManageEngineDevices(); recordFetchResult('manageengine', { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })() : Promise.resolve([]),
   ])
 
   const devices: Device[] = []
-  for (const result of [intuneResult, kandjiResult, meResult]) {
+  const sources = [
+    { result: intuneResult,  key: 'intune'        },
+    { result: kandjiResult,  key: 'kandji'        },
+    { result: meResult,      key: 'manageengine'  },
+  ] as const
+
+  for (const { result, key } of sources) {
     if (result.status === 'fulfilled') {
       devices.push(...result.value)
     } else {
-      console.error('[fetchAllDevices] source error:', result.reason)
+      console.error(`[fetchAllDevices] ${key} error:`, result.reason)
+      recordFetchResult(key, {
+        deviceCount: 0,
+        lastFetchAt: Date.now(),
+        latencyMs:   0,
+        error:       result.reason instanceof Error ? result.reason.message : 'Unknown error',
+      })
     }
   }
 
-  // Fall back to mock if every configured source failed
   return devices.length > 0 ? { devices, mock: false } : { devices: mockDevices, mock: true }
 }
 
@@ -80,15 +92,15 @@ router.get('/stats', asyncHandler(async (_req, res) => {
   const { devices, mock } = await fetchAllDevices()
 
   const stats: DashboardStats = {
-    total: devices.length,
-    compliant: devices.filter(d => d.complianceState === 'Compliant').length,
+    total:        devices.length,
+    compliant:    devices.filter(d => d.complianceState === 'Compliant').length,
     nonCompliant: devices.filter(d => d.complianceState === 'Non-Compliant').length,
-    warning: devices.filter(d => d.complianceState === 'Warning').length,
-    windows: devices.filter(d => d.platform === 'Windows').length,
-    mac: devices.filter(d => d.platform === 'macOS').length,
+    warning:      devices.filter(d => d.complianceState === 'Warning').length,
+    windows:      devices.filter(d => d.platform === 'Windows').length,
+    mac:          devices.filter(d => d.platform === 'macOS').length,
     sources: {
-      intune: devices.filter(d => d.managementSource === 'Microsoft Intune').length,
-      kandji: devices.filter(d => d.managementSource === 'Kandji').length,
+      intune:       devices.filter(d => d.managementSource === 'Microsoft Intune').length,
+      kandji:       devices.filter(d => d.managementSource === 'Kandji').length,
       manageEngine: devices.filter(d => d.managementSource === 'ManageEngine').length,
     },
     mock,

@@ -8,6 +8,7 @@ import runbooksRouter from './routes/runbooks.js'
 import notificationsRouter from './routes/notifications.js'
 import activityRouter from './routes/activity.js'
 import aiRouter from './routes/ai.js'
+import integrationsRouter from './routes/integrations.js'
 
 dotenv.config()
 
@@ -23,6 +24,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/api/devices', devicesRouter)
+app.use('/api/integrations', integrationsRouter)
 app.use('/api/runbooks', runbooksRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/activity', activityRouter)

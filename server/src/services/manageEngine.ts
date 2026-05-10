@@ -1,4 +1,6 @@
 import type { Device } from '../types.js'
+import type { RuntimeManageEngineConfig } from '../store/integrationStore.js'
+import { getManageEngineConfig } from '../store/integrationStore.js'
 
 interface MEComputer {
   resource_id: string | number
@@ -29,34 +31,34 @@ function mapMEDevice(d: MEComputer): Device {
     : 'Unknown'
 
   return {
-    id: String(d.resource_id),
-    deviceName: d.name,
-    user: d.email_id ?? 'Unknown',
-    serialNumber: d.serial_number ?? 'Unknown',
-    platform: mappedPlatform,
-    osVersion: d.os_version ?? 'Unknown',
+    id:               String(d.resource_id),
+    deviceName:       d.name,
+    user:             d.email_id ?? 'Unknown',
+    serialNumber:     d.serial_number ?? 'Unknown',
+    platform:         mappedPlatform,
+    osVersion:        d.os_version ?? 'Unknown',
     managementSource: 'ManageEngine',
     lastCheckIn,
-    complianceState: isManaged ? 'Compliant' : 'Warning',
+    complianceState:  isManaged ? 'Compliant' : 'Warning',
     encryptionStatus: 'Unknown',
-    primaryIssue: isManaged ? 'None' : 'Agent not managed',
-    policyFailed: isManaged ? 'None' : 'Agent Management Policy',
-    severity: 'Low',
-    confidence: '70%',
-    firstDetected: 'N/A',
-    lastDetected: lastCheckIn,
-    issueSource: 'ManageEngine',
+    primaryIssue:     isManaged ? 'None' : 'Agent not managed',
+    policyFailed:     isManaged ? 'None' : 'Agent Management Policy',
+    severity:         'Low',
+    confidence:       '70%',
+    firstDetected:    'N/A',
+    lastDetected:     lastCheckIn,
+    issueSource:      'ManageEngine',
   }
 }
 
-export async function getManageEngineDevices(): Promise<Device[]> {
-  const meUrl = process.env.MANAGEENGINE_URL
-  const apiKey = process.env.MANAGEENGINE_API_KEY
+export async function getManageEngineDevices(cfg?: RuntimeManageEngineConfig): Promise<Device[]> {
+  const config = cfg ?? getManageEngineConfig()
+  if (!config) throw new Error('ManageEngine credentials not configured')
 
-  if (!meUrl || !apiKey) throw new Error('ManageEngine credentials not configured')
-
-  const res = await fetch(`${meUrl}/api/1.0/computers?restype=computer&count=100`, {
-    headers: { Authorization: apiKey },
+  const port = config.port ?? '8443'
+  const baseUrl = config.serverUrl.replace(/\/$/, '')
+  const res = await fetch(`${baseUrl}:${port}/api/1.0/computers?restype=computer&count=100`, {
+    headers: { Authorization: config.apiKey },
   })
   if (!res.ok) throw new Error(`ManageEngine API error: ${res.status} ${res.statusText}`)
 
@@ -65,5 +67,5 @@ export async function getManageEngineDevices(): Promise<Device[]> {
 }
 
 export function isManageEngineConfigured(): boolean {
-  return !!(process.env.MANAGEENGINE_URL && process.env.MANAGEENGINE_API_KEY)
+  return !!getManageEngineConfig()
 }

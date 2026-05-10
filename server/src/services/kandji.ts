@@ -1,4 +1,6 @@
 import type { Device } from '../types.js'
+import type { RuntimeKandjiConfig } from '../store/integrationStore.js'
+import { getKandjiConfig } from '../store/integrationStore.js'
 
 interface KandjiDevice {
   device_id: string
@@ -19,35 +21,34 @@ function mapKandjiDevice(d: KandjiDevice): Device {
   const compliance: Device['complianceState'] = hasEncryptionIssue ? 'Warning' : 'Compliant'
 
   return {
-    id: d.device_id,
-    deviceName: d.device_name,
-    user: d.assigned_user?.email ?? 'Unknown',
-    serialNumber: d.serial_number,
-    platform: 'macOS',
-    osVersion: d.os_version,
+    id:               d.device_id,
+    deviceName:       d.device_name,
+    user:             d.assigned_user?.email ?? 'Unknown',
+    serialNumber:     d.serial_number,
+    platform:         'macOS',
+    osVersion:        d.os_version,
     managementSource: 'Kandji',
-    lastCheckIn: new Date(d.last_check_in).toLocaleString(),
-    complianceState: compliance,
+    lastCheckIn:      new Date(d.last_check_in).toLocaleString(),
+    complianceState:  compliance,
     encryptionStatus: d.filevault_enabled ? 'FileVault On' : 'FileVault Off',
-    primaryIssue: hasEncryptionIssue ? 'FileVault encryption not enabled' : 'None',
-    policyFailed: hasEncryptionIssue ? 'Security - FileVault Policy' : 'None',
-    severity: 'Low',
-    confidence: '72%',
-    firstDetected: 'N/A',
-    lastDetected: new Date(d.last_check_in).toLocaleString(),
-    issueSource: 'Kandji',
+    primaryIssue:     hasEncryptionIssue ? 'FileVault encryption not enabled' : 'None',
+    policyFailed:     hasEncryptionIssue ? 'Security - FileVault Policy' : 'None',
+    severity:         'Low',
+    confidence:       '72%',
+    firstDetected:    'N/A',
+    lastDetected:     new Date(d.last_check_in).toLocaleString(),
+    issueSource:      'Kandji',
   }
 }
 
-export async function getKandjiDevices(): Promise<Device[]> {
-  const apiUrl = process.env.KANDJI_API_URL
-  const apiToken = process.env.KANDJI_API_TOKEN
+export async function getKandjiDevices(cfg?: RuntimeKandjiConfig): Promise<Device[]> {
+  const config = cfg ?? getKandjiConfig()
+  if (!config) throw new Error('Kandji credentials not configured')
 
-  if (!apiUrl || !apiToken) throw new Error('Kandji credentials not configured')
-
+  const apiUrl = `https://${config.subdomain}.api.kandji.io`
   const res = await fetch(`${apiUrl}/api/v1/devices?limit=100`, {
     headers: {
-      Authorization: `Bearer ${apiToken}`,
+      Authorization:  `Bearer ${config.apiToken}`,
       'Content-Type': 'application/json',
     },
   })
@@ -58,5 +59,5 @@ export async function getKandjiDevices(): Promise<Device[]> {
 }
 
 export function isKandjiConfigured(): boolean {
-  return !!(process.env.KANDJI_API_URL && process.env.KANDJI_API_TOKEN)
+  return !!getKandjiConfig()
 }
