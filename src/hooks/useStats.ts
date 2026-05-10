@@ -7,6 +7,7 @@ const REFRESH_INTERVAL = 30 // seconds
 export function useStats() {
   const [stats, setStats] = useState<ApiStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [offline, setOffline] = useState(false)
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -16,10 +17,11 @@ export function useStats() {
     try {
       const data = await api.fetchStats()
       setStats(data)
+      setOffline(false)
       setLastUpdated(new Date())
       setCountdown(REFRESH_INTERVAL)
     } catch {
-      // server offline — keep stale data
+      setOffline(true)
     } finally {
       if (showLoading) setLoading(false)
     }
@@ -36,7 +38,7 @@ export function useStats() {
     return () => clearInterval(id)
   }, [fetchStats])
 
-  // Countdown ticker — resets on each successful fetch (setCountdown(REFRESH_INTERVAL) above)
+  // Countdown ticker — resets on each successful fetch
   useEffect(() => {
     countdownRef.current = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? REFRESH_INTERVAL : prev - 1))
@@ -48,5 +50,5 @@ export function useStats() {
 
   const refresh = useCallback(() => fetchStats(true), [fetchStats])
 
-  return { stats, loading, countdown, lastUpdated, refresh }
+  return { stats, loading, offline, countdown, lastUpdated, refresh }
 }

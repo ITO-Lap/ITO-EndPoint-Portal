@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { ToastProvider, useToast } from './components/ui/ToastProvider'
 import { Header } from './components/layout/Header'
@@ -12,34 +12,70 @@ import { SettingsPage } from './components/settings/SettingsPage'
 import { DocsPage } from './pages/DocsPage'
 import { SignInPage } from './components/auth/SignInPage'
 import { SourceModal } from './components/devices/SourceModal'
+import { ReportsPage } from './components/reports/ReportsPage'
+import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
+import { OpenIssuesPage } from './components/issues/OpenIssuesPage'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
 import { useNotifications } from './hooks/useNotifications'
+import { useAiAnalysis } from './hooks/useAiAnalysis'
 import type { ConnectedSource, DeviceData } from './types'
 import {
-  statCards as baseStatCards,
-  deviceSummary,
   getRunbookForDevice,
-  issueCategories,
-  complianceSegments as baseComplianceSegments,
-  searchDevices,
 } from './data/dashboardData'
+import {
+  Laptop2, AlertTriangle, ShieldCheck, ShieldAlert, ClipboardList,
+} from 'lucide-react'
+import type { StatCardData } from './types'
 
-const DEFAULT_NOTIFICATIONS = [
-  { id: '1', message: 'Device LAPTOP-8F7G2Q1 is now compliant', read: false },
-  { id: '2', message: 'New security patch available for 3 devices', read: false },
-  { id: '3', message: 'BitLocker policy enforcement completed', read: false },
+function OfflineBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-center gap-3 bg-red-600 px-4 py-2 text-white text-xs font-medium">
+      <span className="flex items-center gap-1.5">
+        <svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        Server unreachable — showing last known data.
+      </span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="ml-auto flex-shrink-0 rounded border border-white/40 bg-white/10 px-2.5 py-0.5 text-xs font-semibold hover:bg-white/20 transition"
+      >
+        Retry
+      </button>
+    </div>
+  )
+}
+
+// Static card templates — only icons/colors/titles, values come from live stats
+const STAT_CARD_TEMPLATES: Omit<StatCardData, 'value' | 'trend' | 'trendChange'>[] = [
+  { title: 'Total Devices',      icon: Laptop2,      accent: 'text-sky-700',     iconBg: 'bg-sky-100',     iconText: 'text-sky-600'     },
+  { title: 'Compliant Devices',  icon: ShieldCheck,  accent: 'text-emerald-700', iconBg: 'bg-emerald-100', iconText: 'text-emerald-600' },
+  { title: 'Non-Compliant',      icon: ShieldAlert,  accent: 'text-red-700',     iconBg: 'bg-red-100',     iconText: 'text-red-600'     },
+  { title: 'Warning Devices',      icon: AlertTriangle,accent: 'text-amber-700',   iconBg: 'bg-amber-100',   iconText: 'text-amber-600'   },
+  { title: 'Open Issues',        icon: ClipboardList,accent: 'text-orange-700',  iconBg: 'bg-orange-100',  iconText: 'text-orange-600'  },
 ]
 
+const CATEGORY_COLORS: Record<string, string> = {
+  'Encryption / FileVault': '#ef4444',
+  'Security / AV':          '#f97316',
+  'OS / Patch':             '#f59e0b',
+  'Device Check-in':        '#22c55e',
+  'Compliance Policies':    '#f59e0b',
+  'Application Issues':     '#6366f1',
+  'Other':                  '#64748b',
+}
+
 const PAGE_META: Record<string, { description: string }> = {
-  'Device Lookup': { description: 'Search and inspect individual managed devices across all connected sources.' },
-  'Users': { description: 'Browse and manage user accounts, roles, and device assignments.' },
-  'Runbooks': { description: 'Manage and execute automated runbooks and remediation workflows.' },
-  'Diagnostics': { description: 'Run diagnostic checks and view device health telemetry.' },
-  'Reports & Analytics': { description: 'Generate compliance reports and view trend analytics.' },
-  'Activity Log': { description: 'Full audit trail of all device events, policy changes, and remediation actions.' },
-  'Settings': { description: 'Configure integrations, notification preferences, and account settings.' },
+  'Device Lookup':      { description: 'Search and inspect individual managed devices across all connected sources.' },
+  'Users':              { description: 'Browse and manage user accounts, roles, and device assignments.' },
+  'Runbooks':           { description: 'Manage and execute automated runbooks and remediation workflows.' },
+  'Diagnostics':        { description: 'Run diagnostic checks and view device health telemetry.' },
+  'Reports & Analytics':{ description: 'Generate compliance reports and view trend analytics.' },
+  'Activity Log':       { description: 'Full audit trail of all device events, policy changes, and remediation actions.' },
+  'Settings':           { description: 'Configure integrations, notification preferences, and account settings.' },
 }
 
 function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRole: string }) {
@@ -48,41 +84,75 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
   const [searchInput, setSearchInput] = useState('')
   const [searchLoading, setSearchLoading] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
-  const [selectedDevice, setSelectedDevice] = useState<DeviceData>(deviceSummary)
+  const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
   const [selectedSource, setSelectedSource] = useState<ConnectedSource | null>(null)
+  const [deviceLookupTarget, setDeviceLookupTarget] = useState<string | undefined>(undefined)
   const { notify } = useToast()
 
-  const { stats, countdown, lastUpdated, refresh: refreshStats } = useStats()
+  const { stats, offline, countdown, lastUpdated, refresh: refreshStats } = useStats()
   const { items: activityItems } = useActivity()
-  const { notifications, markAllRead } = useNotifications(DEFAULT_NOTIFICATIONS)
+  const { notifications, markAllRead } = useNotifications()
 
-  const liveStatCards = useMemo(() => {
-    if (!stats) return baseStatCards
-    const counts = [
-      stats.total,
-      stats.compliant,
-      stats.nonCompliant,
-      stats.mac,
-      stats.nonCompliant + stats.warning,
-    ]
-    return baseStatCards.map((card, i) => ({ ...card, value: counts[i].toLocaleString() }))
+  const { analysis: aiAnalysis, loading: aiLoading } = useAiAnalysis(selectedDevice, false)
+
+  // Auto-select first non-compliant device when live data first arrives
+  const autoLoaded = useRef(false)
+  useEffect(() => {
+    if (!stats || stats.total === 0 || autoLoaded.current) return
+    autoLoaded.current = true
+    api.fetchDevices().then(devices => {
+      if (devices.length === 0) return
+      const first = devices.find(d => d.complianceState !== 'Compliant') ?? devices[0]
+      setSelectedDevice(apiDeviceToDeviceData(first))
+    }).catch(() => {})
+  }, [stats])
+
+  const liveStatCards = useMemo((): StatCardData[] => {
+    const vals = stats
+      ? [stats.total, stats.compliant, stats.nonCompliant, stats.warning, stats.nonCompliant + stats.warning]
+      : [0, 0, 0, 0, 0]
+    return STAT_CARD_TEMPLATES.map((tmpl, i) => ({
+      ...tmpl,
+      value: vals[i].toLocaleString(),
+      trend: '',
+      trendChange: '',
+    }))
   }, [stats])
 
   const liveComplianceSegments = useMemo(() => {
-    if (!stats) return baseComplianceSegments
-    const t = stats.total || 1
+    if (!stats || stats.total === 0) return []
+    const t = stats.total
     return [
-      { label: 'Compliant', value: stats.compliant, percent: `${((stats.compliant / t) * 100).toFixed(1)}%`, color: '#22c55e' },
-      { label: 'Warning', value: stats.warning, percent: `${((stats.warning / t) * 100).toFixed(1)}%`, color: '#f59e0b' },
-      { label: 'Non-Compliant', value: stats.nonCompliant, percent: `${((stats.nonCompliant / t) * 100).toFixed(1)}%`, color: '#ef4444' },
+      { label: 'Compliant',     value: stats.compliant,    percent: `${((stats.compliant    / t) * 100).toFixed(1)}%`, color: '#22c55e' },
+      { label: 'Warning',       value: stats.warning,      percent: `${((stats.warning       / t) * 100).toFixed(1)}%`, color: '#f59e0b' },
+      { label: 'Non-Compliant', value: stats.nonCompliant, percent: `${((stats.nonCompliant  / t) * 100).toFixed(1)}%`, color: '#ef4444' },
     ]
   }, [stats])
+
+  const liveIssueCategories = useMemo(() => {
+    if (!stats?.issueCategories?.length) return []
+    return stats.issueCategories.map(c => ({
+      label: c.label,
+      value: c.value,
+      color: CATEGORY_COLORS[c.label] ?? '#64748b',
+    }))
+  }, [stats])
+
+  const liveRunbookData = useMemo(() => {
+    const base = selectedDevice ? getRunbookForDevice(selectedDevice) : null
+    if (!aiAnalysis || !base) return base
+    return {
+      runbookName: aiAnalysis.suggestedRunbook || base.runbookName,
+      runbookLink: 'AI-generated runbook',
+      steps: aiAnalysis.steps.length ? aiAnalysis.steps : base.steps,
+      escalation: (aiAnalysis.riskLevel === 'High' || aiAnalysis.riskLevel === 'Critical') ? 'Yes' : 'No',
+      automation: base.automation,
+    }
+  }, [selectedDevice, aiAnalysis])
 
   const handleDeviceSelect = useCallback(async (deviceName: string) => {
     setSearchLoading(true)
     try {
-      // Race the API call against a 500ms minimum — whichever is longer wins,
-      // ensuring the loading state is always visible even on fast responses.
       const [apiResult] = await Promise.allSettled([
         api.fetchDevices(deviceName),
         new Promise<void>(resolve => setTimeout(resolve, 500)),
@@ -96,28 +166,34 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
         return
       }
 
-      // Server offline or returned empty — fall back to local mock data
-      const local = searchDevices(deviceName)
-      if (local) {
-        setSelectedDevice(local)
-        notify('success', 'Device Found', `Viewing ${local.deviceName}`)
-        setActivePage('Dashboard')
-      } else {
-        notify('error', 'Not Found', `No device found matching "${deviceName}"`)
-      }
+      notify('error', 'Not Found', `No device found matching "${deviceName}"`)
     } finally {
       setSearchLoading(false)
     }
   }, [notify])
 
   const handleSearch = useCallback(async (query: string) => {
-    if (!query.trim()) {
+    const trimmed = query.trim()
+    if (!trimmed) {
       notify('info', 'Search', 'Please enter a device name, user email, or serial number')
       return
     }
-    await handleDeviceSelect(query.trim())
+    if (trimmed.length > 120) {
+      notify('error', 'Invalid Search', 'Search query is too long')
+      return
+    }
+    if (!/^[\w@.\-\s]+$/.test(trimmed)) {
+      notify('error', 'Invalid Search', 'Search contains unsupported characters')
+      return
+    }
+    await handleDeviceSelect(trimmed)
     setSearchInput('')
   }, [handleDeviceSelect, notify])
+
+  const handleActivityDeviceClick = useCallback((deviceName: string) => {
+    setDeviceLookupTarget(deviceName)
+    setActivePage('Device Lookup')
+  }, [setActivePage])
 
   const handleNotificationToggle = useCallback(() => {
     setNotificationOpen((prev) => !prev)
@@ -140,6 +216,7 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
             onSourceClick={setSelectedSource}
           />
           <div className="flex min-h-full flex-col w-full">
+            {offline && <OfflineBanner onRetry={refreshStats} />}
             <Header
               onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               onSearch={handleSearch}
@@ -161,19 +238,58 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                     statCards={liveStatCards}
                     selectedDevice={selectedDevice}
                     onDeviceChange={handleDeviceSelect}
-                    runbookData={getRunbookForDevice(selectedDevice)}
+                    onActivityDeviceClick={handleActivityDeviceClick}
+                    onStatCardNavigate={setActivePage}
+                    runbookData={liveRunbookData}
+                    aiRunbookLoading={aiLoading}
                     complianceSegments={liveComplianceSegments}
-                    issueCategories={issueCategories}
+                    issueCategories={liveIssueCategories}
                     recentActivityItems={activityItems}
-                    isMockData={stats?.mock ?? true}
                     sourceCounts={stats?.sources ?? { intune: 0, kandji: 0, manageEngine: 0 }}
                     countdown={countdown}
                     lastUpdated={lastUpdated}
                     onRefresh={refreshStats}
                   />
+                ) : activePage === 'Compliant Devices' ? (
+                  <FilteredDevicesPage
+                    filter="Compliant"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'Non-Compliant Devices' ? (
+                  <FilteredDevicesPage
+                    filter="Non-Compliant"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'Warning Devices' ? (
+                  <FilteredDevicesPage
+                    filter="Warning"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'Open Issues' ? (
+                  <OpenIssuesPage
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
                 ) : activePage === 'Device Lookup' ? (
                   <DeviceLookupPage
+                    initialDeviceName={deviceLookupTarget}
                     onViewInDashboard={async (deviceName) => {
+                      setDeviceLookupTarget(undefined)
                       await handleDeviceSelect(deviceName)
                       setActivePage('Dashboard')
                     }}
@@ -186,6 +302,8 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                   <SettingsPage />
                 ) : activePage === 'Documentation' ? (
                   <DocsPage />
+                ) : activePage === 'Reports & Analytics' ? (
+                  <ReportsPage />
                 ) : (
                   <PlaceholderPage
                     title={activePage}

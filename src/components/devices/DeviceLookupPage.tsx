@@ -7,7 +7,8 @@ import {
   Wifi, WifiOff, Bug, Zap, FileWarning, Activity, Eye,
   BarChart3, FileText,
 } from 'lucide-react'
-import { getAllDevices, getRunbookForDevice } from '../../data/dashboardData'
+import { getRunbookForDevice } from '../../data/dashboardData'
+import { api, apiDeviceToDeviceData } from '../../api'
 import { useToast } from '../ui/ToastProvider'
 import type { DeviceData, SecurityProfile, SecurityEvent } from '../../types'
 
@@ -877,11 +878,26 @@ function SortTh({ label, sortKey, currentKey, currentDir, onSort }: {
 
 const PAGE_SIZE = 10
 
-export function DeviceLookupPage({ onViewInDashboard }: { onViewInDashboard?: (deviceName: string) => void }) {
+export function DeviceLookupPage({
+  onViewInDashboard,
+  initialDeviceName,
+}: {
+  onViewInDashboard?: (deviceName: string) => void
+  initialDeviceName?: string
+}) {
   const { notify } = useToast()
-  const allDevices = useMemo(() => getAllDevices(), [])
+  const [allDevices, setAllDevices] = useState<DeviceData[]>([])
+  const [devicesLoading, setDevicesLoading] = useState(true)
 
-  const [query, setQuery] = useState('')
+  useEffect(() => {
+    setDevicesLoading(true)
+    api.fetchAllDevicesRaw({ limit: 2000 })
+      .then(({ devices }) => setAllDevices(devices.map(apiDeviceToDeviceData)))
+      .catch(() => {})
+      .finally(() => setDevicesLoading(false))
+  }, [])
+
+  const [query, setQuery] = useState(initialDeviceName ?? '')
   const [complianceFilter, setComplianceFilter] = useState('All')
   const [platformFilter, setPlatformFilter] = useState('All')
   const [sourceFilter, setSourceFilter] = useState('All')
@@ -890,6 +906,15 @@ export function DeviceLookupPage({ onViewInDashboard }: { onViewInDashboard?: (d
   const [sortDir, setSortDir] = useState<SortDir>(null)
   const [page, setPage] = useState(1)
   const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
+
+  // Auto-open detail drawer when arriving from activity feed
+  useEffect(() => {
+    if (!initialDeviceName || allDevices.length === 0) return
+    const match = allDevices.find(d =>
+      d.deviceName.toLowerCase() === initialDeviceName.toLowerCase()
+    )
+    if (match) setSelectedDevice(match)
+  }, [initialDeviceName, allDevices])
   const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set())
   const [reportOpen, setReportOpen] = useState(false)
 
@@ -975,7 +1000,9 @@ export function DeviceLookupPage({ onViewInDashboard }: { onViewInDashboard?: (d
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-slate-900">Device Lookup</h1>
-            <p className="mt-0.5 text-sm text-slate-500">{allDevices.length} devices across {sources.length - 1} management sources</p>
+            <p className="mt-0.5 text-sm text-slate-500">
+              {devicesLoading ? 'Loading devices…' : `${allDevices.length} devices across ${sources.length - 1} management source${sources.length - 1 !== 1 ? 's' : ''}`}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button

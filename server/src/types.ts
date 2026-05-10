@@ -63,6 +63,7 @@ export interface AppStatus {
   version: string
   publisher: string
   status: 'Installed' | 'Failed' | 'Pending' | 'NotApplicable'
+  appType?: string      // e.g. "App Store", "System", "MDM Managed"
   installDate?: string
   size?: string
   errorCode?: string
@@ -127,6 +128,7 @@ export interface DashboardStats {
     kandji: number
     manageEngine: number
   }
+  issueCategories: Array<{ label: string; value: number }>
   mock: boolean
 }
 

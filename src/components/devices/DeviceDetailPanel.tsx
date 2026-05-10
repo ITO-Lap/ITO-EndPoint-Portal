@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft, Monitor, Laptop, Globe, Shield, ShieldCheck,
   Network, Lock, LockOpen, CheckCircle2,
@@ -6,6 +6,7 @@ import {
   Server, Fingerprint, ChevronRight, Package,
   Key, RotateCcw, Clock, AlertCircle, Loader,
 } from 'lucide-react'
+import { api } from '../../api'
 import type { ApiDevice, AppStatus } from '../../api'
 
 type Tab = 'overview' | 'hardware' | 'network' | 'security' | 'apps' | 'compliance'
@@ -316,20 +317,52 @@ function SecurityTab({ d }: { d: ApiDevice }) {
   )
 }
 
+// ── App type badge ─────────────────────────────────────────────────────────
+
+function AppTypeBadge({ type }: { type?: string }) {
+  if (!type) return null
+  const [bg, text] =
+    type === 'App Store'    ? ['bg-blue-50 border-blue-200 text-blue-700', ''] :
+    type === 'System'       ? ['bg-slate-100 border-slate-200 text-slate-500', ''] :
+    type === 'MDM Managed'  ? ['bg-violet-50 border-violet-200 text-violet-700', ''] :
+    ['bg-slate-50 border-slate-200 text-slate-500', '']
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${bg} ${text}`}>
+      {type}
+    </span>
+  )
+}
+
 // ── Apps Tab ──────────────────────────────────────────────────────────────
 
 function AppsTab({ d }: { d: ApiDevice }) {
   const [filter, setFilter] = useState<'all' | 'installed' | 'failed' | 'pending'>('all')
+  const [fetchedApps, setFetchedApps] = useState<AppStatus[] | null>(null)
+  const [appsLoading, setAppsLoading] = useState(false)
 
-  const apps = d.apps ?? []
+  // Lazy-fetch from server when device is Kandji (apps not bundled in sync payload)
+  useEffect(() => {
+    if (d.managementSource !== 'Kandji') return
+    setAppsLoading(true)
+    api.fetchDeviceApps(d.id)
+      .then(apps => setFetchedApps(apps))
+      .catch(() => setFetchedApps([]))
+      .finally(() => setAppsLoading(false))
+  }, [d.id, d.managementSource])
+
+  const apps = fetchedApps ?? d.apps ?? []
   const installed = apps.filter(a => a.status === 'Installed')
   const failed    = apps.filter(a => a.status === 'Failed')
   const pending   = apps.filter(a => a.status === 'Pending')
 
-  const visible =
-    filter === 'installed' ? installed :
-    filter === 'failed'    ? failed    :
-    filter === 'pending'   ? pending   : apps
+  if (appsLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-400">
+        <RefreshCw className="h-8 w-8 text-slate-300 animate-spin" />
+        <p className="text-sm font-medium">Loading installed applications…</p>
+      </div>
+    )
+  }
 
   if (apps.length === 0) {
     return (
@@ -438,10 +471,10 @@ function AppsTab({ d }: { d: ApiDevice }) {
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[480px]">
+              <table className="w-full text-xs min-w-[520px]">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    {['Application', 'Version', 'Publisher', filter === 'failed' || filter === 'pending' ? 'Last Attempt' : 'Installed', 'Status'].map((h, i) => (
+                    {['Application', 'Version', 'Bundle ID / Publisher', 'Type', filter === 'failed' || filter === 'pending' ? 'Last Attempt' : 'Installed', 'Status'].map((h, i) => (
                       <th key={i} className="px-3 py-2 text-left font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -454,7 +487,11 @@ function AppsTab({ d }: { d: ApiDevice }) {
                         {app.errorCode && <p className="text-xs font-mono text-red-500 mt-0.5">{app.errorCode}</p>}
                       </td>
                       <td className="px-3 py-2.5 font-mono text-slate-500 whitespace-nowrap">{app.version}</td>
-                      <td className="px-3 py-2.5 text-slate-500 max-w-[140px] truncate">{app.publisher}</td>
+                      <td className="px-3 py-2.5 text-slate-400 font-mono text-xs max-w-[180px] truncate" title={app.publisher}>{app.publisher || '—'}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <AppTypeBadge type={app.appType} />
+                        {!app.appType && <span className="text-slate-300">—</span>}
+                      </td>
                       <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
                         {app.status === 'Installed' ? (app.installDate ?? '—') : (app.lastAttempt ?? '—')}
                       </td>

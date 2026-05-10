@@ -19,6 +19,7 @@ function toColor(status: ActivityItem['status']): ActivityItem['color'] {
 export function useActivity(limit = 20) {
   const [items, setItems] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [offline, setOffline] = useState(false)
 
   const fetchActivity = useCallback(async () => {
     try {
@@ -32,8 +33,9 @@ export function useActivity(limit = 20) {
           color: toColor(a.status),
         }))
       )
+      setOffline(false)
     } catch {
-      // server offline
+      setOffline(true)
     } finally {
       setLoading(false)
     }
@@ -45,5 +47,5 @@ export function useActivity(limit = 20) {
     return () => clearInterval(id)
   }, [fetchActivity])
 
-  return { items, loading }
+  return { items, loading, offline }
 }

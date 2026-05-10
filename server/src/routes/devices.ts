@@ -1,9 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { mockDevices } from '../data/mockDevices.js'
 import { getIntuneDevices, isIntuneConfigured } from '../services/intune.js'
-import { getKandjiDevices, isKandjiConfigured } from '../services/kandji.js'
+import { getKandjiDevices, getKandjiDeviceApps, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
 import type { Device, DashboardStats } from '../types.js'
@@ -15,7 +14,7 @@ const listSchema = z.object({
   source:     z.enum(['intune', 'kandji', 'manageengine', 'all']).optional().default('all'),
   compliance: z.enum(['Compliant', 'Non-Compliant', 'Warning']).optional(),
   platform:   z.enum(['Windows', 'macOS', 'Linux']).optional(),
-  limit:      z.coerce.number().int().min(1).max(200).optional().default(100),
+  limit:      z.coerce.number().int().min(1).max(2000).optional().default(100),
 })
 
 const sourceLabel: Record<string, Device['managementSource']> = {
@@ -24,9 +23,21 @@ const sourceLabel: Record<string, Device['managementSource']> = {
   manageengine: 'ManageEngine',
 }
 
-async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> {
+function categorizeIssue(primaryIssue: string): string | null {
+  const i = primaryIssue.toLowerCase()
+  if (!i || i === 'none') return null
+  if (i.includes('filevault') || i.includes('bitlocker') || i.includes('encrypt')) return 'Encryption / FileVault'
+  if (i.includes('firewall') || i.includes('antivirus') || i.includes('crowdstrike') || i.includes('defender')) return 'Security / AV'
+  if (i.includes('os update') || i.includes('patch') || i.includes('software update')) return 'OS / Patch'
+  if (i.includes('check-in') || i.includes('check in') || i.includes('offline')) return 'Device Check-in'
+  if (i.includes('policy') || i.includes('compliance')) return 'Compliance Policies'
+  if (i.includes('app') || i.includes('application')) return 'Application Issues'
+  return 'Other'
+}
+
+export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> {
   const anyConfigured = isIntuneConfigured() || isKandjiConfigured() || isManageEngineConfigured()
-  if (!anyConfigured) return { devices: mockDevices, mock: true }
+  if (!anyConfigured) return { devices: [], mock: false }
 
   const [intuneResult, kandjiResult, meResult] = await Promise.allSettled([
     isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await getIntuneDevices();       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
@@ -55,7 +66,7 @@ async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> 
     }
   }
 
-  return devices.length > 0 ? { devices, mock: false } : { devices: mockDevices, mock: true }
+  return { devices, mock: false }
 }
 
 // GET /api/devices
@@ -91,6 +102,16 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/stats', asyncHandler(async (_req, res) => {
   const { devices, mock } = await fetchAllDevices()
 
+  // Aggregate issue categories across all non-compliant/warning devices
+  const catMap = new Map<string, number>()
+  for (const d of devices) {
+    const cat = categorizeIssue(d.primaryIssue)
+    if (cat) catMap.set(cat, (catMap.get(cat) ?? 0) + 1)
+  }
+  const issueCategories = Array.from(catMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+
   const stats: DashboardStats = {
     total:        devices.length,
     compliant:    devices.filter(d => d.complianceState === 'Compliant').length,
@@ -103,9 +124,21 @@ router.get('/stats', asyncHandler(async (_req, res) => {
       kandji:       devices.filter(d => d.managementSource === 'Kandji').length,
       manageEngine: devices.filter(d => d.managementSource === 'ManageEngine').length,
     },
+    issueCategories,
     mock,
   }
   res.json({ success: true, data: stats })
+}))
+
+// GET /api/devices/:id/apps — lazy-fetch installed apps (Kandji only for now)
+router.get('/:id/apps', asyncHandler(async (req, res) => {
+  const deviceId = Array.isArray(req.params['id']) ? req.params['id'][0] : req.params['id']
+  if (!deviceId || !isKandjiConfigured()) {
+    res.json({ success: true, data: [] })
+    return
+  }
+  const apps = await getKandjiDeviceApps(deviceId)
+  res.json({ success: true, data: apps })
 }))
 
 // GET /api/devices/:id

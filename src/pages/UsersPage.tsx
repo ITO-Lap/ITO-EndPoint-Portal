@@ -9,7 +9,7 @@ import {
   Zap, Edit2, Ban, RotateCcw, Trash2, Copy,
   Cloud, Smartphone, Ticket, Database,
 } from 'lucide-react'
-import { getAllUsers } from '../data/usersData'
+// Users data is loaded from connected directory sources (Azure AD, Okta, etc.) via future API integration
 import { useToast } from '../components/ui/ToastProvider'
 import type { AppUser, UserToolRole, UserStatus, UserRiskLevel, UserActivityEvent, JiraTicket } from '../types'
 
@@ -1046,7 +1046,7 @@ const PAGE_SIZE = 10
 
 export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserToolRole }) {
   const { notify } = useToast()
-  const allUsers = useMemo(() => getAllUsers(), [])
+  const allUsers: AppUser[] = []
   const isGlobalAdmin = viewerRole === 'Global Admin'
 
   const [query, setQuery] = useState('')
