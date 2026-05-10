@@ -371,7 +371,7 @@ const INTEG_DEFS: IntegDef[] = [
       { key: 'subdomain', label: 'Subdomain',   hint: 'Your Kandji org subdomain',        placeholder: 'yourorg',                    secret: false },
     ],
     defaults: {
-      apiToken:  'kandji_api_token_2P7r_replace_with_real',
+      apiToken:  '',
       subdomain: 'zinnia',
     },
   },
@@ -637,6 +637,12 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
   const { notify } = useToast()
   const Icon = def.icon
 
+  // Server state wins over local UI state — if the server reports this integration
+  // as configured and not erroring, show it as connected regardless of local state.
+  const isConnected = liveStatus?.configured != null
+    ? (liveStatus.configured && liveStatus.healthy !== false)
+    : state.connected
+
   const setField = (key: string, updater: (f: FieldState) => FieldState) =>
     onUpdate(s => ({ ...s, fields: { ...s.fields, [key]: updater(s.fields[key]) } }))
 
@@ -653,20 +659,35 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
       if (result.error) {
         notify('error', 'Sync Failed', result.error)
       } else {
-        notify('success', 'Sync Complete', `${def.name} synced ${result.deviceCount.toLocaleString()} devices in ${result.latencyMs}ms`)
+        notify('success', 'Sync Complete', `${def.name} synced ${result.deviceCount.toLocaleString()} devices in ${(result.latencyMs / 1000).toFixed(1)}s`)
       }
-    } catch {
+    } catch (err) {
       onUpdate(s => ({ ...s, syncing: false }))
-      notify('error', 'Sync Failed', `Push credentials first, then sync`)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      if (msg.includes('not configured') || msg.includes('credentials')) {
+        notify('error', 'Sync Failed', 'Push valid credentials first, then sync')
+      } else {
+        notify('error', 'Sync Failed', `${def.name} API error — check your credentials and try again`)
+      }
     }
   }
 
   const handlePush = async () => {
-    onUpdate(s => ({ ...s, pushing: true }))
     const fields: Record<string, string> = {}
     for (const [key, fs] of Object.entries(state.fields)) {
       fields[key] = fs.value
     }
+
+    // Reject placeholder/empty credentials — they would overwrite real env-var config
+    const secretField = def.fields.find(f => f.secret)
+    const secretVal = secretField ? (fields[secretField.key] ?? '') : ''
+    const isPlaceholder = !secretVal || secretVal.includes('replace') || secretVal.includes('placeholder') || secretVal.length < 10
+    if (isPlaceholder) {
+      notify('error', 'Push Blocked', `Enter a real ${secretField?.label ?? 'API key'} before pushing — placeholder values would overwrite active credentials`)
+      return
+    }
+
+    onUpdate(s => ({ ...s, pushing: true }))
     try {
       await api.pushCredentials(def.id, fields)
       onUpdate(s => ({ ...s, pushing: false, pushed: true, pushedAt: new Date().toLocaleTimeString() }))
@@ -707,7 +728,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
 
   return (
     <div className={`rounded-[18px] border bg-white shadow-sm shadow-slate-900/5 overflow-hidden transition-all ${
-      state.connected ? 'border-slate-200' : 'border-dashed border-slate-300 opacity-60'
+      isConnected ? 'border-slate-200' : 'border-dashed border-slate-300 opacity-60'
     }`}>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
@@ -722,7 +743,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
               <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${def.categoryColor}`}>
                 {def.category}
               </span>
-              {state.connected ? (
+              {isConnected ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[0.58rem] font-bold text-emerald-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />Connected
                 </span>
@@ -739,7 +760,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          {state.connected && (
+          {isConnected && (
             <button
               type="button"
               onClick={handleSync}
@@ -1091,7 +1112,25 @@ function IntegrationsSection() {
     setCardStates(prev => ({ ...prev, [id]: updater(prev[id]) }))
   }, [])
 
-  const connectedCount = Object.values(cardStates).filter(s => s.connected).length
+  // Keep local connected state in sync with server reality
+  useEffect(() => {
+    if (integrationStatus.length === 0) return
+    setCardStates(prev => {
+      const next = { ...prev }
+      for (const s of integrationStatus) {
+        if (!next[s.id]) continue
+        const serverConnected = s.configured && s.healthy !== false
+        if (next[s.id].connected !== serverConnected) {
+          next[s.id] = { ...next[s.id], connected: serverConnected }
+        }
+      }
+      return next
+    })
+  }, [integrationStatus])
+
+  const connectedCount = integrationStatus.length > 0
+    ? integrationStatus.filter(s => s.configured && s.healthy !== false).length
+    : Object.values(cardStates).filter(s => s.connected).length
   const pushedCount = integrationStatus.filter(s => s.configured).length
   const healthyCount = integrationStatus.filter(s => s.healthy === true).length
 
@@ -1519,7 +1558,7 @@ function NotificationsSection() {
   const [saving, setSaving] = useState(false)
   const [senderName, setSenderName] = useState('ITO Endpoint Alerts')
   const [replyTo, setReplyTo] = useState('no-reply@zinnia.com')
-  const [slackWebhook, setSlackWebhook] = useState('https://hooks.slack.com/services/T00000/B00000/XXXXXXXX')
+  const [slackWebhook, setSlackWebhook] = useState('')
   const [slackEnabled, setSlackEnabled] = useState(false)
   const [digestEnabled, setDigestEnabled] = useState(true)
   const [digestFreq, setDigestFreq] = useState('weekly')
@@ -1582,7 +1621,7 @@ function NotificationsSection() {
             <Divider />
             <FieldRow label="Webhook URL" hint="Found in your Slack app's Incoming Webhooks section">
               <div className="flex gap-2">
-                <Input value={slackWebhook} onChange={setSlackWebhook} className="font-mono text-[0.65rem]" />
+                <Input value={slackWebhook} onChange={setSlackWebhook} placeholder="https://hooks.slack.com/services/…" className="font-mono text-[0.65rem]" />
                 <button
                   type="button"
                   onClick={handleTestSlack}

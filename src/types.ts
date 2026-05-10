@@ -27,6 +27,7 @@ export interface ConnectedSource {
 }
 
 export interface DeviceData {
+  id?: string          // set when device comes from a live integration
   deviceName: string
   user: string
   serialNumber: string

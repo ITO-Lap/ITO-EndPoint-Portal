@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import {
   setIntuneConfig,
@@ -13,56 +14,92 @@ import {
   getManageEngineConfig,
 } from '../store/integrationStore.js'
 import { getIntuneDevices } from '../services/intune.js'
-import { getKandjiDevices } from '../services/kandji.js'
+import { getKandjiDevices, invalidateKandjiCache, getKandjiLibraryApps } from '../services/kandji.js'
 import { getManageEngineDevices } from '../services/manageEngine.js'
 
 const router = Router()
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const credentialSchemas: Record<string, z.ZodObject<any>> = {
+  intune: z.object({
+    tenantId:     z.string().min(1, 'tenantId required'),
+    clientId:     z.string().min(1, 'clientId required'),
+    clientSecret: z.string().min(1, 'clientSecret required'),
+    endpoint:     z.string().url().optional(),
+  }),
+  kandji: z.object({
+    apiToken:  z.string().min(1, 'apiToken required'),
+    subdomain: z.string().min(1, 'subdomain required'),
+  }),
+  manageengine: z.object({
+    apiKey:    z.string().min(1, 'apiKey required'),
+    serverUrl: z.string().url('serverUrl must be a valid URL'),
+    port:      z.string().regex(/^\d+$/).optional(),
+  }),
+  openai: z.object({
+    apiKey: z.string().min(1, 'apiKey required'),
+    orgId:  z.string().optional(),
+    model:  z.string().optional(),
+  }),
+}
+
 // POST /api/integrations/:id/credentials — push credentials from UI to backend
 router.post('/:id/credentials', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const { fields } = req.body as { fields: Record<string, string> }
+  const { fields } = req.body as { fields: unknown }
 
-  if (!fields || typeof fields !== 'object') {
-    res.status(400).json({ success: false, error: 'fields object required' })
+  const schema = typeof id === 'string' ? credentialSchemas[id] : undefined
+  if (!schema) {
+    res.status(400).json({ success: false, error: `Unknown integration: ${id ?? 'unknown'}` })
     return
   }
 
+  const parsed = schema.safeParse(fields)
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((e: { message: string }) => e.message).join(', ')
+    res.status(400).json({ success: false, error: message })
+    return
+  }
+
+  const f = parsed.data
   switch (id) {
     case 'intune':
       setIntuneConfig({
-        tenantId:     fields['tenantId']     ?? '',
-        clientId:     fields['clientId']     ?? '',
-        clientSecret: fields['clientSecret'] ?? '',
-        ...(fields['endpoint'] ? { endpoint: fields['endpoint'] } : {}),
+        tenantId:     f['tenantId']     as string,
+        clientId:     f['clientId']     as string,
+        clientSecret: f['clientSecret'] as string,
+        ...(f['endpoint'] ? { endpoint: f['endpoint'] as string } : {}),
       })
       break
     case 'kandji':
       setKandjiConfig({
-        apiToken:  fields['apiToken']  ?? '',
-        subdomain: fields['subdomain'] ?? '',
+        apiToken:  f['apiToken']  as string,
+        subdomain: f['subdomain'] as string,
       })
       break
     case 'manageengine':
       setManageEngineConfig({
-        apiKey:    fields['apiKey']    ?? '',
-        serverUrl: fields['serverUrl'] ?? '',
-        ...(fields['port'] ? { port: fields['port'] } : {}),
+        apiKey:    f['apiKey']    as string,
+        serverUrl: f['serverUrl'] as string,
+        ...(f['port'] ? { port: f['port'] as string } : {}),
       })
       break
     case 'openai':
       setOpenAIConfig({
-        apiKey: fields['apiKey'] ?? '',
-        ...(fields['orgId'] ? { orgId: fields['orgId'] } : {}),
-        ...(fields['model'] ? { model: fields['model'] } : {}),
+        apiKey: f['apiKey'] as string,
+        ...(f['orgId'] ? { orgId: f['orgId'] as string } : {}),
+        ...(f['model'] ? { model: f['model'] as string } : {}),
       })
       break
-    default:
-      res.status(400).json({ success: false, error: `Unknown integration: ${id}` })
-      return
   }
 
   res.json({ success: true, data: { id, configured: true } })
+}))
+
+// GET /api/integrations/kandji/apps — Kandji Library items (single API call)
+router.get('/kandji/apps', asyncHandler(async (_req, res) => {
+  const apps = await getKandjiLibraryApps()
+  res.json({ success: true, data: apps })
 }))
 
 // GET /api/integrations/status — per-integration health snapshot
@@ -116,7 +153,8 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
       case 'kandji': {
         const cfg = getKandjiConfig()
         if (!cfg) throw new Error('Kandji is not configured — push credentials first')
-        const devices = await getKandjiDevices(cfg)
+        invalidateKandjiCache()
+        const devices = await getKandjiDevices(cfg, true)
         deviceCount = devices.length
         break
       }

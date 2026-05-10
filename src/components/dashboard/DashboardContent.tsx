@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, MonitorSmartphone } from 'lucide-react'
 import { StatCard } from './StatCard'
 import { DeviceSummary } from '../devices/DeviceSummary'
 import { ComplianceDetails } from '../devices/ComplianceDetails'
@@ -33,30 +33,42 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   )
 }
 
+function NoDeviceCard() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[200px] rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-slate-400">
+      <MonitorSmartphone className="h-8 w-8 mb-3 opacity-40" />
+      <p className="text-sm font-medium text-slate-500">No device selected</p>
+      <p className="text-xs mt-1 text-center">Search for a device above or connect an integration in Settings.</p>
+    </div>
+  )
+}
+
 interface DashboardContentProps {
-  statCards: StatCardData[]
-  selectedDevice: DeviceData
-  onDeviceChange: (deviceName: string) => void
-  runbookData: RunbookData
-  complianceSegments: ComplianceSegment[]
-  issueCategories: IssueCategory[]
-  recentActivityItems: ActivityItem[]
-  isMockData?: boolean
-  sourceCounts?: { intune: number; kandji: number; manageEngine: number }
-  countdown?: number
-  lastUpdated?: Date | null
-  onRefresh?: () => void
+  statCards:            StatCardData[]
+  selectedDevice:       DeviceData | null
+  onDeviceChange:       (deviceName: string) => void
+  onActivityDeviceClick?: (deviceName: string) => void
+  runbookData:          RunbookData | null
+  aiRunbookLoading?:    boolean
+  complianceSegments:   ComplianceSegment[]
+  issueCategories:      IssueCategory[]
+  recentActivityItems:  ActivityItem[]
+  sourceCounts?:        { intune: number; kandji: number; manageEngine: number }
+  countdown?:           number
+  lastUpdated?:         Date | null
+  onRefresh?:           () => void
 }
 
 export function DashboardContent({
   statCards,
   selectedDevice,
   onDeviceChange,
+  onActivityDeviceClick,
   runbookData,
+  aiRunbookLoading = false,
   complianceSegments,
   issueCategories,
   recentActivityItems,
-  isMockData = true,
   sourceCounts = { intune: 0, kandji: 0, manageEngine: 0 },
   countdown = 30,
   lastUpdated = null,
@@ -80,12 +92,16 @@ export function DashboardContent({
   } = useDashboardState()
 
   const currentComplianceRows = useMemo(() => {
-    return getComplianceRowsForDevice(selectedDevice)
+    return selectedDevice ? getComplianceRowsForDevice(selectedDevice) : []
   }, [selectedDevice])
 
   const handleActivityRowClick = (deviceName: string) => {
     setActivityModalOpen(false)
-    onDeviceChange(deviceName)
+    if (onActivityDeviceClick) {
+      onActivityDeviceClick(deviceName)
+    } else {
+      onDeviceChange(deviceName)
+    }
   }
 
   const handleStartAutomation = async () => {
@@ -150,7 +166,6 @@ export function DashboardContent({
     setSelectedCategory(null)
   }
 
-  // Merge all active filters: manual pills + stat card + donut segment
   const effectiveStatusFilter = useMemo(() => {
     const filters = new Set<string>(selectedFilters)
     if (activeStatCard === 'Compliant Devices') filters.add('Compliant')
@@ -172,7 +187,6 @@ export function DashboardContent({
 
         {/* Live data status bar */}
         <LiveDataBar
-          isMockData={isMockData}
           sourceCounts={sourceCounts}
           countdown={countdown}
           lastUpdated={lastUpdated}
@@ -193,12 +207,16 @@ export function DashboardContent({
 
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,0.95fr)] w-full auto-rows-max">
           <div className="min-w-0 h-full md:col-span-2 lg:col-span-1">
-            <DeviceSummary
-              device={selectedDevice}
-              onSyncNow={handleSyncNow}
-              syncLoading={syncLoading}
-              onCopy={handleCopy}
-            />
+            {selectedDevice ? (
+              <DeviceSummary
+                device={selectedDevice}
+                onSyncNow={handleSyncNow}
+                syncLoading={syncLoading}
+                onCopy={handleCopy}
+              />
+            ) : (
+              <NoDeviceCard />
+            )}
           </div>
           <div className="min-w-0 h-full">
             <ComplianceDetails
@@ -207,25 +225,31 @@ export function DashboardContent({
             />
           </div>
           <div className="min-w-0 h-full">
-            <RunbookCard
-              data={runbookData}
-              onViewRunbook={() => setRunbookModalOpen(true)}
-              onCopySteps={() => {
-                navigator.clipboard.writeText(runbookData.steps.join('\n')).then(() => {
-                  notify('success', 'Copied', 'Runbook steps copied to clipboard')
-                }).catch(() => {
-                  notify('error', 'Error', 'Failed to copy to clipboard')
-                })
-              }}
-            />
+            {runbookData ? (
+              <RunbookCard
+                data={runbookData}
+                aiLoading={aiRunbookLoading}
+                onViewRunbook={() => setRunbookModalOpen(true)}
+                onCopySteps={() => {
+                  navigator.clipboard.writeText(runbookData.steps.join('\n')).then(() => {
+                    notify('success', 'Copied', 'Runbook steps copied to clipboard')
+                  }).catch(() => {
+                    notify('error', 'Error', 'Failed to copy to clipboard')
+                  })
+                }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full min-h-[160px] rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-8 text-slate-400">
+                <p className="text-sm font-medium text-slate-500">No runbook</p>
+                <p className="text-xs mt-1">Select a device to see recommended steps.</p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Filter Section */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-500 flex-shrink-0">Filter:</span>
-
-          {/* Quick-filter pills */}
           {['All', 'Non-Compliant', 'Warning', 'Compliant'].map((filter) => {
             const isAll = filter === 'All'
             const isActive = isAll
@@ -245,8 +269,6 @@ export function DashboardContent({
               </button>
             )
           })}
-
-          {/* Active source-filter chips with individual dismiss */}
           {activeStatCard && (
             <FilterChip label={activeStatCard} onRemove={() => setActiveStatCard(null)} />
           )}
@@ -256,8 +278,6 @@ export function DashboardContent({
           {selectedCategory && (
             <FilterChip label={selectedCategory} onRemove={() => setSelectedCategory(null)} />
           )}
-
-          {/* Clear all — only shown when something is active */}
           {(selectedFilters.length > 0 || activeStatCard || selectedDonutLabel || selectedCategory) && (
             <button
               onClick={clearFilters}
@@ -293,20 +313,22 @@ export function DashboardContent({
         </div>
       </div>
 
-      <RunbookModal
-        open={runbookModalOpen}
-        onClose={() => setRunbookModalOpen(false)}
-        runbookData={runbookData}
-        onCopySteps={() => {
-          navigator.clipboard.writeText(runbookData.steps.join('\n')).then(() => {
-            notify('success', 'Copied', 'Runbook steps copied to clipboard')
-          }).catch(() => {
-            notify('error', 'Error', 'Failed to copy to clipboard')
-          })
-        }}
-        onStartAutomation={handleStartAutomation}
-        automationLoading={automationLoading}
-      />
+      {runbookData && (
+        <RunbookModal
+          open={runbookModalOpen}
+          onClose={() => setRunbookModalOpen(false)}
+          runbookData={runbookData}
+          onCopySteps={() => {
+            navigator.clipboard.writeText(runbookData.steps.join('\n')).then(() => {
+              notify('success', 'Copied', 'Runbook steps copied to clipboard')
+            }).catch(() => {
+              notify('error', 'Error', 'Failed to copy to clipboard')
+            })
+          }}
+          onStartAutomation={handleStartAutomation}
+          automationLoading={automationLoading}
+        />
+      )}
 
       <ActivityListModal
         open={activityModalOpen}
@@ -315,17 +337,18 @@ export function DashboardContent({
         onSelectDevice={handleActivityRowClick}
       />
 
-      <PolicyDetailsModal
-        open={policyRow !== null}
-        onClose={() => setPolicyRow(null)}
-        device={selectedDevice}
-      />
+      {selectedDevice && (
+        <PolicyDetailsModal
+          open={policyRow !== null}
+          onClose={() => setPolicyRow(null)}
+          device={selectedDevice}
+        />
+      )}
 
       <AllDevicesDrawer
         open={allDevicesOpen}
         onClose={() => setAllDevicesOpen(false)}
         onViewDevice={onDeviceChange}
-        isMockData={isMockData}
         sourceCounts={sourceCounts}
       />
     </>

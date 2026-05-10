@@ -6,8 +6,8 @@ function toItem({ id, message, read }: { id: string; message: string; read: bool
   return { id, message, read }
 }
 
-export function useNotifications(seed: NotificationItem[]) {
-  const [notifications, setNotifications] = useState<NotificationItem[]>(seed)
+export function useNotifications() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
   useEffect(() => {
     api.fetchNotifications()

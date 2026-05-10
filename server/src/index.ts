@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import rateLimit from 'express-rate-limit'
 import { requestLogger } from './middleware/requestLogger.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import devicesRouter from './routes/devices.js'
@@ -9,11 +10,30 @@ import notificationsRouter from './routes/notifications.js'
 import activityRouter from './routes/activity.js'
 import aiRouter from './routes/ai.js'
 import integrationsRouter from './routes/integrations.js'
+import reportsRouter from './routes/reports.js'
 
 dotenv.config()
 
 const app = express()
 const port = process.env.PORT ?? 4000
+
+// General API rate limit: 200 req / 15 min per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later.' },
+})
+
+// Tighter limit for AI and sync endpoints (expensive ops)
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later.' },
+})
 
 app.use(cors())
 app.use(express.json())
@@ -23,12 +43,13 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() })
 })
 
-app.use('/api/devices', devicesRouter)
-app.use('/api/integrations', integrationsRouter)
-app.use('/api/runbooks', runbooksRouter)
-app.use('/api/notifications', notificationsRouter)
-app.use('/api/activity', activityRouter)
-app.use('/api/ai', aiRouter)
+app.use('/api/devices', apiLimiter, devicesRouter)
+app.use('/api/integrations', apiLimiter, integrationsRouter)
+app.use('/api/runbooks', apiLimiter, runbooksRouter)
+app.use('/api/notifications', apiLimiter, notificationsRouter)
+app.use('/api/activity', apiLimiter, activityRouter)
+app.use('/api/ai', strictLimiter, aiRouter)
+app.use('/api/reports', apiLimiter, reportsRouter)
 
 app.use(errorHandler)
 

@@ -1,4 +1,4 @@
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, Server, Cloud, Settings, Zap } from 'lucide-react'
+import { RefreshCw, Wifi, WifiOff, Server, Cloud, Settings, Zap } from 'lucide-react'
 
 interface SourceCount {
   intune: number
@@ -7,7 +7,6 @@ interface SourceCount {
 }
 
 interface LiveDataBarProps {
-  isMockData: boolean
   sourceCounts: SourceCount
   countdown: number
   lastUpdated: Date | null
@@ -73,7 +72,6 @@ function formatLastUpdated(d: Date): string {
 }
 
 export function LiveDataBar({
-  isMockData,
   sourceCounts,
   countdown,
   lastUpdated,
@@ -82,31 +80,6 @@ export function LiveDataBar({
 }: LiveDataBarProps) {
   const totalDevices = sourceCounts.intune + sourceCounts.kandji + sourceCounts.manageEngine
   const connectedSources = SOURCES.filter(s => sourceCounts[s.id] > 0).length
-
-  if (isMockData) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 shadow-sm shadow-amber-900/5">
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-          <span className="text-[0.7rem] font-bold text-amber-700 uppercase tracking-wide">Mock Data</span>
-        </div>
-        <div className="h-3.5 w-px bg-amber-300 flex-shrink-0" />
-        <p className="text-[0.7rem] text-amber-600 flex-1 min-w-0">
-          No integrations are connected — showing demo data.{' '}
-          <span className="font-semibold">Go to Settings → Integrations</span> to connect your MDM sources and see real device data.
-        </p>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[0.68rem] font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition"
-        >
-          <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-          Retry
-        </button>
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-sky-50/60 px-4 py-2.5 shadow-sm shadow-slate-900/5">

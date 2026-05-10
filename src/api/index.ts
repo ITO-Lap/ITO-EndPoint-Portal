@@ -9,7 +9,17 @@ export interface ApiStats {
   windows: number
   mac: number
   sources: { intune: number; kandji: number; manageEngine: number }
+  issueCategories: Array<{ label: string; value: number }>
   mock: boolean
+}
+
+export interface DeviceAnalysis {
+  summary: string
+  rootCause: string
+  recommendation: string
+  suggestedRunbook: string
+  riskLevel: 'Low' | 'Medium' | 'High' | 'Critical'
+  steps: string[]
 }
 
 export interface ApiDevice {
@@ -93,6 +103,7 @@ export interface AppStatus {
   version: string
   publisher: string
   status: 'Installed' | 'Failed' | 'Pending' | 'NotApplicable'
+  appType?: string      // e.g. "App Store", "System", "MDM Managed"
   installDate?: string
   size?: string
   errorCode?: string
@@ -108,6 +119,14 @@ export interface LapsInfo {
   passwordExpiresAt?: string
 }
 
+export interface LibraryApp {
+  id: string
+  name: string
+  category: string
+  active: boolean
+  enforcement: string
+}
+
 export interface IntegrationStatusItem {
   id: string
   name: string
@@ -117,6 +136,52 @@ export interface IntegrationStatusItem {
   latencyMs: number | null
   error: string | null
   healthy: boolean | null
+}
+
+// ── Reporting ─────────────────────────────────────────────────────────────────
+
+export type ReportCategory = 'inventory' | 'compliance' | 'security' | 'software' | 'health' | 'users'
+
+export interface ReportColumn {
+  key:    string
+  label:  string
+  type:   'string' | 'number' | 'date' | 'badge' | 'percent'
+  align?: 'left' | 'right'
+  width?: 'sm' | 'md' | 'lg' | 'xl'
+}
+
+export interface ReportSummaryCard {
+  label: string
+  value: string | number
+  color: 'green' | 'red' | 'amber' | 'sky' | 'slate' | 'violet'
+}
+
+export interface ReportMeta {
+  id:          string
+  name:        string
+  category:    ReportCategory
+  description: string
+  sources:     string[]
+}
+
+export interface ReportResult {
+  reportId:    string
+  reportName:  string
+  category:    ReportCategory
+  description: string
+  generatedAt: string
+  totalRows:   number
+  rows:        Record<string, unknown>[]
+  columns:     ReportColumn[]
+  summary?:    ReportSummaryCard[]
+  cached:      boolean
+}
+
+export interface ReportRunParams {
+  limit?:   number
+  offset?:  number
+  sortBy?:  string
+  sortDir?: 'asc' | 'desc'
 }
 
 export interface IntegrationSyncResult {
@@ -178,6 +243,27 @@ export const api = {
   markAllRead: () => patch<ApiNotification[]>('/api/notifications/read-all'),
   markRead: (id: string) => patch<ApiNotification>(`/api/notifications/${id}/read`),
 
+  fetchDeviceApps: (id: string) =>
+    get<AppStatus[]>(`/api/devices/${id}/apps`),
+
+  fetchKandjiApps: () =>
+    get<LibraryApp[]>('/api/integrations/kandji/apps'),
+
+  // AI analysis — pass live device fields directly (no device-ID lookup needed)
+  analyzeDeviceFields: (fields: {
+    deviceName: string; user: string; platform: string; osVersion: string
+    managementSource: string; complianceState: string; encryptionStatus: string
+    primaryIssue: string; policyFailed: string; severity: string
+  }) => post<DeviceAnalysis>('/api/ai/analyze', fields),
+
+  // Reports
+  listReports: () =>
+    get<ReportMeta[]>('/api/reports'),
+  runReport: (id: string, params: ReportRunParams = {}) =>
+    post<ReportResult>(`/api/reports/${encodeURIComponent(id)}/run`, params),
+  exportReportCsvUrl: (id: string) =>
+    `${BASE_URL}/api/reports/${encodeURIComponent(id)}/export/csv`,
+
   // Integration management
   fetchIntegrationStatus: () =>
     get<IntegrationStatusItem[]>('/api/integrations/status'),
@@ -190,6 +276,7 @@ export const api = {
 /** Map a server Device to the frontend DeviceData shape. */
 export function apiDeviceToDeviceData(d: ApiDevice) {
   return {
+    id:               d.id,
     deviceName:       d.deviceName,
     user:             d.user,
     serialNumber:     d.serialNumber,

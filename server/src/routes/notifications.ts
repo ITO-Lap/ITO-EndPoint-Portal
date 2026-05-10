@@ -1,12 +1,11 @@
 import { Router } from 'express'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { mockNotifications } from '../data/mockNotifications.js'
 import type { Notification } from '../types.js'
 
 const router = Router()
 
 // In-memory store — replace with a DB in production
-let notifications: Notification[] = mockNotifications.map(n => ({ ...n }))
+let notifications: Notification[] = []
 
 // GET /api/notifications
 router.get('/', asyncHandler(async (_req, res) => {
