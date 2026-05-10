@@ -16,6 +16,66 @@ export interface Device {
   firstDetected: string
   lastDetected: string
   issueSource: string
+
+  // Hardware
+  manufacturer?: string
+  model?: string
+  totalStorage?: string
+  freeStorage?: string
+  totalMemory?: string
+  processor?: string
+  architecture?: string
+
+  // Network
+  ipAddress?: string
+  macAddress?: string
+  wifiMacAddress?: string
+
+  // Enrollment & Identity
+  enrollmentDate?: string
+  enrollmentType?: string
+  ownership?: 'Corporate' | 'Personal'
+  isAadRegistered?: boolean
+  department?: string
+
+  // OS Details
+  osBuildNumber?: string
+
+  // Security
+  firewallStatus?: string
+  antivirusStatus?: string
+  secureBoot?: string
+  tpmVersion?: string
+
+  // Compliance
+  lastComplianceCheck?: string
+  appliedPolicies?: string[]
+
+  // Applications
+  apps?: AppStatus[]
+
+  // LAPS
+  laps?: LapsInfo
+}
+
+export interface AppStatus {
+  name: string
+  version: string
+  publisher: string
+  status: 'Installed' | 'Failed' | 'Pending' | 'NotApplicable'
+  installDate?: string
+  size?: string
+  errorCode?: string
+  errorDescription?: string
+  lastAttempt?: string
+}
+
+export interface LapsInfo {
+  enabled: boolean
+  source?: string          // "Microsoft LAPS (Entra)" | "Legacy LAPS" | "Kandji Managed" | "Not Configured"
+  accountName?: string     // "LocalAdmin" | "Administrator"
+  passwordLastRotated?: string
+  passwordExpiresAt?: string
 }
 
 export interface Runbook {
@@ -53,6 +113,21 @@ export interface ActivityItem {
   message: string
   status: 'Compliant' | 'Warning' | 'Non-Compliant'
   timestamp: string
+}
+
+export interface DashboardStats {
+  total: number
+  compliant: number
+  nonCompliant: number
+  warning: number
+  windows: number
+  mac: number
+  sources: {
+    intune: number
+    kandji: number
+    manageEngine: number
+  }
+  mock: boolean
 }
 
 export interface ApiResponse<T> {

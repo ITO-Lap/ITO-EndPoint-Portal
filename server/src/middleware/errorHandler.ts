@@ -1,14 +1,23 @@
 import type { Request, Response, NextFunction } from 'express'
+import { ZodError } from 'zod'
 
 export interface ApiError extends Error {
   status?: number
   code?: string
 }
 
-export function errorHandler(err: ApiError, req: Request, res: Response, next: NextFunction) {
-  const status = err.status ?? 500
-  const message = err.message ?? 'Internal Server Error'
+export function errorHandler(err: ApiError | ZodError, _req: Request, res: Response, _next: NextFunction) {
+  if (err instanceof ZodError) {
+    const first = err.issues[0]
+    res.status(400).json({
+      success: false,
+      error: first ? `${first.path.join('.')}: ${first.message}` : 'Validation error',
+    })
+    return
+  }
 
+  const status = (err as ApiError).status ?? 500
+  const message = err.message ?? 'Internal Server Error'
   console.error(`[Error] ${status} - ${message}`, err)
 
   res.status(status).json({
