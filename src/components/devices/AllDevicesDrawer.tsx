@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useColumnResize } from '../../hooks/useColumnResize'
 import { X, Monitor, Laptop, Globe, Search, RefreshCw, Lock, LockOpen, ChevronRight, Package } from 'lucide-react'
 import { api, type ApiDevice, type LibraryApp } from '../../api'
 import { DeviceDetailPanel } from './DeviceDetailPanel'
@@ -13,42 +14,14 @@ const COLS = [
   { key: 'checkin',    label: 'Last Check-in',  min: 100, default: 155 },
   { key: 'encryption', label: 'Encryption',     min:  90, default: 130 },
   { key: 'issue',      label: 'Issue',          min: 100, default: 200 },
-  { key: 'actions',    label: '',               min:  60, default:  80 },
+  { key: 'actions',    label: '',               min:  60, default:  80, noResize: true },
 ] as const
 type ColKey = typeof COLS[number]['key']
 
-function useColumnResize(defaults: Record<ColKey, number>) {
-  const [widths, setWidths] = useState<Record<ColKey, number>>(defaults)
-  const drag = useRef<{ col: ColKey; x0: number; w0: number } | null>(null)
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!drag.current) return
-      const { col, x0, w0 } = drag.current
-      const min = COLS.find(c => c.key === col)?.min ?? 60
-      setWidths(prev => ({ ...prev, [col]: Math.max(min, w0 + e.clientX - x0) }))
-    }
-    const onUp = () => { drag.current = null }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup',  onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup',  onUp)
-    }
-  }, [])
-
-  const startResize = (col: ColKey, e: React.MouseEvent, currentW: number) => {
-    drag.current = { col, x0: e.clientX, w0: currentW }
-    e.preventDefault()
-  }
-
-  return { widths, startResize }
-}
-
 const SOURCE_TABS = [
   { id: 'all',          label: 'All Sources',  activeClass: 'bg-slate-900 text-white' },
-  { id: 'intune',       label: 'Intune',        activeClass: 'bg-sky-600 text-white'  },
-  { id: 'kandji',       label: 'Kandji',        activeClass: 'bg-violet-600 text-white' },
+  { id: 'intune',       label: 'Intune',        activeClass: 'bg-orange-600 text-white'  },
+  { id: 'kandji',       label: 'Kandji',        activeClass: 'bg-lime-600 text-white' },
   { id: 'manageengine', label: 'ManageEngine',  activeClass: 'bg-orange-500 text-white' },
 ] as const
 
@@ -64,8 +37,8 @@ interface Props {
 }
 
 function PlatformIcon({ p }: { p: string }) {
-  if (p === 'Windows') return <Monitor className="h-3.5 w-3.5 text-sky-500 flex-shrink-0" />
-  if (p === 'macOS')   return <Laptop  className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+  if (p === 'Windows') return <Monitor className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+  if (p === 'macOS')   return <Laptop  className="h-3.5 w-3.5 text-lime-500 flex-shrink-0" />
   return                      <Globe   className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
 }
 
@@ -84,9 +57,9 @@ function CompliancePill({ state }: { state: string }) {
 
 function SourcePill({ src }: { src: string }) {
   if (src === 'Microsoft Intune')
-    return <span className="inline-flex rounded-full bg-sky-50 border border-sky-200 px-2 py-0.5 text-xs font-medium text-sky-700">Intune</span>
+    return <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-xs font-medium text-orange-700">Intune</span>
   if (src === 'Kandji')
-    return <span className="inline-flex rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-xs font-medium text-violet-700">Kandji</span>
+    return <span className="inline-flex rounded-full bg-lime-50 border border-lime-200 px-2 py-0.5 text-xs font-medium text-lime-700">Kandji</span>
   return   <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-xs font-medium text-orange-700">ManageEngine</span>
 }
 
@@ -101,7 +74,7 @@ function EncryptionCell({ status }: { status: string }) {
 }
 
 function SeverityDot({ s }: { s: string }) {
-  const c = s === 'Critical' ? 'bg-red-600' : s === 'High' ? 'bg-orange-500' : s === 'Medium' ? 'bg-amber-400' : 'bg-blue-400'
+  const c = s === 'Critical' ? 'bg-red-600' : s === 'High' ? 'bg-orange-500' : s === 'Medium' ? 'bg-amber-400' : 'bg-orange-400'
   return <span className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${c}`} title={s} />
 }
 
@@ -167,9 +140,9 @@ function matchesSearch(d: ApiDevice, q: string): boolean {
 // ── App category badge ────────────────────────────────────────────────────────
 function AppTypeBadge({ type }: { type: string }) {
   const cls =
-    type === 'Auto App'   ? 'bg-sky-50     border-sky-200     text-sky-700'     :
-    type === 'Custom App' ? 'bg-violet-50  border-violet-200  text-violet-700'  :
-    type === 'VPP App'    ? 'bg-indigo-50  border-indigo-200  text-indigo-700'  :
+    type === 'Auto App'   ? 'bg-orange-50     border-orange-200     text-orange-700'     :
+    type === 'Custom App' ? 'bg-lime-50  border-lime-200  text-lime-700'  :
+    type === 'VPP App'    ? 'bg-lime-50  border-lime-200  text-lime-700'  :
     type === 'Script'     ? 'bg-amber-50   border-amber-200   text-amber-700'   :
     type === 'Profile'    ? 'bg-slate-100  border-slate-200   text-slate-600'   :
     type === 'Web App'    ? 'bg-teal-50    border-teal-200    text-teal-700'    :
@@ -228,7 +201,7 @@ function KandjiAppsPanel() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <p className="text-sm text-red-500">{error}</p>
-        <button type="button" onClick={load} className="text-xs text-sky-600 underline">Retry</button>
+        <button type="button" onClick={load} className="text-xs text-orange-600 underline">Retry</button>
       </div>
     )
   }
@@ -240,7 +213,7 @@ function KandjiAppsPanel() {
       {/* Stats bar */}
       <div className="flex flex-wrap gap-4 px-6 py-2.5 border-b border-slate-100 bg-slate-50/60 text-xs flex-shrink-0">
         <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-          <Package className="h-3.5 w-3.5 text-violet-500" />
+          <Package className="h-3.5 w-3.5 text-lime-500" />
           {apps.length.toLocaleString()} items in Kandji Library
         </span>
         {categoryStats.map(({ cat, count }) => (
@@ -259,7 +232,7 @@ function KandjiAppsPanel() {
             placeholder="Search library…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-7.5 pr-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-300 transition"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-7.5 pr-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-300 transition"
           />
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -275,7 +248,7 @@ function KandjiAppsPanel() {
               key={cat}
               type="button"
               onClick={() => setCategory(cat === category ? '' : cat)}
-              className={`rounded-full px-2 py-0.5 text-xs font-medium border transition ${category === cat ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+              className={`rounded-full px-2 py-0.5 text-xs font-medium border transition ${category === cat ? 'bg-lime-600 text-white border-lime-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
             >
               {cat}
             </button>
@@ -350,8 +323,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
   const [error,   setError]   = useState<string | null>(null)
   const [selected, setSelected] = useState<ApiDevice | null>(null)
 
-  const defaultWidths = Object.fromEntries(COLS.map(c => [c.key, c.default])) as Record<ColKey, number>
-  const { widths, startResize } = useColumnResize(defaultWidths)
+  const { widths, startResize, totalWidth } = useColumnResize(COLS, 'all-devices')
 
   const [source,     setSource]     = useState<SourceId>('all')
   const [compliance, setCompliance] = useState<ComplianceOpt>('')
@@ -442,7 +414,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
           <button
             type="button"
             onClick={onClose}
-            className="ml-4 flex-shrink-0 rounded-full p-2 hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition focus-visible:ring-2 focus-visible:ring-sky-300"
+            className="ml-4 flex-shrink-0 rounded-full p-2 hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition focus-visible:ring-2 focus-visible:ring-orange-300"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -471,7 +443,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                       // Reset apps sub-view when leaving Kandji
                       if (tab.id !== 'kandji') setKandjiView('devices')
                     }}
-                    className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                    className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                       isActive ? tab.activeClass : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -486,7 +458,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
 
             {/* Kandji sub-view toggle: Devices | Apps */}
             {source === 'kandji' && (
-              <div className="flex gap-1 px-4 py-2 border-b border-slate-100 bg-violet-50/40 flex-shrink-0">
+              <div className="flex gap-1 px-4 py-2 border-b border-slate-100 bg-lime-50/40 flex-shrink-0">
                 {(['devices', 'apps'] as const).map(v => (
                   <button
                     key={v}
@@ -494,8 +466,8 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     onClick={() => setKandjiView(v)}
                     className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition ${
                       kandjiView === v
-                        ? 'bg-violet-600 text-white shadow-sm'
-                        : 'text-violet-700 hover:bg-violet-100'
+                        ? 'bg-lime-600 text-white shadow-sm'
+                        : 'text-lime-700 hover:bg-lime-100'
                     }`}
                   >
                     {v === 'apps' && <Package className="h-3 w-3" />}
@@ -516,7 +488,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                   placeholder="Search…"
                   value={searchRaw}
                   onChange={e => setSearchRaw(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-7.5 pr-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-300 transition"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-7.5 pr-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-300 transition"
                 />
               </div>
               {/* Compliance */}
@@ -526,7 +498,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     key={opt || 'all-c'}
                     type="button"
                     onClick={() => setCompliance(opt)}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                       compliance === opt
                         ? opt === 'Compliant'     ? 'bg-emerald-500 text-white border-emerald-500'
                         : opt === 'Warning'       ? 'bg-amber-500   text-white border-amber-500'
@@ -547,7 +519,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                       key={opt || 'all-p'}
                       type="button"
                       onClick={() => setPlatform(opt)}
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                         platform === opt ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
@@ -592,13 +564,13 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
               ) : error ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-3">
                   <p className="text-sm text-slate-500">{error}</p>
-                  <button type="button" onClick={fetchDevices} className="text-xs text-sky-600 underline">Retry</button>
+                  <button type="button" onClick={fetchDevices} className="text-xs text-orange-600 underline">Retry</button>
                 </div>
               ) : devices.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-2">
                   <Search className="h-10 w-10 text-slate-200" />
                   <p className="text-sm font-medium text-slate-400">No devices match current filters</p>
-                  {hasFilters && <button type="button" onClick={clearFilters} className="text-xs text-sky-600 underline">Clear filters</button>}
+                  {hasFilters && <button type="button" onClick={clearFilters} className="text-xs text-orange-600 underline">Clear filters</button>}
                 </div>
               ) : showDetail ? (
                 /* Compact list when detail is open */
@@ -610,13 +582,13 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                         key={device.id}
                         type="button"
                         onClick={() => setSelected(device)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 ${
-                          isActive ? 'bg-sky-50 border-l-2 border-sky-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
+                          isActive ? 'bg-orange-50 border-l-2 border-orange-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
                         }`}
                       >
                         <PlatformIcon p={device.platform} />
                         <div className="min-w-0 flex-1">
-                          <p className={`text-xs font-semibold truncate ${isActive ? 'text-sky-700' : 'text-slate-900'}`}>{device.deviceName}</p>
+                          <p className={`text-xs font-semibold truncate ${isActive ? 'text-orange-700' : 'text-slate-900'}`}>{device.deviceName}</p>
                           <p className="text-xs text-slate-400 truncate">{device.user}</p>
                         </div>
                         <CompliancePill state={device.complianceState} />
@@ -626,7 +598,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                 </div>
               ) : (
                 /* Full table — resizable columns */
-                <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: COLS.reduce((s, c) => s + widths[c.key], 0) }}>
+                <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
                   <colgroup>
                     {COLS.map(c => <col key={c.key} style={{ width: widths[c.key] }} />)}
                   </colgroup>
@@ -642,8 +614,8 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                           {/* Drag handle — visible on hover */}
                           {c.key !== 'actions' && (
                             <span
-                              className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-sky-400/60 active:bg-sky-500 transition-colors"
-                              onMouseDown={e => startResize(c.key, e, widths[c.key])}
+                              className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/60 active:bg-orange-500 transition-colors"
+                              onMouseDown={e => startResize(c.key, e)}
                             />
                           )}
                         </th>
@@ -654,7 +626,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     {devices.map(device => (
                       <tr
                         key={device.id}
-                        className="group hover:bg-sky-50/40 cursor-pointer transition-colors"
+                        className="group hover:bg-orange-50/40 cursor-pointer transition-colors"
                         onClick={() => setSelected(device)}
                       >
                         <td className="px-4 py-3 overflow-hidden">
@@ -689,7 +661,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                           )}
                         </td>
                         <td className="px-4 py-3 overflow-hidden">
-                          <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition opacity-0 group-hover:opacity-100">
+                          <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 transition opacity-0 group-hover:opacity-100">
                             Details <ChevronRight className="h-3 w-3" />
                           </span>
                         </td>
@@ -731,7 +703,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                 <button
                   type="button"
                   onClick={() => { onClose(); onViewDevice(selected.deviceName) }}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold bg-sky-600 hover:bg-sky-700 text-white transition focus-visible:ring-2 focus-visible:ring-sky-300"
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white transition focus-visible:ring-2 focus-visible:ring-orange-300"
                 >
                   Open in Dashboard <ChevronRight className="h-4 w-4" />
                 </button>

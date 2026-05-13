@@ -1,7 +1,7 @@
 import type { BadgeVariant } from '../../types'
 
 const styles: Record<BadgeVariant, string> = {
-  blue: 'bg-sky-100 text-sky-700',
+  blue: 'bg-orange-100 text-orange-700',
   red: 'bg-red-100 text-red-700',
   green: 'bg-emerald-100 text-emerald-700',
   orange: 'bg-orange-100 text-orange-700',

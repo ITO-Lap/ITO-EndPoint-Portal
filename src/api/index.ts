@@ -140,7 +140,10 @@ export interface IntegrationStatusItem {
 
 // ── Reporting ─────────────────────────────────────────────────────────────────
 
-export type ReportCategory = 'inventory' | 'compliance' | 'security' | 'software' | 'health' | 'users'
+export type ReportCategory =
+  | 'inventory' | 'compliance' | 'security' | 'software' | 'health' | 'users'
+  | 'endpoint' | 'threat' | 'identity' | 'audit'
+  | 'slack-access' | 'slack-channel' | 'slack-users' | 'slack-files' | 'slack-compliance'
 
 export interface ReportColumn {
   key:    string
@@ -157,11 +160,13 @@ export interface ReportSummaryCard {
 }
 
 export interface ReportMeta {
-  id:          string
-  name:        string
-  category:    ReportCategory
-  description: string
-  sources:     string[]
+  id:           string
+  name:         string
+  category:     ReportCategory
+  description:  string
+  sources:      string[]
+  apiEndpoint?: string
+  graphSource?: string
 }
 
 export interface ReportResult {
@@ -191,6 +196,112 @@ export interface IntegrationSyncResult {
   error: string | null
 }
 
+export interface JiraIssue {
+  id:        string
+  key:       string
+  summary:   string
+  status:    string
+  priority:  string
+  issueType: string
+  url:       string
+  created:   string
+}
+
+export interface JiraIssueInput {
+  summary:    string
+  description: string
+  issueType:  'Incident' | 'Task' | 'Bug' | 'Story'
+  priority:   'Critical' | 'High' | 'Medium' | 'Low'
+  projectKey?: string
+  labels?:    string[]
+}
+
+export interface ConfluencePage {
+  id:           string
+  title:        string
+  space:        string
+  url:          string
+  excerpt:      string
+  lastModified: string
+}
+
+// ── Remote Scripts ─────────────────────────────────────────────────────────────
+
+export interface ScriptParameter {
+  name: string
+  label: string
+  type: 'string' | 'number' | 'boolean' | 'select'
+  required: boolean
+  defaultValue?: string
+  options?: string[]
+  placeholder?: string
+}
+
+export interface Script {
+  id: string
+  name: string
+  description: string
+  os: 'Windows' | 'macOS' | 'Linux' | 'Cross-platform'
+  type: 'PowerShell' | 'Bash' | 'Batch' | 'Python'
+  content: string
+  version: number
+  tags: string[]
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+  isDestructive: boolean
+  requiresApproval: boolean
+  minRole: 'Helpdesk' | 'IT Admin' | 'Global Admin'
+  parameters: ScriptParameter[]
+  timeoutSeconds: number
+  useCount: number
+}
+
+export interface ScriptExecution {
+  id: string
+  scriptId: string
+  scriptName: string
+  scriptVersion: number
+  deviceId: string
+  deviceName: string
+  platform: string
+  managementSource: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'timeout' | 'cancelled' | 'pending_approval'
+  exitCode?: number
+  stdout?: string
+  stderr?: string
+  runtimeMs?: number
+  startedAt: string
+  completedAt?: string
+  executedBy: string
+  approvedBy?: string
+  parameters?: Record<string, string>
+}
+
+export interface ExecuteScriptInput {
+  deviceId: string
+  deviceName: string
+  platform: string
+  managementSource: string
+  executedBy: string
+  parameters?: Record<string, string>
+}
+
+export interface CreateScriptInput {
+  name: string
+  description: string
+  os: 'Windows' | 'macOS' | 'Linux' | 'Cross-platform'
+  type: 'PowerShell' | 'Bash' | 'Batch' | 'Python'
+  content: string
+  tags: string[]
+  createdBy: string
+  isDestructive: boolean
+  requiresApproval: boolean
+  minRole: 'Helpdesk' | 'IT Admin' | 'Global Admin'
+  parameters: ScriptParameter[]
+  timeoutSeconds: number
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`)
   if (!res.ok) throw new Error(`${path}: ${res.status}`)
@@ -212,6 +323,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (!res.ok) throw new Error(`${path}: ${res.status}`)
+  const data = await res.json()
+  if (!data.success) throw new Error(data.error ?? 'API error')
+  return data.data as T
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${path}: ${res.status}`)
   const data = await res.json()
   if (!data.success) throw new Error(data.error ?? 'API error')
@@ -271,6 +390,47 @@ export const api = {
     post<{ id: string; configured: boolean }>(`/api/integrations/${id}/credentials`, { fields }),
   syncIntegration: (id: string) =>
     post<IntegrationSyncResult>(`/api/integrations/${id}/sync`, {}),
+
+  // Jira
+  jiraStatus: () =>
+    get<{ jira: boolean; confluence: boolean }>('/api/jira/status'),
+  createJiraIssue: (input: JiraIssueInput) =>
+    post<JiraIssue>('/api/jira/issues', input),
+  searchJiraIssues: (q: string) =>
+    get<JiraIssue[]>(`/api/jira/issues/search?q=${encodeURIComponent(q)}`),
+
+  // Confluence
+  searchConfluence: (q: string) =>
+    get<ConfluencePage[]>(`/api/jira/confluence/search?q=${encodeURIComponent(q)}`),
+
+  // Remote Scripts
+  fetchScripts: (params?: { q?: string; os?: string; type?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.os) qs.set('os', params.os)
+    if (params?.type) qs.set('type', params.type)
+    const query = qs.toString()
+    return get<Script[]>(`/api/scripts${query ? `?${query}` : ''}`)
+  },
+  fetchScript: (id: string) =>
+    get<Script>(`/api/scripts/${encodeURIComponent(id)}`),
+  createScript: (input: CreateScriptInput) =>
+    post<Script>('/api/scripts', input),
+  deleteScript: (id: string) =>
+    del<{ id: string }>(`/api/scripts/${encodeURIComponent(id)}`),
+  executeScript: (id: string, input: ExecuteScriptInput) =>
+    post<ScriptExecution>(`/api/scripts/${encodeURIComponent(id)}/execute`, input),
+  fetchExecutions: (params?: { deviceId?: string; scriptId?: string; status?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.deviceId) qs.set('deviceId', params.deviceId)
+    if (params?.scriptId) qs.set('scriptId', params.scriptId)
+    if (params?.status) qs.set('status', params.status)
+    if (params?.limit) qs.set('limit', String(params.limit))
+    const query = qs.toString()
+    return get<ScriptExecution[]>(`/api/scripts/executions${query ? `?${query}` : ''}`)
+  },
+  fetchExecution: (id: string) =>
+    get<ScriptExecution>(`/api/scripts/executions/${encodeURIComponent(id)}`),
 }
 
 /** Map a server Device to the frontend DeviceData shape. */

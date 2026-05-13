@@ -24,6 +24,7 @@ export interface ConnectedSource {
   label: string
   status: string
   icon: LucideIcon
+  integrationId: string  // matches id from /api/integrations/status
 }
 
 export interface DeviceData {
@@ -177,6 +178,9 @@ export interface AppUser {
   loginLocation: string
   createdAt: string
   riskLevel: UserRiskLevel
+  isVip?: boolean
+  groups?: string[]
+  licenseStatus?: string
   assignedDevices: UserDeviceRef[]
   recentActivity: UserActivityEvent[]
   sources: UserSource[]

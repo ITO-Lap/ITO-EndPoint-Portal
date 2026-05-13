@@ -17,6 +17,11 @@ const SOURCE_META: Record<string, { lastSync: string; description: string }> = {
     description:
       'Microsoft Intune manages Windows device compliance policies, BitLocker enforcement, OS update rings, and conditional access rules across the organisation.',
   },
+  'Microsoft Entra ID': {
+    lastSync: 'On demand',
+    description:
+      'Microsoft Entra ID (Azure AD) provides identity signals — sign-in logs, risky sign-in events, MFA registration status, directory audits, and user lifecycle events used to enrich device risk context.',
+  },
   'Kandji': {
     lastSync: '5 minutes ago',
     description:
@@ -28,9 +33,24 @@ const SOURCE_META: Record<string, { lastSync: string; description: string }> = {
       'ManageEngine Desktop Central tracks Windows desktop inventory, patch compliance, software licensing, and remote management workflows.',
   },
   'OpenAI': {
-    lastSync: 'N/A',
+    lastSync: 'Real-time',
     description:
-      'OpenAI GPT-4 powers the AI Copilot — generating compliance analysis, remediation recommendations, and natural-language answers about device issues.',
+      'OpenAI GPT-4o powers the AI Copilot — generating compliance analysis, remediation recommendations, and natural-language answers about device issues.',
+  },
+  'Jira': {
+    lastSync: 'On demand',
+    description:
+      'Jira integration auto-creates and links tickets from device runbooks and compliance failures. Tickets are raised directly against the configured project when a remediation runbook is triggered.',
+  },
+  'Confluence': {
+    lastSync: 'On demand',
+    description:
+      'Confluence integration searches your knowledge base to surface relevant runbook articles alongside device issues, reducing mean time to resolution for recurring compliance failures.',
+  },
+  'Slack': {
+    lastSync: 'On demand',
+    description:
+      'Slack integration ingests workspace audit logs, login events, and channel activity. Compliance alerts and remediation notifications can be pushed directly to Slack channels.',
   },
 }
 

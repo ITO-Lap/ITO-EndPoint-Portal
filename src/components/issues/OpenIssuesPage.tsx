@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../api'
 import type { ApiDevice } from '../../api'
+import { useColumnResize } from '../../hooks/useColumnResize'
 
 type SortField = 'deviceName' | 'user' | 'issueSource' | 'primaryIssue' | 'severity' | 'firstDetected' | 'complianceState'
 type SortDir = 'asc' | 'desc'
@@ -42,9 +43,21 @@ function PlatformIcon({ platform }: { platform: string }) {
 function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
   if (field !== sortField) return <ChevronsUpDown className="h-3 w-3 text-slate-400" />
   return sortDir === 'asc'
-    ? <ChevronUp className="h-3 w-3 text-sky-500" />
-    : <ChevronDown className="h-3 w-3 text-sky-500" />
+    ? <ChevronUp className="h-3 w-3 text-orange-500" />
+    : <ChevronDown className="h-3 w-3 text-orange-500" />
 }
+
+const COLS = [
+  { key: 'deviceName',    label: 'Device',         min: 100, default: 180 },
+  { key: 'user',          label: 'User',            min:  80, default: 140 },
+  { key: 'complianceState', label: 'Status',        min:  80, default: 110 },
+  { key: 'issueSource',   label: 'Category',        min:  80, default: 120 },
+  { key: 'primaryIssue',  label: 'Issue',           min: 100, default: 200 },
+  { key: 'severity',      label: 'Severity',        min:  70, default:  90 },
+  { key: 'firstDetected', label: 'First Detected',  min:  90, default: 120 },
+  { key: 'actions',       label: '',                min:  40, default:  50, noResize: true },
+] as const
+type OColKey = typeof COLS[number]['key']
 
 interface Props {
   onBack: () => void
@@ -131,15 +144,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
     Low:      devices.filter(d => d.severity === 'Low').length,
   }), [devices])
 
-  const columns: { key: SortField; label: string }[] = [
-    { key: 'deviceName',     label: 'Device'          },
-    { key: 'user',           label: 'User'             },
-    { key: 'complianceState',label: 'Status'           },
-    { key: 'issueSource',    label: 'Category'         },
-    { key: 'primaryIssue',   label: 'Issue'            },
-    { key: 'severity',       label: 'Severity'         },
-    { key: 'firstDetected',  label: 'First Detected'   },
-  ]
+  const { widths, startResize, totalWidth } = useColumnResize(COLS, 'open-issues')
 
   return (
     <div className="flex flex-col gap-5">
@@ -167,10 +172,9 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
         <button
           type="button"
           onClick={fetchData}
-          disabled={loading}
-          className="ml-auto flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm hover:bg-slate-50 transition disabled:opacity-50"
+          className={`ml-auto flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition ${loading ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-orange-500' : ''}`} />
           Refresh
         </button>
       </div>
@@ -208,7 +212,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
                   onClick={() => setActiveCategory(isActive ? null : cat.label)}
                   className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition shadow-sm ${
                     isActive
-                      ? 'border-sky-400 bg-sky-50 text-sky-700 ring-2 ring-sky-200'
+                      ? 'border-orange-400 bg-orange-50 text-orange-700 ring-2 ring-orange-200'
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
@@ -217,7 +221,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
                     style={{ backgroundColor: color }}
                   />
                   {cat.label}
-                  <span className={`rounded-full px-1.5 py-0.5 font-semibold ${isActive ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'}`}>
+                  <span className={`rounded-full px-1.5 py-0.5 font-semibold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>
                     {cat.value}
                   </span>
                 </button>
@@ -244,7 +248,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search devices, users, issues…"
-          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400"
+          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
         />
       </div>
 
@@ -263,22 +267,35 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
+              <colgroup>
+                {COLS.map(c => <col key={c.key} style={{ width: widths[c.key as OColKey] }} />)}
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-left">
-                  {columns.map(col => (
-                    <th
-                      key={col.key}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer select-none hover:text-slate-700 transition whitespace-nowrap"
-                      onClick={() => handleSort(col.key)}
-                    >
-                      <span className="flex items-center gap-1">
-                        {col.label}
-                        <SortIcon field={col.key} sortField={sortField} sortDir={sortDir} />
-                      </span>
-                    </th>
-                  ))}
-                  <th className="w-10 px-4 py-3" />
+                  {COLS.map(col => {
+                    const isSortable = col.key !== 'actions'
+                    return (
+                      <th
+                        key={col.key}
+                        className="relative px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 select-none whitespace-nowrap overflow-hidden"
+                        style={{ width: widths[col.key as OColKey] }}
+                        onClick={isSortable ? () => handleSort(col.key as SortField) : undefined}
+                      >
+                        <span className={`flex items-center gap-1 ${isSortable ? 'cursor-pointer hover:text-slate-700 transition' : ''}`}>
+                          {col.label}
+                          {isSortable && <SortIcon field={col.key as SortField} sortField={sortField} sortDir={sortDir} />}
+                        </span>
+                        {!col.noResize && (
+                          <span
+                            className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                            onMouseDown={e => startResize(col.key as OColKey, e)}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        )}
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -288,42 +305,46 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
                     className={`border-b border-slate-100 last:border-0 transition hover:bg-slate-50 ${idx % 2 === 0 ? '' : 'bg-slate-50/40'} ${onViewDevice ? 'cursor-pointer' : ''}`}
                     onClick={() => onViewDevice?.(device.deviceName)}
                   >
-                    <td className="px-4 py-3">
+                    <td className="overflow-hidden px-4 py-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <PlatformIcon platform={device.platform} />
-                        <span className="font-medium text-slate-800 truncate whitespace-nowrap">{device.deviceName}</span>
+                        <span className="block truncate font-medium text-slate-800">{device.deviceName}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 truncate max-w-[8rem] whitespace-nowrap">{device.user}</td>
-                    <td className="px-4 py-3">
+                    <td className="overflow-hidden px-4 py-3 text-slate-600">
+                      <span className="block truncate">{device.user}</span>
+                    </td>
+                    <td className="overflow-hidden px-4 py-3">
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold whitespace-nowrap ${COMPLIANCE_BADGE[device.complianceState] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                         {device.complianceState}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="overflow-hidden px-4 py-3">
                       <span className="flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap">
                         <span
                           className="h-2 w-2 rounded-full flex-shrink-0"
                           style={{ backgroundColor: CATEGORY_COLORS[device.issueSource] ?? '#64748b' }}
                         />
-                        {device.issueSource || 'Other'}
+                        <span className="block truncate">{device.issueSource || 'Other'}</span>
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 max-w-[14rem]">
-                      <span className="truncate block" title={device.primaryIssue}>{device.primaryIssue || '—'}</span>
+                    <td className="overflow-hidden px-4 py-3 text-xs text-slate-500">
+                      <span className="block truncate" title={device.primaryIssue}>{device.primaryIssue || '—'}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="overflow-hidden px-4 py-3">
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold ${SEVERITY_BADGE[device.severity] ?? SEVERITY_BADGE.Low}`}>
                         {device.severity}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{device.firstDetected || '—'}</td>
-                    <td className="px-4 py-3">
+                    <td className="overflow-hidden px-4 py-3 text-xs text-slate-500">
+                      <span className="block truncate">{device.firstDetected || '—'}</span>
+                    </td>
+                    <td className="overflow-hidden px-4 py-3">
                       {onViewDevice && (
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); onViewDevice(device.deviceName) }}
-                          className="rounded-lg p-1 hover:bg-sky-50 text-slate-400 hover:text-sky-600 transition"
+                          className="rounded-lg p-1 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition"
                           title="View device"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />

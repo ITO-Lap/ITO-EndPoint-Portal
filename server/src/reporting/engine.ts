@@ -1,5 +1,6 @@
 import type { Device } from '../types.js'
 import type { LibraryApp } from '../services/kandji.js'
+import type { EntraData } from '../services/entra.js'
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -10,6 +11,17 @@ export type ReportCategory =
   | 'software'
   | 'health'
   | 'users'
+  // Microsoft Graph API report categories
+  | 'endpoint'   // Endpoint management (Intune MDM)
+  | 'threat'     // Security & threat intelligence (Defender)
+  | 'identity'   // Identity & user (Entra ID / AAD)
+  | 'audit'      // Compliance & audit (Purview / AAD)
+  // Slack Audit Logs API report categories
+  | 'slack-access'      // Login, SSO & authentication events
+  | 'slack-channel'     // Message & channel activity
+  | 'slack-users'       // User & workspace management
+  | 'slack-files'       // File & app activity
+  | 'slack-compliance'  // Data retention, DLP & eDiscovery
 
 export interface ReportColumn {
   key:    string
@@ -46,17 +58,20 @@ export interface ReportResult {
 }
 
 export interface ReportMeta {
-  id:          string
-  name:        string
-  category:    ReportCategory
-  description: string
-  sources:     string[]
+  id:           string
+  name:         string
+  category:     ReportCategory
+  description:  string
+  sources:      string[]
+  apiEndpoint?: string
+  graphSource?: string
 }
 
 // Data context injected into every report runner
 export interface ReportContext {
   devices:     Device[]
   kandjiApps?: LibraryApp[]
+  entraData?:  EntraData
   isMock:      boolean
 }
 
@@ -69,6 +84,8 @@ export interface ReportDef {
   columns:      ReportColumn[]
   defaultSort?: { field: string; dir: 'asc' | 'desc' }
   cacheTtlSec:  number
+  apiEndpoint?: string
+  graphSource?: string
   run(ctx: ReportContext, params: ReportParams): {
     rows:     Record<string, unknown>[]
     summary?: ReportSummaryCard[]
@@ -93,6 +110,8 @@ export function listReportMeta(): ReportMeta[] {
   return Array.from(registry.values()).map(r => ({
     id: r.id, name: r.name, category: r.category,
     description: r.description, sources: r.sources,
+    ...(r.apiEndpoint && { apiEndpoint: r.apiEndpoint }),
+    ...(r.graphSource && { graphSource: r.graphSource }),
   }))
 }
 

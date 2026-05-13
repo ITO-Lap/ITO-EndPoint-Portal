@@ -9,9 +9,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles = {
   solid:
-    'bg-sky-600 text-white hover:bg-sky-700 active:bg-sky-800 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-50 disabled:cursor-not-allowed',
+    'bg-orange-600 text-white hover:bg-orange-700 active:bg-orange-800 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed',
   outline:
-    'border border-slate-200 bg-white text-sky-600 hover:bg-slate-50 hover:border-slate-300 active:bg-slate-100 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-50 disabled:cursor-not-allowed',
+    'border border-slate-200 bg-white text-orange-600 hover:bg-slate-50 hover:border-slate-300 active:bg-slate-100 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed',
 }
 
 export function Button({ variant = 'solid', icon: Icon, children, className = '', ...props }: ButtonProps) {

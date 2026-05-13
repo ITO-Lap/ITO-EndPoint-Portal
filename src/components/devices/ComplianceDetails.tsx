@@ -19,7 +19,7 @@ export function ComplianceDetails({ rows, onRowClick }: ComplianceDetailsProps) 
             <div
               key={row.label}
               className={`flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0 min-w-0 ${
-                isClickable ? 'rounded-lg px-2 -mx-2 cursor-pointer hover:bg-sky-50 transition group' : ''
+                isClickable ? 'rounded-lg px-2 -mx-2 cursor-pointer hover:bg-orange-50 transition group' : ''
               }`}
               onClick={isClickable ? () => onRowClick(row) : undefined}
               role={isClickable ? 'button' : undefined}
@@ -27,7 +27,7 @@ export function ComplianceDetails({ rows, onRowClick }: ComplianceDetailsProps) 
               onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onRowClick(row) } : undefined}
               aria-label={isClickable ? `View policy details: ${row.value}` : undefined}
             >
-              <span className={`text-xs shrink-0 w-[46%] leading-snug pt-0.5 ${isClickable ? 'text-sky-600 group-hover:text-sky-700 font-medium' : 'text-slate-500'}`}>
+              <span className={`text-xs shrink-0 w-[46%] leading-snug pt-0.5 ${isClickable ? 'text-orange-600 group-hover:text-orange-700 font-medium' : 'text-slate-500'}`}>
                 {row.label}
                 {isClickable && <span className="ml-1 text-[0.6rem] opacity-60">↗</span>}
               </span>

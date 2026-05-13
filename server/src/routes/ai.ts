@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { analyzeDevice, chatWithAI, isOpenAIConfigured } from '../services/openai.js'
+import { analyzeDevice, chatWithAI, isOpenAIConfigured, generateFallbackAnalysis } from '../services/openai.js'
 import { getCachedKandjiDevices } from '../services/kandji.js'
 import type { Device } from '../types.js'
 
@@ -51,14 +51,11 @@ router.get('/status', asyncHandler(async (_req, res) => {
 
 // POST /api/ai/analyze — deep compliance analysis for a device
 router.post('/analyze', asyncHandler(async (req, res) => {
-  if (!requireOpenAI(res)) return
-
   const parsed = analyzeSchema.parse(req.body)
 
   let device: Device | undefined
 
   if ('deviceId' in parsed) {
-    // Look up from the already-populated device cache (no new API calls)
     const cached = getCachedKandjiDevices()
     device = cached?.find(d => d.id === parsed.deviceId)
     if (!device) {
@@ -66,7 +63,6 @@ router.post('/analyze', asyncHandler(async (req, res) => {
       return
     }
   } else {
-    // Build a minimal Device from passed fields
     device = {
       id:               'inline',
       deviceName:       parsed.deviceName,
@@ -88,7 +84,11 @@ router.post('/analyze', asyncHandler(async (req, res) => {
     }
   }
 
-  const analysis = await analyzeDevice(device)
+  // Use OpenAI when available, fall back to deterministic rule-based analysis
+  const analysis = isOpenAIConfigured()
+    ? await analyzeDevice(device)
+    : generateFallbackAnalysis(device)
+
   res.json({ success: true, data: analysis })
 }))
 

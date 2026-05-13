@@ -10,7 +10,13 @@ import {
   Search,
   Server,
   Settings,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Terminal,
   Users,
+  Hash,
+  MessageSquare,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -29,15 +35,22 @@ export const navItems: NavItem[] = [
   { title: 'Diagnostics', icon: Activity },
   { title: 'Reports & Analytics', icon: BarChart3 },
   { title: 'Activity Log', icon: Clock3 },
+  { title: 'Remote Scripts', icon: Terminal },
+  { title: 'Security Posture', icon: Shield },
+  { title: 'Vulnerabilities', icon: ShieldAlert },
   { title: 'Settings', icon: Settings },
   { title: 'Documentation', icon: BookMarked },
 ]
 
 export const connectedSources: ConnectedSource[] = [
-  { name: 'Microsoft Intune', label: 'Intune', status: 'Connected', icon: Server },
-  { name: 'Kandji', label: 'Kandji', status: 'Connected', icon: Cloud },
-  { name: 'Manage Engine', label: 'Manage Engine', status: 'Connected', icon: Settings },
-  { name: 'OpenAI', label: 'OpenAI', status: 'Connected', icon: Cpu },
+  { name: 'Microsoft Intune',   label: 'Intune',       status: 'Connected', icon: Server,        integrationId: 'intune'        },
+  { name: 'Microsoft Entra ID', label: 'Entra ID',     status: 'Connected', icon: ShieldCheck,   integrationId: 'entra'         },
+  { name: 'Kandji',             label: 'Kandji',       status: 'Connected', icon: Cloud,         integrationId: 'kandji'        },
+  { name: 'Manage Engine',      label: 'ManageEngine', status: 'Connected', icon: Settings,      integrationId: 'manageengine'  },
+  { name: 'OpenAI',             label: 'OpenAI',       status: 'Connected', icon: Cpu,           integrationId: 'openai'        },
+  { name: 'Jira',               label: 'Jira',         status: 'Connected', icon: Hash,          integrationId: 'jira'          },
+  { name: 'Confluence',         label: 'Confluence',   status: 'Connected', icon: BookOpen,      integrationId: 'confluence'    },
+  { name: 'Slack',              label: 'Slack',        status: 'Connected', icon: MessageSquare, integrationId: 'slack'         },
 ]
 
 // ── Device-state helpers (derive from real device data) ───────────────────────

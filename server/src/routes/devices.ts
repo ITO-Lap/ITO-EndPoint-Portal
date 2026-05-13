@@ -5,6 +5,7 @@ import { getIntuneDevices, isIntuneConfigured } from '../services/intune.js'
 import { getKandjiDevices, getKandjiDeviceApps, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
+import { mockDevices } from '../data/mockDevices.js'
 import type { Device, DashboardStats } from '../types.js'
 
 const router = Router()
@@ -37,7 +38,7 @@ function categorizeIssue(primaryIssue: string): string | null {
 
 export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> {
   const anyConfigured = isIntuneConfigured() || isKandjiConfigured() || isManageEngineConfigured()
-  if (!anyConfigured) return { devices: [], mock: false }
+  if (!anyConfigured) return { devices: mockDevices as unknown as Device[], mock: true }
 
   const [intuneResult, kandjiResult, meResult] = await Promise.allSettled([
     isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await getIntuneDevices();       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
@@ -130,15 +131,29 @@ router.get('/stats', asyncHandler(async (_req, res) => {
   res.json({ success: true, data: stats })
 }))
 
-// GET /api/devices/:id/apps — lazy-fetch installed apps (Kandji only for now)
+// GET /api/devices/:id/apps — lazy-fetch installed apps for any source
 router.get('/:id/apps', asyncHandler(async (req, res) => {
   const deviceId = Array.isArray(req.params['id']) ? req.params['id'][0] : req.params['id']
-  if (!deviceId || !isKandjiConfigured()) {
-    res.json({ success: true, data: [] })
+  if (!deviceId) { res.json({ success: true, data: [] }); return }
+
+  // Find the device across all sources (includes mock data when nothing configured)
+  const { devices } = await fetchAllDevices()
+  const device = devices.find(d => d.id === deviceId)
+
+  // If the device has apps bundled in its payload (mock data or pre-fetched), return immediately
+  if (device?.apps && device.apps.length > 0) {
+    res.json({ success: true, data: device.apps })
     return
   }
-  const apps = await getKandjiDeviceApps(deviceId)
-  res.json({ success: true, data: apps })
+
+  // For live Kandji devices, lazy-fetch from the Kandji API
+  if (isKandjiConfigured() && device?.managementSource === 'Kandji') {
+    const apps = await getKandjiDeviceApps(deviceId)
+    res.json({ success: true, data: apps })
+    return
+  }
+
+  res.json({ success: true, data: [] })
 }))
 
 // GET /api/devices/:id

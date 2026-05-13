@@ -21,14 +21,14 @@ export function IssueCategories({ categories, onCategoryClick, selectedCategory 
               type="button"
               onClick={() => onCategoryClick?.(category.label)}
               aria-pressed={isSelected}
-              className={`w-full text-left space-y-1.5 min-w-0 rounded-lg px-2 py-1.5 -mx-2 transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+              className={`w-full text-left space-y-1.5 min-w-0 rounded-lg px-2 py-1.5 -mx-2 transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                 isSelected
-                  ? 'bg-sky-50 ring-1 ring-sky-200'
+                  ? 'bg-orange-50 ring-1 ring-orange-200'
                   : 'hover:bg-slate-50'
               } ${onCategoryClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
               <div className="flex items-center justify-between gap-2 min-w-0">
-                <p className={`text-xs font-medium min-w-0 break-words ${isSelected ? 'text-sky-700' : 'text-slate-700'}`}>
+                <p className={`text-xs font-medium min-w-0 break-words ${isSelected ? 'text-orange-700' : 'text-slate-700'}`}>
                   {category.label}
                 </p>
                 <p className="text-xs font-semibold text-slate-900 flex-shrink-0 tabular-nums">{category.value.toLocaleString()}</p>

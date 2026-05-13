@@ -19,13 +19,13 @@ import { ActivityListModal } from './ActivityListModal'
 
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 border border-sky-200 pl-2.5 pr-1.5 py-1 text-xs font-medium text-sky-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 border border-orange-200 pl-2.5 pr-1.5 py-1 text-xs font-medium text-orange-700">
       {label}
       <button
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${label} filter`}
-        className="rounded-full p-0.5 hover:bg-sky-200 focus-visible:ring-1 focus-visible:ring-sky-400 transition"
+        className="rounded-full p-0.5 hover:bg-orange-200 focus-visible:ring-1 focus-visible:ring-orange-400 transition"
       >
         <X className="h-2.5 w-2.5" />
       </button>
@@ -58,6 +58,7 @@ interface DashboardContentProps {
   countdown?:           number
   lastUpdated?:         Date | null
   onRefresh?:           () => void
+  onNavigate?:          (page: string) => void
 }
 
 export function DashboardContent({
@@ -75,6 +76,7 @@ export function DashboardContent({
   countdown = 30,
   lastUpdated = null,
   onRefresh,
+  onNavigate,
 }: DashboardContentProps) {
   const { notify } = useToast()
   const [automationLoading, setAutomationLoading] = useState(false)
@@ -139,6 +141,8 @@ export function DashboardContent({
       'Non-Compliant':      'Non-Compliant Devices',
       'Warning Devices':    'Warning Devices',
       'Open Issues':        'Open Issues',
+      'Windows Devices':    'Windows Devices',
+      'Mac Devices':        'Mac Devices',
     }
     const page = pageMap[cardTitle]
     if (page && onStatCardNavigate) {
@@ -198,9 +202,10 @@ export function DashboardContent({
           countdown={countdown}
           lastUpdated={lastUpdated}
           onRefresh={onRefresh ?? (() => {})}
+          onNavigate={onNavigate}
         />
 
-        <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 w-full">
+        <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 xl:grid-cols-7 w-full">
           {statCards.map((card) => (
             <div key={card.title} className="min-w-0 h-full">
               <StatCard
@@ -266,9 +271,9 @@ export function DashboardContent({
               <button
                 key={filter}
                 onClick={() => isAll ? clearFilters() : handleFilterToggle(filter)}
-                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition border focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition border focus-visible:ring-2 focus-visible:ring-orange-300 ${
                   isActive
-                    ? 'bg-sky-100 text-sky-700 border-sky-200'
+                    ? 'bg-orange-100 text-orange-700 border-orange-200'
                     : 'bg-white text-slate-500 hover:bg-slate-50 border-slate-200'
                 }`}
               >
@@ -288,7 +293,7 @@ export function DashboardContent({
           {(selectedFilters.length > 0 || activeStatCard || selectedDonutLabel || selectedCategory) && (
             <button
               onClick={clearFilters}
-              className="text-xs text-slate-400 hover:text-slate-600 font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-sky-300 rounded"
+              className="text-xs text-slate-400 hover:text-slate-600 font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-orange-300 rounded"
             >
               Clear all
             </button>

@@ -535,8 +535,13 @@ export async function getKandjiDeviceApps(
     )
     if (!res.ok) return []
 
-    const body = await res.json() as KandjiApp[]
-    const apps: AppStatus[] = (Array.isArray(body) ? body : []).map(a => ({
+    const body = await res.json()
+    // Kandji can return a bare array or an object with an `apps` / `data` key
+    const raw: KandjiApp[] = Array.isArray(body) ? body
+      : Array.isArray(body?.apps) ? body.apps
+      : Array.isArray(body?.data) ? body.data
+      : []
+    const apps: AppStatus[] = raw.map(a => ({
       name:      a.app_name ?? 'Unknown',
       version:   a.version  ?? '—',
       publisher: a.bundle_id ?? '',

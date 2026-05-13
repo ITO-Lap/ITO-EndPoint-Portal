@@ -45,8 +45,8 @@ const PERMISSION_MATRIX = [
 
 function roleCfg(role: UserToolRole) {
   switch (role) {
-    case 'Global Admin': return { bg: 'bg-sky-100', text: 'text-sky-700', border: 'border-sky-200', icon: Layers }
-    case 'IT Admin':     return { bg: 'bg-violet-100', text: 'text-violet-700', border: 'border-violet-200', icon: ShieldCheck }
+    case 'Global Admin': return { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-200', icon: Layers }
+    case 'IT Admin':     return { bg: 'bg-lime-100', text: 'text-lime-700', border: 'border-lime-200', icon: ShieldCheck }
     case 'Helpdesk':     return { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200', icon: LifeBuoy }
     case 'End User':     return { bg: 'bg-slate-50', text: 'text-slate-500', border: 'border-slate-200', icon: Users }
   }
@@ -80,8 +80,8 @@ function permCfg(val: string) {
 function Avatar({ user, size = 'md' }: { user: AppUser; size?: 'sm' | 'md' | 'lg' }) {
   const initials = `${user.firstName[0]}${user.lastName[0]}`
   const colors = [
-    'bg-sky-500', 'bg-violet-500', 'bg-emerald-500', 'bg-orange-500',
-    'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-rose-500',
+    'bg-orange-500', 'bg-lime-500', 'bg-emerald-500', 'bg-orange-500',
+    'bg-pink-500', 'bg-teal-500', 'bg-lime-500', 'bg-rose-500',
   ]
   const color = colors[(user.firstName.charCodeAt(0) + user.lastName.charCodeAt(0)) % colors.length]
   const sizes = { sm: 'h-7 w-7 text-[0.6rem]', md: 'h-8 w-8 text-xs', lg: 'h-11 w-11 text-sm' }
@@ -141,9 +141,9 @@ function StatStrip({ users }: { users: AppUser[] }) {
   const atRisk = users.filter(u => u.riskLevel === 'High' || u.riskLevel === 'Critical').length
 
   const stats = [
-    { label: 'Total Users', value: total, icon: Users, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-100' },
+    { label: 'Total Users', value: total, icon: Users, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
     { label: 'Active', value: active, icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    { label: 'IT Staff', value: itStaff, icon: Shield, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-100' },
+    { label: 'IT Staff', value: itStaff, icon: Shield, color: 'text-lime-600', bg: 'bg-lime-50', border: 'border-lime-100' },
     { label: 'End Users', value: endUsers, icon: Laptop2, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-100' },
     { label: 'MFA Disabled', value: noMfa, icon: Unlock, color: noMfa > 0 ? 'text-amber-600' : 'text-emerald-600', bg: noMfa > 0 ? 'bg-amber-50' : 'bg-emerald-50', border: noMfa > 0 ? 'border-amber-100' : 'border-emerald-100' },
     { label: 'At Risk', value: atRisk, icon: ShieldAlert, color: atRisk > 0 ? 'text-red-600' : 'text-emerald-600', bg: atRisk > 0 ? 'bg-red-50' : 'bg-emerald-50', border: atRisk > 0 ? 'border-red-100' : 'border-emerald-100' },
@@ -202,7 +202,7 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal aria-label="Invite User"
         className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-950/20 overflow-hidden outline-none">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#071f49] to-[#0e2d6b]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06]">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2"><UserPlus className="h-4 w-4 text-white" /></div>
             <h2 className="text-sm font-bold text-white">Invite New User</h2>
@@ -217,7 +217,7 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
               <p className="text-sm font-bold text-slate-800">Invitation Sent!</p>
               <p className="text-xs text-slate-500 mt-1">An invite link has been sent to <span className="font-medium text-slate-700">{form.email}</span></p>
               <p className="text-[0.65rem] text-slate-400 mt-3">The link expires in 48 hours.</p>
-              <button type="button" onClick={onClose} className="mt-5 rounded-xl bg-sky-600 px-5 py-2 text-xs font-semibold text-white hover:bg-sky-700 transition">Done</button>
+              <button type="button" onClick={onClose} className="mt-5 rounded-xl bg-orange-600 px-5 py-2 text-xs font-semibold text-white hover:bg-orange-700 transition">Done</button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -225,35 +225,35 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
                 <div>
                   <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">First Name *</label>
                   <input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
-                    placeholder="John" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20" />
+                    placeholder="John" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
                 </div>
                 <div>
                   <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">Last Name</label>
                   <input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))}
-                    placeholder="Doe" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20" />
+                    placeholder="Doe" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
                 </div>
               </div>
               <div>
                 <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">Work Email *</label>
                 <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="john@company.com" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20" />
+                  placeholder="john@company.com" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">Department</label>
                   <input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
-                    placeholder="Engineering" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20" />
+                    placeholder="Engineering" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
                 </div>
                 <div>
                   <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">Title</label>
                   <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                    placeholder="Software Engineer" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20" />
+                    placeholder="Software Engineer" className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
                 </div>
               </div>
               <div>
                 <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">Tool Access Level</label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as UserToolRole }))}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20">
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20">
                   <option value="End User">End User (no tool access)</option>
                   <option value="Helpdesk">Helpdesk (read-only + sync)</option>
                   <option value="IT Admin">IT Admin (operational access)</option>
@@ -266,7 +266,7 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
                 <button type="button" onClick={handleSend} disabled={!form.email || !form.firstName || loading}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
                   {loading ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <Mail className="h-3 w-3" />}
                   {loading ? 'Sending…' : 'Send Invite'}
                 </button>
@@ -321,7 +321,7 @@ function EditUserModal({ user, open, onClose }: { user: AppUser | null; open: bo
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal aria-label="Edit User"
         className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-950/20 overflow-hidden outline-none">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#071f49] to-[#0e2d6b]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06]">
           <div className="flex items-center gap-3">
             <Avatar user={user} size="sm" />
             <div>
@@ -337,7 +337,7 @@ function EditUserModal({ user, open, onClose }: { user: AppUser | null; open: bo
           <div>
             <label className="block text-[0.68rem] font-semibold text-slate-600 mb-1">Tool Access Level</label>
             <select value={role} onChange={e => setRole(e.target.value as UserToolRole)}
-              className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20">
+              className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20">
               <option value="End User">End User (no tool access)</option>
               <option value="Helpdesk">Helpdesk (read-only + sync)</option>
               <option value="IT Admin">IT Admin (operational access)</option>
@@ -392,7 +392,7 @@ function EditUserModal({ user, open, onClose }: { user: AppUser | null; open: bo
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
             <button type="button" onClick={handleSave} disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-50 transition">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition">
               {saving ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : null}
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
@@ -497,14 +497,14 @@ function ProfileTab({ user, viewerRole }: { user: AppUser; viewerRole: UserToolR
       {user.sources.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Database className="h-3.5 w-3.5 text-sky-600" />
+            <Database className="h-3.5 w-3.5 text-orange-600" />
             <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Directory &amp; MDM Sources</h3>
           </div>
           <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
             {user.sources.map(s => {
               const SrcIcon = s.type === 'directory' ? Cloud : s.type === 'mdm' ? Smartphone : Ticket
-              const iconColor = s.type === 'directory' ? 'text-sky-600' : s.type === 'mdm' ? 'text-violet-600' : 'text-orange-600'
-              const iconBg = s.type === 'directory' ? 'bg-sky-50' : s.type === 'mdm' ? 'bg-violet-50' : 'bg-orange-50'
+              const iconColor = s.type === 'directory' ? 'text-orange-600' : s.type === 'mdm' ? 'text-lime-600' : 'text-orange-600'
+              const iconBg = s.type === 'directory' ? 'bg-orange-50' : s.type === 'mdm' ? 'bg-lime-50' : 'bg-orange-50'
               const statusColor = s.status === 'Synced'
                 ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                 : s.status === 'Error'
@@ -613,11 +613,11 @@ function ActivityTab({ user, viewerRole }: { user: AppUser; viewerRole: UserTool
   const isHelpdesk = viewerRole === 'Helpdesk'
   const actCfg = (type: UserActivityEvent['type']) => {
     switch (type) {
-      case 'Login':        return { icon: LogIn, color: 'text-sky-600', bg: 'bg-sky-100' }
+      case 'Login':        return { icon: LogIn, color: 'text-orange-600', bg: 'bg-orange-100' }
       case 'Logout':       return { icon: LogOut, color: 'text-slate-500', bg: 'bg-slate-100' }
-      case 'MFA':          return { icon: Key, color: 'text-violet-600', bg: 'bg-violet-100' }
+      case 'MFA':          return { icon: Key, color: 'text-lime-600', bg: 'bg-lime-100' }
       case 'DeviceSync':   return { icon: RefreshCw, color: 'text-emerald-600', bg: 'bg-emerald-100' }
-      case 'PolicyChange': return { icon: Shield, color: 'text-blue-600', bg: 'bg-blue-100' }
+      case 'PolicyChange': return { icon: Shield, color: 'text-orange-600', bg: 'bg-orange-100' }
       case 'Alert':        return { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-100' }
       case 'RoleChange':   return { icon: Edit2, color: 'text-orange-600', bg: 'bg-orange-100' }
     }
@@ -750,7 +750,7 @@ function jiraPriorityCfg(p: JiraTicket['priority']) {
 function jiraStatusCfg(s: JiraTicket['status']) {
   switch (s) {
     case 'Open':        return 'text-red-700 bg-red-50 border-red-200'
-    case 'In Progress': return 'text-sky-700 bg-sky-50 border-sky-200'
+    case 'In Progress': return 'text-orange-700 bg-orange-50 border-orange-200'
     case 'Pending':     return 'text-amber-700 bg-amber-50 border-amber-200'
     case 'Resolved':    return 'text-emerald-700 bg-emerald-50 border-emerald-200'
   }
@@ -760,8 +760,8 @@ function jiraTypeCfg(t: JiraTicket['type']) {
   switch (t) {
     case 'Incident': return 'text-red-600'
     case 'Bug':      return 'text-orange-600'
-    case 'Task':     return 'text-sky-600'
-    case 'Request':  return 'text-violet-600'
+    case 'Task':     return 'text-orange-600'
+    case 'Request':  return 'text-lime-600'
     case 'Story':    return 'text-emerald-600'
   }
 }
@@ -840,7 +840,7 @@ function InfoSection({ title, icon: Icon, children }: { title: string; icon: typ
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-3.5 w-3.5 text-sky-600" />
+        <Icon className="h-3.5 w-3.5 text-orange-600" />
         <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{title}</h3>
       </div>
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50">
@@ -860,7 +860,7 @@ function InfoRow({ icon: Icon, label, value, onCopy }: { icon: typeof Mail; labe
       <div className="flex items-center gap-1 min-w-0">
         <span className="text-[0.72rem] font-medium text-slate-800 text-right truncate">{value}</span>
         {onCopy && (
-          <button type="button" onClick={onCopy} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded p-0.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition flex-shrink-0">
+          <button type="button" onClick={onCopy} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded p-0.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition flex-shrink-0">
             <Copy className="h-2.5 w-2.5" />
           </button>
         )}
@@ -931,7 +931,7 @@ function UserDetailDrawer({
         {user && (
           <>
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#071f49] to-[#0e2d6b] px-5 py-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06] px-5 py-4">
               <div className="flex items-center gap-3 min-w-0">
                 <Avatar user={user} size="lg" />
                 <div className="min-w-0">
@@ -959,8 +959,8 @@ function UserDetailDrawer({
             <div className="flex border-b border-slate-100 bg-slate-50 px-3 overflow-x-auto">
               {tabs.map(tab => (
                 <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-2.5 text-xs font-semibold transition whitespace-nowrap focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 ${
-                    activeTab === tab.id ? 'text-sky-700 border-b-2 border-sky-600 -mb-px bg-white' : 'text-slate-500 hover:text-slate-700'
+                  className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-2.5 text-xs font-semibold transition whitespace-nowrap focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
+                    activeTab === tab.id ? 'text-orange-700 border-b-2 border-orange-600 -mb-px bg-white' : 'text-slate-500 hover:text-slate-700'
                   }`}>
                   {tab.label}
                   {tab.id === 'activity' && alertCount > 0 && (
@@ -987,7 +987,7 @@ function UserDetailDrawer({
               {isGlobalAdmin && (
                 <>
                   <button type="button" onClick={() => onEdit(user)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700 transition focus-visible:ring-2 focus-visible:ring-sky-300">
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700 transition focus-visible:ring-2 focus-visible:ring-orange-300">
                     <Edit2 className="h-3 w-3" />Edit User
                   </button>
                   {user.status === 'Suspended' ? (
@@ -1009,7 +1009,7 @@ function UserDetailDrawer({
               )}
               {!isGlobalAdmin && !isHelpdesk && (
                 <button type="button" onClick={() => notify('info', 'Sync', `Device sync triggered for ${user.firstName}'s devices`)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700 transition focus-visible:ring-2 focus-visible:ring-sky-300">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700 transition focus-visible:ring-2 focus-visible:ring-orange-300">
                   <RefreshCw className="h-3 w-3" />Sync Devices
                 </button>
               )}
@@ -1034,7 +1034,7 @@ function SortTh({ label, sortKey, currentKey, currentDir, onSort }: {
       className="whitespace-nowrap px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500 cursor-pointer select-none hover:text-slate-700 transition group">
       <span className="inline-flex items-center gap-1">
         {label}
-        <Icon className={`h-3 w-3 ${active ? 'text-sky-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
+        <Icon className={`h-3 w-3 ${active ? 'text-orange-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
       </span>
     </th>
   )
@@ -1119,7 +1119,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
           </div>
           {isGlobalAdmin && (
             <button type="button" onClick={() => setInviteOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-300">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-orange-300">
               <UserPlus className="h-3.5 w-3.5" />Invite User
             </button>
           )}
@@ -1134,7 +1134,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
             <div className="relative flex-1 min-w-[200px]">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input type="text" placeholder="Search by name, email, department…" value={query} onChange={e => { setQuery(e.target.value); setPage(1) }}
-                className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-8 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20" />
+                className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-8 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
               {query && <button type="button" onClick={() => { setQuery(''); setPage(1) }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600"><X className="h-3 w-3" /></button>}
             </div>
 
@@ -1142,7 +1142,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
             <div className="relative">
               <Shield className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 <option value="All">All Roles</option>
                 <option value="Global Admin">Global Admin</option>
                 <option value="IT Admin">IT Admin</option>
@@ -1156,7 +1156,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
             <div className="relative">
               <Filter className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 <option value="All">All Statuses</option>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
@@ -1169,7 +1169,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
             <div className="relative">
               <Zap className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={riskFilter} onChange={e => { setRiskFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 <option value="All">All Risk Levels</option>
                 <option value="Critical">Critical</option>
                 <option value="High">High</option>
@@ -1183,7 +1183,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
             <div className="relative">
               <Database className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 <option value="All">All Sources</option>
                 <option value="Microsoft Entra ID">Microsoft Entra ID</option>
                 <option value="Microsoft Intune">Microsoft Intune</option>
@@ -1208,7 +1208,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
                       ? s === 'Active' ? 'bg-emerald-600 border-emerald-600 text-white'
                         : s === 'Suspended' ? 'bg-red-600 border-red-600 text-white'
                         : s === 'Inactive' ? 'bg-slate-600 border-slate-600 text-white'
-                        : 'bg-sky-600 border-sky-600 text-white'
+                        : 'bg-orange-600 border-orange-600 text-white'
                       : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                   }`}>
                   {s}
@@ -1226,7 +1226,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
               <div className="rounded-full bg-slate-100 p-4 mb-3"><Search className="h-6 w-6 text-slate-400" /></div>
               <p className="text-sm font-semibold text-slate-700">No users found</p>
               <p className="text-xs text-slate-500 mt-1">Try adjusting your search or filters</p>
-              <button type="button" onClick={clearFilters} className="mt-3 text-xs text-sky-600 hover:text-sky-700 font-medium underline underline-offset-2">Clear filters</button>
+              <button type="button" onClick={clearFilters} className="mt-3 text-xs text-orange-600 hover:text-orange-700 font-medium underline underline-offset-2">Clear filters</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1248,7 +1248,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
                   {paginated.map(user => {
                     const alertCount = user.recentActivity.filter(a => a.type === 'Alert').length
                     return (
-                      <tr key={user.id} onClick={() => setSelectedUser(user)} className="group cursor-pointer hover:bg-sky-50/60 transition">
+                      <tr key={user.id} onClick={() => setSelectedUser(user)} className="group cursor-pointer hover:bg-orange-50/60 transition">
                         {/* User */}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2.5">
@@ -1259,7 +1259,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <p className="text-xs font-semibold text-slate-900 group-hover:text-sky-700 transition truncate max-w-[110px]">{user.firstName} {user.lastName}</p>
+                                <p className="text-xs font-semibold text-slate-900 group-hover:text-orange-700 transition truncate max-w-[110px]">{user.firstName} {user.lastName}</p>
                                 {alertCount > 0 && (
                                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[0.5rem] font-bold text-white flex-shrink-0">{alertCount}</span>
                                 )}
@@ -1269,7 +1269,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
                                 <div className="flex items-center gap-0.5 mt-0.5">
                                   {user.sources.map(s => {
                                     const SIcon = s.type === 'directory' ? Cloud : s.type === 'mdm' ? Smartphone : Ticket
-                                    const sc = s.status === 'Error' ? 'text-red-400' : s.status === 'Pending' ? 'text-amber-400' : s.type === 'directory' ? 'text-sky-400' : 'text-violet-400'
+                                    const sc = s.status === 'Error' ? 'text-red-400' : s.status === 'Pending' ? 'text-amber-400' : s.type === 'directory' ? 'text-orange-400' : 'text-lime-400'
                                     return <SIcon key={s.name} className={`h-2.5 w-2.5 ${sc}`} title={`${s.name}: ${s.status}`} />
                                   })}
                                 </div>
@@ -1321,12 +1321,12 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5">
                             <button type="button" onClick={e => { e.stopPropagation(); setSelectedUser(user) }}
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 hover:bg-slate-50 hover:text-sky-600 transition focus-visible:ring-2 focus-visible:ring-sky-300">
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 hover:bg-slate-50 hover:text-orange-600 transition focus-visible:ring-2 focus-visible:ring-orange-300">
                               Details
                             </button>
                             {isGlobalAdmin && (
                               <button type="button" onClick={e => { e.stopPropagation(); setEditUser(user) }}
-                                className="rounded-lg border border-slate-200 bg-white p-1 text-slate-400 hover:bg-slate-50 hover:text-sky-600 transition focus-visible:ring-2 focus-visible:ring-sky-300"
+                                className="rounded-lg border border-slate-200 bg-white p-1 text-slate-400 hover:bg-slate-50 hover:text-orange-600 transition focus-visible:ring-2 focus-visible:ring-orange-300"
                                 aria-label="Edit user">
                                 <Edit2 className="h-3 w-3" />
                               </button>
@@ -1349,17 +1349,17 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
               </p>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-sky-300">
+                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300">
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
                   <button key={p} type="button" onClick={() => setPage(p)}
-                    className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-sky-300 ${p === page ? 'bg-sky-600 border-sky-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                    className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${p === page ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
                     {p}
                   </button>
                 ))}
                 <button type="button" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-sky-300">
+                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300">
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>

@@ -234,7 +234,7 @@ function TimeSelect({ value, onChange, disabled }: {
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
       disabled={disabled}
-      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition disabled:opacity-40 disabled:cursor-not-allowed appearance-none cursor-pointer"
+      className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition disabled:opacity-40 disabled:cursor-not-allowed appearance-none cursor-pointer"
     >
       {Array.from({ length: 24 }, (_, i) => (
         <option key={i} value={i}>{fmt12(i)}</option>
@@ -332,12 +332,12 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
         {/* ── Master enable row ─────────────────────────────────────────── */}
         <div className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors ${
           enabled
-            ? 'border-sky-200 bg-sky-50'
+            ? 'border-orange-200 bg-orange-50'
             : 'border-slate-200 bg-slate-50'
         }`}>
           <div className="flex items-center gap-3 min-w-0">
             <div className={`grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl transition-colors ${
-              enabled ? 'bg-sky-600' : 'bg-slate-200'
+              enabled ? 'bg-orange-600' : 'bg-slate-200'
             }`}>
               {enabled
                 ? <Moon className="h-4.5 w-4.5 text-white" />
@@ -359,8 +359,8 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
             role="switch"
             aria-checked={enabled}
             onClick={() => setEnabled(v => !v)}
-            className={`relative flex-shrink-0 h-6 w-11 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-1 ${
-              enabled ? 'bg-sky-600' : 'bg-slate-300'
+            className={`relative flex-shrink-0 h-6 w-11 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
+              enabled ? 'bg-orange-600' : 'bg-slate-300'
             }`}
           >
             <span className={`absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
@@ -375,17 +375,17 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
           {/* Clock */}
           <div className={`flex flex-col items-center justify-center rounded-2xl px-4 py-5 transition-opacity ${
             enabled ? 'opacity-100' : 'opacity-50'
-          } bg-gradient-to-br from-[#071f49] via-[#0e3272] to-[#0a2860] border border-[#1a3a6e]`}>
+          } bg-gradient-to-br from-[#141408] via-[#161602] to-[#0a0a03] border border-[#2a2a08]`}>
             <QuietClock startHour={startHour} endHour={endHour} enabled={enabled} />
 
             {/* Legend below clock */}
             <div className="mt-3 flex items-center gap-4 text-[0.62rem]">
               <span className="flex items-center gap-1.5 text-white/60">
-                <span className="h-2 w-2 rounded-full bg-sky-400 inline-block" />
+                <span className="h-2 w-2 rounded-full bg-orange-400 inline-block" />
                 Start
               </span>
               <span className="flex items-center gap-1.5 text-white/60">
-                <span className="h-2 w-2 rounded-full bg-indigo-400 inline-block" />
+                <span className="h-2 w-2 rounded-full bg-lime-400 inline-block" />
                 End
               </span>
               <span className="flex items-center gap-1.5 text-white/40">
@@ -413,7 +413,7 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
               </div>
               {/* Duration pill */}
               <div className="mt-2 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 border border-sky-200 px-2.5 py-1 text-[0.68rem] font-semibold text-sky-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 border border-orange-200 px-2.5 py-1 text-[0.68rem] font-semibold text-orange-700">
                   <Moon className="h-3 w-3" />
                   {duration === 0 ? 'No duration' : `${duration} hour${duration !== 1 ? 's' : ''} of quiet`}
                 </span>
@@ -435,10 +435,10 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
                       type="button"
                       onClick={() => toggleDay(i)}
                       aria-pressed={isActive}
-                      className={`h-8 w-9 rounded-lg text-[0.68rem] font-semibold transition border focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                      className={`h-8 w-9 rounded-lg text-[0.68rem] font-semibold transition border focus-visible:ring-2 focus-visible:ring-orange-300 ${
                         isActive
-                          ? 'bg-sky-600 border-sky-600 text-white shadow-sm shadow-sky-700/30'
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-sky-300 hover:text-sky-600'
+                          ? 'bg-orange-600 border-orange-600 text-white shadow-sm shadow-orange-700/30'
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-orange-300 hover:text-orange-600'
                       }`}
                     >
                       {d[0]}
@@ -475,7 +475,7 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
                   role="switch"
                   aria-checked={criticalOverride}
                   onClick={() => setCriticalOverride(v => !v)}
-                  className={`mt-0.5 relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                  className={`mt-0.5 relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 ${
                     criticalOverride ? 'bg-red-500' : 'bg-slate-200'
                   }`}
                 >
@@ -487,8 +487,8 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
 
               {/* Batch delivery */}
               <div className="flex items-start gap-2.5 py-2.5">
-                <div className="mt-0.5 grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg bg-sky-100">
-                  <Zap className="h-3.5 w-3.5 text-sky-600" />
+                <div className="mt-0.5 grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg bg-orange-100">
+                  <Zap className="h-3.5 w-3.5 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-xs font-medium text-slate-800">Batch & deliver on wake</p>
@@ -501,10 +501,10 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
 
         {/* ── Summary banner ────────────────────────────────────────────── */}
         {enabled && duration > 0 && activeDays.length > 0 && (
-          <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-sky-50/40 px-4 py-3">
+          <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-orange-50/40 px-4 py-3">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-sky-100">
-                <Bell className="h-3.5 w-3.5 text-sky-600" />
+              <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-orange-100">
+                <Bell className="h-3.5 w-3.5 text-orange-600" />
               </div>
               <div className="space-y-1 min-w-0">
                 <p className="text-xs font-semibold text-slate-800">Schedule summary</p>
@@ -516,7 +516,7 @@ export function QuietHoursModal({ open, onClose, config, onSave }: QuietHoursMod
                     {activeDays.length === 7 ? 'all days' : activeDays.map(i => DAYS[i]).join(', ')}
                   </span>
                   {' '}—{' '}
-                  <span className="font-semibold text-sky-700">{weeklyHours} hours/week</span> of uninterrupted time.
+                  <span className="font-semibold text-orange-700">{weeklyHours} hours/week</span> of uninterrupted time.
                 </p>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5 text-[0.65rem] text-slate-500">
                   <span>Next quiet period: <strong className="text-slate-700">{nextLabel}</strong></span>

@@ -88,12 +88,12 @@ export function Header({
   ]
 
   return (
-    <header className="sticky top-0 z-20 h-16 border-b border-slate-900/10 bg-[#071f49] text-slate-100 shadow-sm shadow-slate-950/10 overflow-visible w-full">
+    <header className="sticky top-0 z-20 h-16 border-b border-slate-900/10 bg-[#141408] text-slate-100 shadow-sm shadow-slate-950/10 overflow-visible w-full">
       <div className="flex h-full items-center gap-3 px-4 md:px-6 overflow-visible">
         {/* Mobile menu button */}
         <button
           type="button"
-          className="xl:hidden flex-shrink-0 rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-sky-300 transition"
+          className="xl:hidden flex-shrink-0 rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-300 transition"
           onClick={onMenuToggle}
           aria-label="Open navigation menu"
         >
@@ -112,13 +112,13 @@ export function Header({
             value={searchInput}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="h-9 w-full rounded-full border border-slate-700/60 bg-slate-900/60 py-0 pl-9 pr-[6.5rem] text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+            className="h-9 w-full rounded-full border border-slate-700/60 bg-slate-900/60 py-0 pl-9 pr-[6.5rem] text-xs text-slate-100 placeholder:text-slate-500 transition focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
           />
           <button
             type="button"
             onClick={() => onSearch?.(searchInput)}
             disabled={searchLoading}
-            className="absolute right-1 top-1 inline-flex h-7 items-center gap-1.5 rounded-full bg-sky-600 px-3 text-xs font-semibold text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="absolute right-1 top-1 inline-flex h-7 items-center gap-1.5 rounded-full bg-orange-600 px-3 text-xs font-semibold text-white transition hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {searchLoading ? (
               <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -144,7 +144,7 @@ export function Header({
               onClick={onNotificationToggle}
               aria-label="Notifications"
               aria-expanded={notificationOpen}
-              className={`relative grid h-9 w-9 place-items-center rounded-full border border-slate-700/60 bg-slate-900/60 text-slate-300 transition hover:border-slate-600 hover:text-white focus-visible:ring-2 focus-visible:ring-sky-300 ${notificationOpen ? 'border-slate-600 text-white' : ''}`}
+              className={`relative grid h-9 w-9 place-items-center rounded-full border border-slate-700/60 bg-slate-900/60 text-slate-300 transition hover:border-slate-600 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-300 ${notificationOpen ? 'border-slate-600 text-white' : ''}`}
             >
               <Bell className="h-4 w-4" />
               {notifications.some(n => !n.read) && (
@@ -161,7 +161,7 @@ export function Header({
                   <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
                   <button
                     onClick={onMarkAllNotificationsRead}
-                    className="text-xs text-sky-600 hover:text-sky-700 font-medium focus-visible:ring-2 focus-visible:ring-sky-300 rounded px-1"
+                    className="text-xs text-orange-600 hover:text-orange-700 font-medium focus-visible:ring-2 focus-visible:ring-orange-300 rounded px-1"
                   >
                     Mark all read
                   </button>
@@ -170,7 +170,7 @@ export function Header({
                   {notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`p-2.5 rounded-lg border text-sm ${notification.read ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-blue-50 border-blue-100 text-slate-800'}`}
+                      className={`p-2.5 rounded-lg border text-sm ${notification.read ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-orange-50 border-orange-100 text-slate-800'}`}
                     >
                       {notification.message}
                     </div>
@@ -185,7 +185,7 @@ export function Header({
             type="button"
             onClick={() => notify('info', 'Dark Mode', 'Dark mode is coming in the next release')}
             aria-label="Toggle dark mode"
-            className="grid h-9 w-9 place-items-center rounded-full border border-slate-700/60 bg-slate-900/60 text-slate-300 transition hover:border-slate-600 hover:text-white focus-visible:ring-2 focus-visible:ring-sky-300"
+            className="grid h-9 w-9 place-items-center rounded-full border border-slate-700/60 bg-slate-900/60 text-slate-300 transition hover:border-slate-600 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-300"
           >
             <Moon className="h-4 w-4" />
           </button>
@@ -197,9 +197,9 @@ export function Header({
               onClick={() => setProfileOpen(prev => !prev)}
               aria-label="Open profile menu"
               aria-expanded={profileOpen}
-              className="flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/60 pl-1 pr-2.5 py-1 text-slate-100 hover:border-slate-600 focus-visible:ring-2 focus-visible:ring-sky-300 transition"
+              className="flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/60 pl-1 pr-2.5 py-1 text-slate-100 hover:border-slate-600 focus-visible:ring-2 focus-visible:ring-orange-300 transition"
             >
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-sky-500/30 text-sky-200 font-bold flex-shrink-0 text-xs">AV</div>
+              <div className="grid h-7 w-7 place-items-center rounded-full bg-orange-500/30 text-orange-200 font-bold flex-shrink-0 text-xs">AV</div>
               <div className="hidden sm:block leading-tight">
                 <p className="text-xs font-semibold">Admin</p>
                 <p className="text-[0.6rem] text-slate-400">{viewerRole}</p>
@@ -215,7 +215,7 @@ export function Header({
                     key={label}
                     type="button"
                     onClick={() => handleProfileAction(label)}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 transition"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 transition"
                   >
                     <Icon className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
                     {label}

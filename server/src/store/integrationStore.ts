@@ -22,6 +22,18 @@ export interface RuntimeOpenAIConfig {
   model?: string
 }
 
+export interface RuntimeEntraConfig {
+  tenantId:     string
+  clientId:     string
+  clientSecret: string
+}
+
+export interface RuntimeSlackConfig {
+  botToken:      string
+  signingSecret?: string
+  workspaceId?:  string
+}
+
 export interface IntegrationFetchResult {
   deviceCount: number
   lastFetchAt: number
@@ -34,15 +46,19 @@ interface Store {
   kandji?: RuntimeKandjiConfig
   manageengine?: RuntimeManageEngineConfig
   openai?: RuntimeOpenAIConfig
+  entra?: RuntimeEntraConfig
+  slack?: RuntimeSlackConfig
   fetchResults: {
     intune: IntegrationFetchResult | null
     kandji: IntegrationFetchResult | null
     manageengine: IntegrationFetchResult | null
+    entra: IntegrationFetchResult | null
+    slack: IntegrationFetchResult | null
   }
 }
 
 const store: Store = {
-  fetchResults: { intune: null, kandji: null, manageengine: null },
+  fetchResults: { intune: null, kandji: null, manageengine: null, entra: null, slack: null },
 }
 
 // ─ Credential setters ────────────────────────────────────────────────────────
@@ -51,6 +67,8 @@ export function setIntuneConfig(c: RuntimeIntuneConfig) { store.intune = c }
 export function setKandjiConfig(c: RuntimeKandjiConfig) { store.kandji = c }
 export function setManageEngineConfig(c: RuntimeManageEngineConfig) { store.manageengine = c }
 export function setOpenAIConfig(c: RuntimeOpenAIConfig) { store.openai = c }
+export function setEntraConfig(c: RuntimeEntraConfig) { store.entra = c }
+export function setSlackConfig(c: RuntimeSlackConfig) { store.slack = c }
 
 // ─ Credential getters — store first, then env vars ───────────────────────────
 
@@ -97,28 +115,53 @@ export function getOpenAIConfig(): RuntimeOpenAIConfig | undefined {
   return undefined
 }
 
+// Entra ID: try ENTRA_ vars first, auto-fall-back to INTUNE_ credentials
+// (same Microsoft tenant — existing Intune registrations often work)
+export function getEntraConfig(): RuntimeEntraConfig | undefined {
+  if (store.entra) return store.entra
+  const { ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET } = process.env
+  if (ENTRA_TENANT_ID && ENTRA_CLIENT_ID && ENTRA_CLIENT_SECRET) {
+    return { tenantId: ENTRA_TENANT_ID, clientId: ENTRA_CLIENT_ID, clientSecret: ENTRA_CLIENT_SECRET }
+  }
+  // Fall back to Intune credentials — same Azure AD app registration often has Entra permissions
+  const { INTUNE_TENANT_ID, INTUNE_CLIENT_ID, INTUNE_CLIENT_SECRET } = process.env
+  if (INTUNE_TENANT_ID && INTUNE_CLIENT_ID && INTUNE_CLIENT_SECRET) {
+    return { tenantId: INTUNE_TENANT_ID, clientId: INTUNE_CLIENT_ID, clientSecret: INTUNE_CLIENT_SECRET }
+  }
+  return undefined
+}
+
+export function getSlackConfig(): RuntimeSlackConfig | undefined {
+  if (store.slack) return store.slack
+  const { SLACK_BOT_TOKEN: botToken, SLACK_SIGNING_SECRET: signingSecret, SLACK_WORKSPACE_ID: workspaceId } = process.env
+  if (botToken) return { botToken, ...(signingSecret ? { signingSecret } : {}), ...(workspaceId ? { workspaceId } : {}) }
+  return undefined
+}
+
 // ─ Fetch result cache ────────────────────────────────────────────────────────
 
 export function recordFetchResult(
-  source: 'intune' | 'kandji' | 'manageengine',
+  source: 'intune' | 'kandji' | 'manageengine' | 'entra' | 'slack',
   result: IntegrationFetchResult,
 ) {
   store.fetchResults[source] = result
 }
 
 export function getFetchResult(
-  source: 'intune' | 'kandji' | 'manageengine',
+  source: 'intune' | 'kandji' | 'manageengine' | 'entra' | 'slack',
 ): IntegrationFetchResult | null {
   return store.fetchResults[source]
 }
 
 // ─ Configured check ──────────────────────────────────────────────────────────
 
-export function isConfigured(source: 'intune' | 'kandji' | 'manageengine' | 'openai'): boolean {
+export function isConfigured(source: 'intune' | 'kandji' | 'manageengine' | 'openai' | 'entra' | 'slack'): boolean {
   switch (source) {
     case 'intune':       return !!getIntuneConfig()
     case 'kandji':       return !!getKandjiConfig()
     case 'manageengine': return !!getManageEngineConfig()
     case 'openai':       return !!getOpenAIConfig()
+    case 'entra':        return !!getEntraConfig()
+    case 'slack':        return !!getSlackConfig()
   }
 }

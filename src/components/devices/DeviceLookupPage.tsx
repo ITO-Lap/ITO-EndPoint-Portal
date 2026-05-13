@@ -11,6 +11,7 @@ import { getRunbookForDevice } from '../../data/dashboardData'
 import { api, apiDeviceToDeviceData } from '../../api'
 import { useToast } from '../ui/ToastProvider'
 import type { DeviceData, SecurityProfile, SecurityEvent } from '../../types'
+import { useColumnResize } from '../../hooks/useColumnResize'
 
 // ─── type helpers ────────────────────────────────────────────────────────────
 
@@ -169,7 +170,7 @@ function SecurityAggregate({ devices }: { devices: DeviceData[] }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5 px-4 py-3">
       <div className="flex items-center gap-2 mb-3">
-        <Shield className="h-4 w-4 text-sky-600" />
+        <Shield className="h-4 w-4 text-orange-600" />
         <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Security Posture Overview</h2>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -259,7 +260,7 @@ function SecurityReportModal({ devices, open, onClose }: { devices: DeviceData[]
         className="relative z-10 w-full max-w-4xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl shadow-slate-950/25 outline-none overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#071f49] to-[#0e2d6b]">
+        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06]">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2.5">
               <BarChart3 className="h-5 w-5 text-white" />
@@ -459,7 +460,7 @@ function EventIcon({ type }: { type: SecurityEvent['type'] }) {
     Critical: { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-100' },
     Alert: { icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-100' },
     Warning: { icon: FileWarning, color: 'text-amber-600', bg: 'bg-amber-100' },
-    Info: { icon: CheckCircle2, color: 'text-sky-600', bg: 'bg-sky-100' },
+    Info: { icon: CheckCircle2, color: 'text-orange-600', bg: 'bg-orange-100' },
   }[type]
   const Icon = cfg.icon
   return (
@@ -469,8 +470,36 @@ function EventIcon({ type }: { type: SecurityEvent['type'] }) {
   )
 }
 
+function deriveAssignedPolicies(device: DeviceData): string[] {
+  const base = ['Endpoint Compliance Baseline', 'Security Configuration Policy']
+  if (device.platform === 'macOS') base.push('FileVault Encryption Policy', 'Kandji Blueprint: Corporate Mac')
+  else if (device.platform === 'Windows') base.push('BitLocker Encryption Policy', 'Windows Update Ring – Production')
+  if (device.managementSource === 'Microsoft Intune') base.push('Intune Compliance Policy v2', 'Conditional Access – MFA Required')
+  if (device.managementSource === 'Kandji') base.push('Kandji Auto-Assign Blueprint')
+  if (device.complianceState !== 'Compliant') base.push('Remediation Enforcement Policy')
+  return base
+}
+
+function deriveRecentFailures(device: DeviceData): { event: string; time: string; severity: string }[] {
+  if (device.complianceState === 'Compliant') return []
+  const failures: { event: string; time: string; severity: string }[] = []
+  if (device.policyFailed && device.policyFailed !== '—') {
+    failures.push({ event: `Policy check failed: ${device.policyFailed}`, time: device.lastDetected || 'Recently', severity: device.severity })
+  }
+  if (device.primaryIssue && device.primaryIssue !== '—') {
+    failures.push({ event: `Compliance issue detected: ${device.primaryIssue}`, time: device.firstDetected || 'Detected earlier', severity: device.severity })
+  }
+  if (device.encryptionStatus?.toLowerCase().includes('off') || device.encryptionStatus?.toLowerCase().includes('pending')) {
+    failures.push({ event: 'Encryption not enabled — disk is unprotected', time: 'Ongoing', severity: 'High' })
+  }
+  return failures
+}
+
 function OverviewTab({ device, onCopy }: { device: DeviceData; onCopy: (v: string, l: string) => void }) {
   const runbook = getRunbookForDevice(device)
+  const assignedPolicies = deriveAssignedPolicies(device)
+  const recentFailures = deriveRecentFailures(device)
+
   return (
     <div className="space-y-5">
       <Section title="Device Identity" icon={Laptop2}>
@@ -499,8 +528,47 @@ function OverviewTab({ device, onCopy }: { device: DeviceData; onCopy: (v: strin
         ]} onCopy={onCopy} />
       </Section>
 
+      {/* Assigned Policies */}
+      <Section title="Assigned Policies" icon={FileText}>
+        <div className="space-y-1.5">
+          {assignedPolicies.map(policy => (
+            <div key={policy} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+              <span className="text-[0.72rem] text-slate-700">{policy}</span>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Recent Failures */}
+      {recentFailures.length > 0 && (
+        <Section title="Recent Failures" icon={AlertTriangle}>
+          <div className="space-y-2">
+            {recentFailures.map((f, i) => (
+              <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${
+                f.severity === 'High' || f.severity === 'Critical' ? 'border-red-200 bg-red-50'
+                : f.severity === 'Medium' ? 'border-amber-200 bg-amber-50'
+                : 'border-slate-200 bg-slate-50'
+              }`}>
+                <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${
+                  f.severity === 'High' || f.severity === 'Critical' ? 'text-red-500' : 'text-amber-500'
+                }`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.72rem] font-medium text-slate-800 leading-snug">{f.event}</p>
+                  <p className="text-[0.62rem] text-slate-400 mt-0.5">{f.time}</p>
+                </div>
+                <span className={`flex-shrink-0 rounded-full border px-1.5 py-0.5 text-[0.6rem] font-bold ${
+                  f.severity === 'High' || f.severity === 'Critical' ? 'bg-red-100 text-red-700 border-red-200'
+                  : 'bg-amber-100 text-amber-700 border-amber-200'
+                }`}>{f.severity}</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {runbook.runbookName !== 'No Action Required' ? (
-        <Section title="Recommended Runbook" icon={CheckCircle2}>
+        <Section title="Recommended Next Action" icon={CheckCircle2}>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 mb-3">
             <p className="text-xs font-semibold text-slate-800">{runbook.runbookName}</p>
             <div className="mt-0.5 flex gap-3 text-[0.65rem] text-slate-500">
@@ -511,7 +579,7 @@ function OverviewTab({ device, onCopy }: { device: DeviceData; onCopy: (v: strin
           <ol className="space-y-1.5 pl-1">
             {runbook.steps.map((step, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[0.72rem] text-slate-700">
-                <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-sky-100 text-[0.6rem] font-bold text-sky-700">{i + 1}</span>
+                <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 text-[0.6rem] font-bold text-orange-700">{i + 1}</span>
                 {step}
               </li>
             ))}
@@ -649,7 +717,7 @@ function EventsTab({ events }: { events: SecurityEvent[] }) {
                 ev.type === 'Critical' ? 'text-red-700'
                 : ev.type === 'Alert' ? 'text-orange-700'
                 : ev.type === 'Warning' ? 'text-amber-700'
-                : 'text-sky-700'
+                : 'text-orange-700'
               }`}>{ev.type}</span>
               <span className="text-[0.62rem] text-slate-400">{ev.time}</span>
             </div>
@@ -721,7 +789,7 @@ function DetailDrawer({
         {device && (
           <>
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#071f49] to-[#0e2d6b] px-5 py-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06] px-5 py-4">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="rounded-xl bg-white/10 p-2.5 flex-shrink-0">
                   <PlatformIcon platform={device.platform} className="h-5 w-5 text-white" />
@@ -746,9 +814,9 @@ function DetailDrawer({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 ${
+                  className={`relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
                     activeTab === tab.id
-                      ? 'text-sky-700 border-b-2 border-sky-600 -mb-px bg-white'
+                      ? 'text-orange-700 border-b-2 border-orange-600 -mb-px bg-white'
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
@@ -781,7 +849,7 @@ function DetailDrawer({
                 type="button"
                 onClick={handleSync}
                 disabled={syncLoading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-sky-300"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300"
               >
                 {syncLoading ? (
                   <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -794,7 +862,7 @@ function DetailDrawer({
               <button
                 type="button"
                 onClick={() => { onViewDashboard(device.deviceName); onClose() }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-300"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-300"
               >
                 <ExternalLink className="h-3 w-3" />
                 View in Dashboard
@@ -802,12 +870,12 @@ function DetailDrawer({
               <button
                 type="button"
                 onClick={() => copyToClipboard(device.serialNumber, 'Serial number')}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-300"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-300"
               >
                 <Copy className="h-3 w-3" />
                 Copy Serial
               </button>
-              <button type="button" onClick={onClose} className="ml-auto text-xs text-slate-400 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-sky-300 rounded">
+              <button type="button" onClick={onClose} className="ml-auto text-xs text-slate-400 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-orange-300 rounded">
                 Close
               </button>
             </div>
@@ -824,7 +892,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
-        <Icon className="h-3.5 w-3.5 text-sky-600 flex-shrink-0" />
+        <Icon className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
         <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{title}</h3>
       </div>
       {children}
@@ -845,7 +913,7 @@ function InfoGrid({ rows, onCopy }: {
             <span className="text-[0.72rem] font-medium text-slate-800 text-right break-all">{row.value}</span>
             {row.copy && (
               <button type="button" onClick={() => onCopy(row.value, row.label)} aria-label={`Copy ${row.label}`}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded p-0.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition flex-shrink-0"
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded p-0.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition flex-shrink-0"
               >
                 <Copy className="h-2.5 w-2.5" />
               </button>
@@ -857,19 +925,53 @@ function InfoGrid({ rows, onCopy }: {
   )
 }
 
+// ─── Column definitions ───────────────────────────────────────────────────────
+
+const LOOKUP_COLS = [
+  { key: 'deviceName',       label: 'Device',        min: 120, default: 190 },
+  { key: 'user',             label: 'User',          min:  80, default: 150 },
+  { key: 'platform',         label: 'Platform',      min:  70, default:  90 },
+  { key: 'managementSource', label: 'Source',        min:  80, default: 130 },
+  { key: 'complianceState',  label: 'Compliance',    min:  90, default: 120 },
+  { key: 'encryption',       label: 'Encryption',    min:  80, default: 110 },
+  { key: 'riskScore',        label: 'Risk Score',    min:  70, default:  90 },
+  { key: 'edr',              label: 'EDR',           min:  70, default:  90 },
+  { key: 'lastCheckIn',      label: 'Last Check-in', min: 100, default: 140 },
+  { key: 'actions',          label: '',              min:  60, default:  80, noResize: true },
+] as const
+type LColKey = typeof LOOKUP_COLS[number]['key']
+
 // ─── Sort header ──────────────────────────────────────────────────────────────
 
-function SortTh({ label, sortKey, currentKey, currentDir, onSort }: {
-  label: string; sortKey: SortKey; currentKey: SortKey | null; currentDir: SortDir; onSort: (key: SortKey) => void
+function SortTh({ label, sortKey, currentKey, currentDir, onSort, width, onStartResize }: {
+  label: string
+  sortKey: SortKey
+  currentKey: SortKey | null
+  currentDir: SortDir
+  onSort: (key: SortKey) => void
+  width?: number
+  onStartResize?: (e: React.MouseEvent) => void
 }) {
   const active = currentKey === sortKey
   const Icon = active ? (currentDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown
   return (
-    <th scope="col" className="whitespace-nowrap px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500 cursor-pointer select-none hover:text-slate-700 transition group" onClick={() => onSort(sortKey)}>
+    <th
+      scope="col"
+      className="relative whitespace-nowrap px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500 cursor-pointer select-none hover:text-slate-700 transition group overflow-hidden"
+      style={width ? { width } : undefined}
+      onClick={() => onSort(sortKey)}
+    >
       <span className="inline-flex items-center gap-1">
         {label}
-        <Icon className={`h-3 w-3 transition ${active ? 'text-sky-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
+        <Icon className={`h-3 w-3 transition ${active ? 'text-orange-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
       </span>
+      {onStartResize && (
+        <span
+          className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+          onMouseDown={onStartResize}
+          onClick={e => e.stopPropagation()}
+        />
+      )}
     </th>
   )
 }
@@ -886,6 +988,7 @@ export function DeviceLookupPage({
   initialDeviceName?: string
 }) {
   const { notify } = useToast()
+  const { widths: lw, startResize: lResize, totalWidth: lTotal } = useColumnResize<LColKey>(LOOKUP_COLS, 'device-lookup')
   const [allDevices, setAllDevices] = useState<DeviceData[]>([])
   const [devicesLoading, setDevicesLoading] = useState(true)
 
@@ -1008,7 +1111,7 @@ export function DeviceLookupPage({
             <button
               type="button"
               onClick={() => setReportOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-300"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-300"
             >
               <FileText className="h-3.5 w-3.5" />
               Security Report
@@ -1016,7 +1119,7 @@ export function DeviceLookupPage({
             <button
               type="button"
               onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-300"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-orange-300"
             >
               <Download className="h-3.5 w-3.5" />
               Export CSV
@@ -1038,7 +1141,7 @@ export function DeviceLookupPage({
                 placeholder="Search by device name, user, serial…"
                 value={query}
                 onChange={e => { setQuery(e.target.value); setPage(1) }}
-                className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-8 text-xs text-slate-800 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20"
+                className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-8 text-xs text-slate-800 placeholder:text-slate-400 transition focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20"
               />
               {query && (
                 <button type="button" onClick={() => { setQuery(''); setPage(1) }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 transition">
@@ -1051,7 +1154,7 @@ export function DeviceLookupPage({
             <div className="relative">
               <SlidersHorizontal className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={platformFilter} onChange={e => { setPlatformFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 transition focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 {platforms.map(p => <option key={p} value={p}>{p === 'All' ? 'All Platforms' : p}</option>)}
               </select>
               <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
@@ -1061,7 +1164,7 @@ export function DeviceLookupPage({
             <div className="relative">
               <Filter className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 transition focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 {sources.map(s => <option key={s} value={s}>{s === 'All' ? 'All Sources' : s}</option>)}
               </select>
               <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
@@ -1071,14 +1174,14 @@ export function DeviceLookupPage({
             <div className="relative">
               <Shield className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
               <select value={riskFilter} onChange={e => { setRiskFilter(e.target.value); setPage(1) }}
-                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 cursor-pointer">
+                className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-6 text-xs text-slate-700 transition focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 cursor-pointer">
                 {['All', 'Critical', 'High', 'Medium', 'Low'].map(r => <option key={r} value={r}>{r === 'All' ? 'All Risk Levels' : `${r} Risk`}</option>)}
               </select>
               <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
             </div>
 
             {hasFilters && (
-              <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition focus-visible:ring-2 focus-visible:ring-sky-300 rounded">
+              <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition focus-visible:ring-2 focus-visible:ring-orange-300 rounded">
                 <X className="h-3 w-3" /> Clear
               </button>
             )}
@@ -1091,12 +1194,12 @@ export function DeviceLookupPage({
               const count = f === 'All' ? filtered.length : filtered.filter(d => d.complianceState === f).length
               return (
                 <button key={f} type="button" onClick={() => { setComplianceFilter(f); setPage(1) }}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                     active
                       ? f === 'Compliant' ? 'bg-emerald-600 border-emerald-600 text-white'
                         : f === 'Warning' ? 'bg-amber-500 border-amber-500 text-white'
                         : f === 'Non-Compliant' ? 'bg-red-600 border-red-600 text-white'
-                        : 'bg-sky-600 border-sky-600 text-white'
+                        : 'bg-orange-600 border-orange-600 text-white'
                       : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                   }`}>
                   {f}
@@ -1116,23 +1219,41 @@ export function DeviceLookupPage({
               </div>
               <p className="text-sm font-semibold text-slate-700">No devices found</p>
               <p className="text-xs text-slate-500 mt-1">Try adjusting your search or filters</p>
-              <button type="button" onClick={clearFilters} className="mt-3 text-xs text-sky-600 hover:text-sky-700 font-medium underline underline-offset-2">Clear all filters</button>
+              <button type="button" onClick={clearFilters} className="mt-3 text-xs text-orange-600 hover:text-orange-700 font-medium underline underline-offset-2">Clear all filters</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="text-left border-collapse" style={{ tableLayout: 'fixed', width: lTotal }}>
+                <colgroup>
+                  {LOOKUP_COLS.map(col => <col key={col.key} style={{ width: lw[col.key] }} />)}
+                </colgroup>
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
-                    <SortTh label="Device" sortKey="deviceName" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <SortTh label="User" sortKey="user" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <SortTh label="Platform" sortKey="platform" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <SortTh label="Source" sortKey="managementSource" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <SortTh label="Compliance" sortKey="complianceState" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <th scope="col" className="px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500">Encryption</th>
-                    <SortTh label="Risk Score" sortKey="riskScore" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <th scope="col" className="px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500">EDR</th>
-                    <SortTh label="Last Check-in" sortKey="lastCheckIn" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                    <th scope="col" className="px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                    <SortTh label="Device" sortKey="deviceName" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['deviceName']} onStartResize={e => lResize('deviceName', e)} />
+                    <SortTh label="User" sortKey="user" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['user']} onStartResize={e => lResize('user', e)} />
+                    <SortTh label="Platform" sortKey="platform" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['platform']} onStartResize={e => lResize('platform', e)} />
+                    <SortTh label="Source" sortKey="managementSource" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['managementSource']} onStartResize={e => lResize('managementSource', e)} />
+                    <SortTh label="Compliance" sortKey="complianceState" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['complianceState']} onStartResize={e => lResize('complianceState', e)} />
+                    <th scope="col" className="relative px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500 overflow-hidden" style={{ width: lw['encryption'] }}>
+                      Encryption
+                      <span
+                        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                        onMouseDown={e => lResize('encryption', e)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </th>
+                    <SortTh label="Risk Score" sortKey="riskScore" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['riskScore']} onStartResize={e => lResize('riskScore', e)} />
+                    <th scope="col" className="relative px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500 overflow-hidden" style={{ width: lw['edr'] }}>
+                      EDR
+                      <span
+                        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                        onMouseDown={e => lResize('edr', e)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </th>
+                    <SortTh label="Last Check-in" sortKey="lastCheckIn" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} width={lw['lastCheckIn']} onStartResize={e => lResize('lastCheckIn', e)} />
+                    <th scope="col" className="relative px-3 py-2.5 text-left text-[0.68rem] font-semibold uppercase tracking-wide text-slate-500 overflow-hidden" style={{ width: lw['actions'] }}>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1141,16 +1262,16 @@ export function DeviceLookupPage({
                     const rc = device.security ? riskColor(device.security.riskScore) : null
                     const alertCount = device.security?.recentEvents.filter(e => e.type === 'Critical' || e.type === 'Alert').length ?? 0
                     return (
-                      <tr key={device.deviceName} onClick={() => setSelectedDevice(device)} className="group cursor-pointer hover:bg-sky-50/60 transition">
+                      <tr key={device.deviceName} onClick={() => setSelectedDevice(device)} className="group cursor-pointer hover:bg-orange-50/60 transition">
                         {/* Device */}
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 overflow-hidden">
                           <div className="flex items-center gap-2">
-                            <div className={`rounded-lg p-1.5 flex-shrink-0 ${device.platform === 'macOS' ? 'bg-violet-100' : 'bg-sky-100'}`}>
-                              <PlatformIcon platform={device.platform} className={`h-3.5 w-3.5 ${device.platform === 'macOS' ? 'text-violet-600' : 'text-sky-600'}`} />
+                            <div className={`rounded-lg p-1.5 flex-shrink-0 ${device.platform === 'macOS' ? 'bg-lime-100' : 'bg-orange-100'}`}>
+                              <PlatformIcon platform={device.platform} className={`h-3.5 w-3.5 ${device.platform === 'macOS' ? 'text-lime-600' : 'text-orange-600'}`} />
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-900 group-hover:text-sky-700 transition truncate max-w-[130px]">{device.deviceName}</p>
-                              <p className="text-[0.62rem] text-slate-400 truncate max-w-[130px]">{device.serialNumber}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-slate-900 group-hover:text-orange-700 transition truncate">{device.deviceName}</p>
+                              <p className="text-[0.62rem] text-slate-400 truncate">{device.serialNumber}</p>
                             </div>
                             {alertCount > 0 && (
                               <span className="flex-shrink-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[0.55rem] font-bold text-white" title={`${alertCount} security alert${alertCount > 1 ? 's' : ''}`}>
@@ -1160,54 +1281,54 @@ export function DeviceLookupPage({
                           </div>
                         </td>
                         {/* User */}
-                        <td className="px-3 py-3"><p className="text-xs text-slate-700 truncate max-w-[160px]">{device.user}</p></td>
+                        <td className="px-3 py-3 overflow-hidden"><p className="text-xs text-slate-700 truncate">{device.user}</p></td>
                         {/* Platform */}
-                        <td className="px-3 py-3">
-                          <p className="text-xs font-medium text-slate-700">{device.platform}</p>
-                          <p className="text-[0.62rem] text-slate-400 truncate max-w-[120px]">{device.osVersion}</p>
+                        <td className="px-3 py-3 overflow-hidden">
+                          <p className="text-xs font-medium text-slate-700 truncate">{device.platform}</p>
+                          <p className="text-[0.62rem] text-slate-400 truncate">{device.osVersion}</p>
                         </td>
                         {/* Source */}
-                        <td className="px-3 py-3"><span className="text-xs text-slate-600 whitespace-nowrap">{device.managementSource}</span></td>
+                        <td className="px-3 py-3 overflow-hidden"><span className="text-xs text-slate-600 truncate block">{device.managementSource}</span></td>
                         {/* Compliance */}
-                        <td className="px-3 py-3"><ComplianceBadge state={device.complianceState} /></td>
+                        <td className="px-3 py-3 overflow-hidden"><ComplianceBadge state={device.complianceState} /></td>
                         {/* Encryption */}
-                        <td className="px-3 py-3"><EncryptionBadge status={device.encryptionStatus} /></td>
+                        <td className="px-3 py-3 overflow-hidden"><EncryptionBadge status={device.encryptionStatus} /></td>
                         {/* Risk Score */}
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 overflow-hidden">
                           {device.security && rc ? (
-                            <div className="flex items-center gap-2 min-w-[80px]">
+                            <div className="flex items-center gap-2">
                               <div className="flex-1 h-1.5 rounded-full bg-slate-100">
                                 <div className={`h-1.5 rounded-full ${rc.bar} transition-all`} style={{ width: `${device.security.riskScore}%` }} />
                               </div>
-                              <span className={`text-xs font-bold w-5 text-right ${rc.text}`}>{device.security.riskScore}</span>
+                              <span className={`text-xs font-bold w-5 text-right flex-shrink-0 ${rc.text}`}>{device.security.riskScore}</span>
                             </div>
                           ) : <span className="text-[0.68rem] text-slate-400">—</span>}
                         </td>
                         {/* EDR */}
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 overflow-hidden">
                           {device.security ? (
                             <span className={`inline-flex items-center gap-1 text-[0.65rem] font-semibold ${device.security.edrStatus === 'Active' ? 'text-emerald-700' : 'text-red-600'}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${device.security.edrStatus === 'Active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                              {device.security.edrStatus}
+                              <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${device.security.edrStatus === 'Active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                              <span className="truncate">{device.security.edrStatus}</span>
                             </span>
                           ) : <span className="text-[0.68rem] text-slate-400">—</span>}
                         </td>
                         {/* Last check-in */}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1 text-[0.68rem] text-slate-500 whitespace-nowrap">
+                        <td className="px-3 py-3 overflow-hidden">
+                          <div className="flex items-center gap-1 text-[0.68rem] text-slate-500">
                             <Clock className="h-3 w-3 text-slate-300 flex-shrink-0" />
-                            {device.lastCheckIn}
+                            <span className="truncate">{device.lastCheckIn}</span>
                           </div>
                         </td>
                         {/* Actions */}
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 overflow-hidden">
                           <div className="flex items-center gap-1.5">
                             <button type="button" onClick={e => { e.stopPropagation(); setSelectedDevice(device) }}
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-300">
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-orange-600 focus-visible:ring-2 focus-visible:ring-orange-300">
                               Details
                             </button>
                             <button type="button" onClick={e => { e.stopPropagation(); handleSyncNow(device) }} disabled={isSyncing} aria-label="Sync device"
-                              className="rounded-lg border border-slate-200 bg-white p-1 text-slate-400 transition hover:bg-slate-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-50">
+                              className="rounded-lg border border-slate-200 bg-white p-1 text-slate-400 transition hover:bg-slate-50 hover:text-orange-600 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50">
                               <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
                             </button>
                           </div>
@@ -1228,17 +1349,17 @@ export function DeviceLookupPage({
               </p>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 transition hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-sky-300">
+                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 transition hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300">
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
                   <button key={p} type="button" onClick={() => setPage(p)}
-                    className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
-                      p === page ? 'bg-sky-600 border-sky-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                      p === page ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                     }`}>{p}</button>
                 ))}
                 <button type="button" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 transition hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-sky-300">
+                  className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 transition hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300">
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>

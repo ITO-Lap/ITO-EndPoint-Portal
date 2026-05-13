@@ -5,7 +5,7 @@ import {
   Download, Trash2, Plus, Link2, Copy, Check,
   Eye, EyeOff, WifiOff, Mail, Hash, LifeBuoy, FileText,
   ShieldAlert, RotateCcw, Info, Users, CheckCircle2, XCircle,
-  MinusCircle, UserPlus,
+  MinusCircle, UserPlus, BookOpen,
   ChevronDown, ChevronRight, X, Key, Wifi, Edit2, Upload,
 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
@@ -19,7 +19,7 @@ import { useIntegrationStatus } from '../../hooks/useIntegrationStatus'
 
 const NAV = [
   { key: 'general',       label: 'General',            icon: Building2    },
-  { key: 'integrations',  label: 'Integrations',       icon: Plug,        badge: '4' },
+  { key: 'integrations',  label: 'Integrations',       icon: Plug,        badge: '6' },
   { key: 'roles',         label: 'Roles & Permissions',icon: Users        },
   { key: 'compliance',    label: 'Compliance',          icon: ShieldCheck  },
   { key: 'automation',    label: 'Automation',          icon: Zap          },
@@ -92,7 +92,7 @@ function Input({ value, onChange, placeholder, disabled, type = 'text', classNam
       placeholder={placeholder}
       disabled={disabled}
       onChange={e => onChange(e.target.value)}
-      className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     />
   )
 }
@@ -106,7 +106,7 @@ function Select({ value, onChange, options, disabled }: {
       value={value}
       disabled={disabled}
       onChange={e => onChange(e.target.value)}
-      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
     >
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -127,7 +127,7 @@ function Toggle({ enabled, onChange, label, description }: {
         role="switch"
         aria-checked={enabled}
         onClick={() => onChange(!enabled)}
-        className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-sky-300 ${enabled ? 'bg-sky-600' : 'bg-slate-200'}`}
+        className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 ${enabled ? 'bg-orange-600' : 'bg-slate-200'}`}
       >
         <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
       </button>
@@ -145,9 +145,9 @@ function RadioGroup({ options, value, onChange }: {
           key={o}
           type="button"
           onClick={() => onChange(o)}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
             value === o
-              ? 'border-sky-300 bg-sky-50 text-sky-700'
+              ? 'border-orange-300 bg-orange-50 text-orange-700'
               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
           }`}
         >
@@ -188,6 +188,7 @@ function GeneralSection() {
     language: 'en-US',
     fiscalStart: 'January',
     logoUrl: '',
+    environment: 'production' as 'production' | 'test',
   })
 
   const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -331,10 +332,10 @@ const INTEG_DEFS: IntegDef[] = [
     id: 'intune',
     name: 'Microsoft Intune',
     icon: Server,
-    iconBg: 'bg-sky-100',
-    iconColor: 'text-sky-600',
+    iconBg: 'bg-orange-100',
+    iconColor: 'text-orange-600',
     category: 'MDM',
-    categoryColor: 'text-sky-700 bg-sky-50 border-sky-200',
+    categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
     description: 'Windows & mobile device management via Microsoft Endpoint Manager',
     docsHint: 'Requires an Azure App Registration with DeviceManagementApps.Read.All permission. Found in Azure Portal → App registrations → Certificates & secrets.',
     defaultInterval: '15',
@@ -347,20 +348,44 @@ const INTEG_DEFS: IntegDef[] = [
       { key: 'endpoint',     label: 'Tenant Domain',  hint: 'Your Microsoft 365 tenant domain',   placeholder: 'yourorg.onmicrosoft.com',               secret: false },
     ],
     defaults: {
-      tenantId:     'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-      clientId:     'b2c3d4e5-f6a7-8901-bcde-f01234567891',
-      clientSecret: '~Azinnia_intune_client_secret_XK9m',
-      endpoint:     'zinnia.onmicrosoft.com',
+      tenantId:     '',
+      clientId:     '',
+      clientSecret: '',
+      endpoint:     '',
+    },
+  },
+  {
+    id: 'entra',
+    name: 'Microsoft Entra ID',
+    icon: ShieldCheck,
+    iconBg: 'bg-lime-100',
+    iconColor: 'text-lime-600',
+    category: 'Identity',
+    categoryColor: 'text-lime-700 bg-lime-50 border-lime-200',
+    description: 'Azure Active Directory identity platform — sign-in logs, MFA registration, risky sign-ins, directory audits, and user lifecycle events',
+    docsHint: 'Azure Portal → App registrations → your app → API permissions. Add: AuditLog.Read.All, Directory.Read.All, IdentityRiskyUser.Read.All, Reports.Read.All. If Intune credentials are set with these permissions, Entra ID is auto-configured.',
+    defaultInterval: '60',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'tenantId',     label: 'Tenant ID',     hint: 'Azure AD Directory (tenant) ID',  placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', secret: false },
+      { key: 'clientId',     label: 'Client ID',     hint: 'App registration Application ID', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', secret: false },
+      { key: 'clientSecret', label: 'Client Secret', hint: 'App registration secret value',   placeholder: '~Axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',    secret: true  },
+    ],
+    defaults: {
+      tenantId:     '',
+      clientId:     '',
+      clientSecret: '',
     },
   },
   {
     id: 'kandji',
     name: 'Kandji',
     icon: Cloud,
-    iconBg: 'bg-violet-100',
-    iconColor: 'text-violet-600',
+    iconBg: 'bg-lime-100',
+    iconColor: 'text-lime-600',
     category: 'MDM',
-    categoryColor: 'text-violet-700 bg-violet-50 border-violet-200',
+    categoryColor: 'text-lime-700 bg-lime-50 border-lime-200',
     description: 'Apple device management — automated compliance & zero-touch Mac, iPhone, and iPad enrollment',
     docsHint: 'Kandji → Settings → Access → API Token. Select Device Read as the minimum scope required.',
     defaultInterval: '30',
@@ -394,8 +419,8 @@ const INTEG_DEFS: IntegDef[] = [
       { key: 'port',      label: 'Port',       hint: 'Default HTTPS port is 8443', placeholder: '8443',                       secret: false },
     ],
     defaults: {
-      apiKey:    'me_api_key_8Q3t_replace_with_real_key',
-      serverUrl: 'https://me.zinnia.internal',
+      apiKey:    '',
+      serverUrl: '',
       port:      '8443',
     },
   },
@@ -418,18 +443,92 @@ const INTEG_DEFS: IntegDef[] = [
       { key: 'model',  label: 'Default Model',   hint: 'Model used for all copilot responses',  placeholder: 'gpt-4o',                            secret: false },
     ],
     defaults: {
-      apiKey: 'sk-proj-replace_this_with_real_openai_key_L4nw',
-      orgId:  'org-zinnia-xxxxxxxxxxxxxxxx',
+      apiKey: '',
+      orgId:  '',
       model:  'gpt-4o',
+    },
+  },
+  {
+    id: 'jira',
+    name: 'Jira',
+    icon: Hash,
+    iconBg: 'bg-orange-100',
+    iconColor: 'text-orange-600',
+    category: 'ITSM',
+    categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
+    description: 'Auto-create and link Jira tickets from device runbooks and compliance failures',
+    docsHint: 'Jira Cloud → Profile → Manage Account → Security → API Tokens. Use your Atlassian login email as the Jira Email. Server URL format: https://yourorg.atlassian.net',
+    defaultInterval: 'realtime',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'baseUrl',    label: 'Server URL',  hint: 'Your Jira Cloud base URL',        placeholder: 'https://yourorg.atlassian.net', secret: false },
+      { key: 'email',      label: 'Jira Email',  hint: 'Your Atlassian account email',    placeholder: 'you@company.com',               secret: false },
+      { key: 'apiToken',   label: 'API Token',   hint: 'Profile → Manage Account → Security → API Tokens', placeholder: 'ATATT3xFfGF0…', secret: true },
+      { key: 'projectKey', label: 'Project Key', hint: 'Default Jira project for tickets', placeholder: 'ITO',                          secret: false },
+    ],
+    defaults: {
+      baseUrl:    'https://zinnia.atlassian.net',
+      email:      'it-admin@zinnia.com',
+      apiToken:   '',
+      projectKey: 'ITO',
+    },
+  },
+  {
+    id: 'confluence',
+    name: 'Confluence',
+    icon: BookOpen,
+    iconBg: 'bg-teal-100',
+    iconColor: 'text-teal-600',
+    category: 'ITSM',
+    categoryColor: 'text-teal-700 bg-teal-50 border-teal-200',
+    description: 'Search and link Confluence knowledge base articles to runbooks and device issues',
+    docsHint: 'Uses the same Atlassian API token as Jira. Confluence Base URL defaults to your Jira URL if left blank. Set Confluence Space Key to scope article searches.',
+    defaultInterval: 'realtime',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'baseUrl',    label: 'Confluence URL', hint: 'Optional: defaults to Jira base URL', placeholder: 'https://yourorg.atlassian.net', secret: false },
+      { key: 'spaceKey',   label: 'Space Key',      hint: 'Confluence space to search by default',placeholder: 'IT',                           secret: false },
+      { key: 'apiToken',   label: 'API Token',      hint: 'Same as your Jira API token',         placeholder: 'ATATT3xFfGF0…',                secret: true  },
+    ],
+    defaults: {
+      baseUrl:  '',
+      spaceKey: 'IT',
+      apiToken: '',
+    },
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    icon: Hash,
+    iconBg: 'bg-teal-100',
+    iconColor: 'text-teal-600',
+    category: 'Collaboration',
+    categoryColor: 'text-teal-700 bg-teal-50 border-teal-200',
+    description: 'Slack workspace integration — Audit Logs, login events, channel activity, user management, and compliance data via Slack Audit Logs API',
+    docsHint: 'Create a Slack App at api.slack.com/apps. Add scopes: auditlogs:read, channels:read, users:read. Install to workspace and copy the Bot OAuth Token. Signing Secret is found in App → Basic Information.',
+    defaultInterval: 'realtime',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'botToken',      label: 'Bot OAuth Token',  hint: 'OAuth & Permissions → Bot Token Scopes',        placeholder: 'xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx', secret: true  },
+      { key: 'signingSecret', label: 'Signing Secret',   hint: 'Basic Information → App Credentials',           placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',                          secret: true  },
+      { key: 'workspaceId',   label: 'Workspace ID',     hint: 'Team ID — found in workspace URL or auth.test', placeholder: 'T0XXXXXXXXX',                                              secret: false },
+    ],
+    defaults: {
+      botToken:      '',
+      signingSecret: '',
+      workspaceId:   '',
     },
   },
 ]
 
 const CATALOG_ITEMS = [
   { id: 'jamf',        name: 'Jamf Pro',           icon: Cloud,       iconBg: 'bg-slate-100',   iconColor: 'text-slate-700',  category: 'MDM',  desc: 'Enterprise Apple lifecycle & compliance management' },
-  { id: 'sccm',        name: 'Microsoft SCCM',     icon: Server,      iconBg: 'bg-sky-100',     iconColor: 'text-sky-600',    category: 'MDM',  desc: 'Windows Config Manager & WSUS patch management' },
+  { id: 'sccm',        name: 'Microsoft SCCM',     icon: Server,      iconBg: 'bg-orange-100',     iconColor: 'text-orange-600',    category: 'MDM',  desc: 'Windows Config Manager & WSUS patch management' },
   { id: 'crowdstrike', name: 'CrowdStrike Falcon', icon: ShieldCheck, iconBg: 'bg-red-100',     iconColor: 'text-red-600',    category: 'EDR',  desc: 'Endpoint detection, response & threat hunting' },
-  { id: 'sentinelone', name: 'SentinelOne',        icon: ShieldAlert, iconBg: 'bg-violet-100',  iconColor: 'text-violet-600', category: 'EDR',  desc: 'AI-powered EPP, EDR & identity threat detection' },
+  { id: 'sentinelone', name: 'SentinelOne',        icon: ShieldAlert, iconBg: 'bg-lime-100',  iconColor: 'text-lime-600', category: 'EDR',  desc: 'AI-powered EPP, EDR & identity threat detection' },
   { id: 'qualys',      name: 'Qualys VMDR',        icon: AlertTriangle,iconBg:'bg-orange-100',  iconColor: 'text-orange-600', category: 'Vuln', desc: 'Cloud vulnerability management & patch compliance' },
   { id: 'servicenow',  name: 'ServiceNow',         icon: FileText,    iconBg: 'bg-teal-100',    iconColor: 'text-teal-700',   category: 'ITSM', desc: 'Auto-create incidents on compliance failures' },
 ]
@@ -464,9 +563,11 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
   const f = state.fields
   switch (def.id) {
     case 'intune':       return f['endpoint']?.value || 'zinnia.onmicrosoft.com'
+    case 'entra':        return `Tenant: ${(f['tenantId']?.value || '').slice(0, 8) || 'not set'}…`
     case 'kandji':       return `${f['subdomain']?.value || 'zinnia'}.kandji.io`
     case 'manageengine': return f['serverUrl']?.value || 'me.zinnia.internal'
     case 'openai':       return `${f['model']?.value || 'gpt-4o'} · Real-time`
+    case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : 'auditlogs:read · channels:read'
     default:             return ''
   }
 }
@@ -517,7 +618,7 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
         className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl shadow-slate-950/20 overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* Modal header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#071f49] to-[#0e2d6b] flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06] flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2"><Plus className="h-4 w-4 text-white" /></div>
             <div>
@@ -542,13 +643,13 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
                       key={item.id}
                       type="button"
                       onClick={() => setSelected(item.id)}
-                      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left hover:border-sky-300 hover:bg-sky-50/40 transition focus-visible:ring-2 focus-visible:ring-sky-300 group"
+                      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left hover:border-orange-300 hover:bg-orange-50/40 transition focus-visible:ring-2 focus-visible:ring-orange-300 group"
                     >
                       <div className={`grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl ${item.iconBg}`}>
                         <Icon className={`h-4 w-4 ${item.iconColor}`} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 group-hover:text-sky-700 transition leading-tight">{item.name}</p>
+                        <p className="text-xs font-semibold text-slate-900 group-hover:text-orange-700 transition leading-tight">{item.name}</p>
                         <span className="inline-block rounded-full bg-slate-200 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-600 mt-1">{item.category}</span>
                         <p className="text-[0.65rem] text-slate-500 mt-1 leading-snug">{item.desc}</p>
                       </div>
@@ -560,7 +661,7 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
           ) : selectedItem ? (
             <div className="space-y-4">
               <button type="button" onClick={() => setSelected(null)}
-                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-sky-600 transition">
+                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-orange-600 transition">
                 <ChevronRight className="h-3 w-3 rotate-180" />Back to catalog
               </button>
 
@@ -580,7 +681,7 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
                     value={setupKey}
                     onChange={e => setSetupKey(e.target.value)}
                     placeholder="Paste your API key or token here"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
                   />
                 </div>
                 <div>
@@ -590,12 +691,12 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
                     value={setupUrl}
                     onChange={e => setSetupUrl(e.target.value)}
                     placeholder="https://yourorg.example.com"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
                   />
                 </div>
-                <div className="flex items-start gap-2 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
-                  <Info className="h-3.5 w-3.5 text-sky-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-[0.65rem] text-sky-700 leading-relaxed">
+                <div className="flex items-start gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2.5">
+                  <Info className="h-3.5 w-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-[0.65rem] text-orange-700 leading-relaxed">
                     Additional settings (scopes, tenant IDs, custom fields) will be available in the Configure panel after connecting.
                   </p>
                 </div>
@@ -610,7 +711,7 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
                   type="button"
                   onClick={handleConnect}
                   disabled={!setupKey.trim() || connecting}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-50 transition"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition"
                 >
                   {connecting
                     ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -728,7 +829,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
 
   return (
     <div className={`rounded-[18px] border bg-white shadow-sm shadow-slate-900/5 overflow-hidden transition-all ${
-      isConnected ? 'border-slate-200' : 'border-dashed border-slate-300 opacity-60'
+      isConnected ? 'border-slate-200' : 'border-dashed border-orange-200'
     }`}>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
@@ -765,17 +866,17 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
               type="button"
               onClick={handleSync}
               disabled={state.syncing}
-              className="inline-flex items-center gap-1.5 h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition"
+              className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold text-slate-700 disabled:opacity-60 transition ${state.syncing ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
             >
-              <RefreshCw className={`h-3 w-3 ${state.syncing ? 'animate-spin text-sky-600' : ''}`} />
+              <RefreshCw className={`h-3 w-3 ${state.syncing ? 'animate-spin text-orange-500' : ''}`} />
               {state.syncing ? 'Syncing…' : 'Sync Now'}
             </button>
           )}
           <button
             type="button"
             onClick={() => onUpdate(s => ({ ...s, expanded: !s.expanded, disconnectConfirm: false }))}
-            className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
-              state.expanded ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+              state.expanded ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
             }`}
           >
             <ChevronDown className={`h-3 w-3 transition-transform ${state.expanded ? 'rotate-180' : ''}`} />
@@ -801,7 +902,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
             <select
               value={state.interval}
               onChange={e => onUpdate(s => ({ ...s, interval: e.target.value }))}
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[0.68rem] font-medium text-slate-800 focus:border-sky-400 focus:outline-none transition appearance-none cursor-pointer"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[0.68rem] font-medium text-slate-800 focus:border-orange-400 focus:outline-none transition appearance-none cursor-pointer"
             >
               {SYNC_INTERVALS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -828,7 +929,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
             <div className="ml-auto">
               {state.testStatus === 'testing' && (
                 <span className="inline-flex items-center gap-1.5 text-[0.68rem] text-slate-500">
-                  <svg className="h-3 w-3 animate-spin text-sky-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  <svg className="h-3 w-3 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                   Testing…
                 </span>
               )}
@@ -856,7 +957,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
             <Info className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-[0.72rem] text-slate-700 leading-relaxed">{def.description}</p>
-              <p className="text-[0.65rem] text-sky-600 mt-1">{def.docsHint}</p>
+              <p className="text-[0.65rem] text-orange-600 mt-1">{def.docsHint}</p>
             </div>
           </div>
 
@@ -889,13 +990,13 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                             onChange={e => setField(field.key, f => ({ ...f, draft: e.target.value }))}
                             placeholder={field.placeholder}
                             autoFocus
-                            className="flex-1 min-w-0 rounded-lg border border-sky-300 bg-sky-50/30 px-3 py-1.5 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+                            className="flex-1 min-w-0 rounded-lg border border-orange-300 bg-orange-50/30 px-3 py-1.5 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
                           />
                           <button
                             type="button"
                             onClick={() => handleSaveField(field.key)}
                             disabled={!fs.draft.trim() || fs.saving}
-                            className="flex-shrink-0 inline-flex items-center gap-1 h-7 rounded-lg bg-sky-600 px-2.5 text-[0.68rem] font-semibold text-white hover:bg-sky-700 disabled:opacity-50 transition"
+                            className="flex-shrink-0 inline-flex items-center gap-1 h-7 rounded-lg bg-orange-600 px-2.5 text-[0.68rem] font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition"
                           >
                             {fs.saving
                               ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -940,7 +1041,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                             <button
                               type="button"
                               onClick={() => setField(field.key, f => ({ ...f, editing: true, draft: f.value }))}
-                              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 hover:bg-sky-50 transition"
+                              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50 transition"
                               title="Edit value"
                             >
                               <Edit2 className="h-3 w-3" />
@@ -981,7 +1082,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                     type="button"
                     onClick={handlePush}
                     disabled={state.pushing}
-                    className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 transition focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 rounded-lg bg-lime-600 px-3 text-xs font-semibold text-white hover:bg-lime-700 disabled:opacity-60 transition focus-visible:ring-2 focus-visible:ring-lime-300"
                   >
                     {state.pushing ? (
                       <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1009,7 +1110,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                   )}
                   {state.testStatus === 'testing' && (
                     <div className="flex items-center gap-2">
-                      <svg className="h-3.5 w-3.5 animate-spin text-sky-500 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      <svg className="h-3.5 w-3.5 animate-spin text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       <p className="text-[0.72rem] text-slate-600 font-medium">Testing connection to {cardSubtitle(def, state)}…</p>
                     </div>
                   )}
@@ -1036,7 +1137,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                   type="button"
                   onClick={handleTest}
                   disabled={state.testStatus === 'testing'}
-                  className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 rounded-lg bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60 transition focus-visible:ring-2 focus-visible:ring-sky-300"
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 rounded-lg bg-orange-600 px-3 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-60 transition focus-visible:ring-2 focus-visible:ring-orange-300"
                 >
                   <Wifi className="h-3 w-3" />
                   {state.testStatus === 'testing' ? 'Testing…' : state.testStatus === 'ok' ? 'Re-test' : 'Test Connection'}
@@ -1106,7 +1207,7 @@ function IntegrationsSection() {
   const [cardStates, setCardStates] = useState<Record<string, CardState>>(
     () => Object.fromEntries(INTEG_DEFS.map(d => [d.id, initCardState(d)]))
   )
-  const { status: integrationStatus, refresh: refreshStatus } = useIntegrationStatus()
+  const { status: integrationStatus, loading: statusLoading, refresh: refreshStatus } = useIntegrationStatus()
 
   const updateCard = useCallback((id: string, updater: (s: CardState) => CardState) => {
     setCardStates(prev => ({ ...prev, [id]: updater(prev[id]) }))
@@ -1164,9 +1265,9 @@ function IntegrationsSection() {
           <button
             type="button"
             onClick={refreshStatus}
-            className="inline-flex items-center gap-1 text-slate-400 hover:text-sky-600 transition text-[0.65rem]"
+            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition text-[0.65rem] ${statusLoading ? 'border-orange-300 bg-orange-50 text-orange-500 animate-pulse' : 'border-transparent text-slate-400 hover:text-orange-600'}`}
           >
-            <RefreshCw className="h-2.5 w-2.5" />Refresh
+            <RefreshCw className={`h-2.5 w-2.5 ${statusLoading ? 'animate-spin text-orange-500' : ''}`} />Refresh
           </button>
         </div>
       </div>
@@ -1187,9 +1288,9 @@ function IntegrationsSection() {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="w-full rounded-[18px] border-2 border-dashed border-slate-200 bg-white py-5 flex flex-col items-center gap-2 text-slate-500 hover:border-sky-300 hover:text-sky-600 hover:bg-sky-50/30 transition focus-visible:ring-2 focus-visible:ring-sky-300"
+          className="w-full rounded-[18px] border-2 border-dashed border-slate-200 bg-white py-5 flex flex-col items-center gap-2 text-slate-500 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50/30 transition focus-visible:ring-2 focus-visible:ring-orange-300"
         >
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 group-hover:bg-sky-100 transition">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 group-hover:bg-orange-100 transition">
             <Plus className="h-4 w-4" />
           </div>
           <p className="text-xs font-semibold">Add Integration</p>
@@ -1226,8 +1327,8 @@ function ComplianceSection() {
   }
 
   const weightKeys = [
-    { key: 'encryption',    label: 'Encryption',        color: 'bg-sky-500' },
-    { key: 'osVersion',     label: 'OS Version',         color: 'bg-violet-500' },
+    { key: 'encryption',    label: 'Encryption',        color: 'bg-orange-500' },
+    { key: 'osVersion',     label: 'OS Version',         color: 'bg-lime-500' },
     { key: 'appCompliance', label: 'App Compliance',     color: 'bg-orange-400' },
     { key: 'checkIn',       label: 'Device Check-in',    color: 'bg-emerald-500' },
   ] as { key: keyof typeof riskWeights; label: string; color: string }[]
@@ -1253,11 +1354,11 @@ function ComplianceSection() {
             <input
               type="range" min={0} max={72} step={1} value={grace}
               onChange={e => setGrace(Number(e.target.value))}
-              className="w-full accent-sky-600"
+              className="w-full accent-orange-600"
             />
             <div className="flex justify-between text-[0.62rem] text-slate-400">
               <span>0 h (immediate)</span>
-              <span className="font-semibold text-sky-700">{grace} hours</span>
+              <span className="font-semibold text-orange-700">{grace} hours</span>
               <span>72 h</span>
             </div>
           </div>
@@ -1301,7 +1402,7 @@ function ComplianceSection() {
               <input
                 type="range" min={0} max={100} step={5} value={riskWeights[key]}
                 onChange={e => setRiskWeights(w => ({ ...w, [key]: Number(e.target.value) }))}
-                className="w-full accent-sky-600"
+                className="w-full accent-orange-600"
               />
             </div>
           ))}
@@ -1344,10 +1445,10 @@ function AutomationSection() {
   return (
     <SectionWrap title="Automation" description="Configure auto-remediation triggers, limits, and logging">
       <Card title="Auto-Remediation">
-        <div className={`rounded-xl border px-4 py-3.5 flex items-start justify-between gap-4 mb-2 ${autoRemediate ? 'border-sky-200 bg-sky-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className={`rounded-xl border px-4 py-3.5 flex items-start justify-between gap-4 mb-2 ${autoRemediate ? 'border-orange-200 bg-orange-50' : 'border-amber-200 bg-amber-50'}`}>
           <div className="flex items-start gap-3 min-w-0">
-            <div className={`mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl ${autoRemediate ? 'bg-sky-100' : 'bg-amber-100'}`}>
-              <Zap className={`h-4 w-4 ${autoRemediate ? 'text-sky-600' : 'text-amber-600'}`} />
+            <div className={`mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl ${autoRemediate ? 'bg-orange-100' : 'bg-amber-100'}`}>
+              <Zap className={`h-4 w-4 ${autoRemediate ? 'text-orange-600' : 'text-amber-600'}`} />
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-900">Auto-Remediation {autoRemediate ? 'Enabled' : 'Disabled'}</p>
@@ -1360,7 +1461,7 @@ function AutomationSection() {
           </div>
           <button type="button" role="switch" aria-checked={autoRemediate}
             onClick={() => setAutoRemediate(v => !v)}
-            className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-sky-300 mt-0.5 ${autoRemediate ? 'bg-sky-600' : 'bg-slate-300'}`}
+            className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 mt-0.5 ${autoRemediate ? 'bg-orange-600' : 'bg-slate-300'}`}
           >
             <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autoRemediate ? 'translate-x-4' : 'translate-x-0'}`} />
           </button>
@@ -1512,7 +1613,7 @@ function SecuritySection() {
                 value={ipAllowlist}
                 onChange={e => setIpAllowlist(e.target.value)}
                 rows={4}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition resize-none"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition resize-none"
               />
             </FieldRow>
             <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
@@ -1894,13 +1995,13 @@ function DangerSection() {
 
       {/* Support link */}
       <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3">
-        <LifeBuoy className="h-4 w-4 text-sky-500 flex-shrink-0" />
+        <LifeBuoy className="h-4 w-4 text-orange-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-600">
           Need help before taking action?{' '}
           <button
             type="button"
             onClick={() => notify('info', 'Support', 'Opening support portal — coming soon')}
-            className="text-sky-600 font-semibold hover:underline focus-visible:ring-1 focus-visible:ring-sky-300 rounded"
+            className="text-orange-600 font-semibold hover:underline focus-visible:ring-1 focus-visible:ring-orange-300 rounded"
           >
             Contact support →
           </button>
@@ -1916,7 +2017,7 @@ const ROLES_DEF = [
   {
     key: 'global',
     name: 'Global Admin',
-    badge: 'bg-sky-100 text-sky-700 border-sky-200',
+    badge: 'bg-orange-100 text-orange-700 border-orange-200',
     icon: Lock,
     who: 'IT Operations leads, platform owners',
     summary: 'Unrestricted access to all features, settings, integrations, and user management.',
@@ -1925,7 +2026,7 @@ const ROLES_DEF = [
   {
     key: 'admin',
     name: 'IT Admin',
-    badge: 'bg-violet-100 text-violet-700 border-violet-200',
+    badge: 'bg-lime-100 text-lime-700 border-lime-200',
     icon: ShieldCheck,
     who: 'Endpoint engineers, senior IT staff',
     summary: 'Full operational access — devices, runbooks, exports. No org-level configuration.',
@@ -2023,8 +2124,8 @@ function RolesSection() {
   }
 
   const roleLabel: Record<string, { label: string; badge: string }> = {
-    global:   { label: 'Global Admin', badge: 'bg-sky-100 text-sky-700' },
-    admin:    { label: 'IT Admin',     badge: 'bg-violet-100 text-violet-700' },
+    global:   { label: 'Global Admin', badge: 'bg-orange-100 text-orange-700' },
+    admin:    { label: 'IT Admin',     badge: 'bg-lime-100 text-lime-700' },
     helpdesk: { label: 'Helpdesk',     badge: 'bg-slate-100 text-slate-600' },
   }
 
@@ -2118,7 +2219,7 @@ function RolesSection() {
           <button
             type="button"
             onClick={() => notify('info', 'Invite User', 'User invitation — coming in next release')}
-            className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-700 transition"
+            className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-orange-600 px-3 text-xs font-semibold text-white hover:bg-orange-700 transition"
           >
             <UserPlus className="h-3.5 w-3.5" />
             Invite User
@@ -2131,7 +2232,7 @@ function RolesSection() {
             return (
               <div key={user.email} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-sky-100 text-sky-700 text-[0.68rem] font-bold">
+                  <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-orange-100 text-orange-700 text-[0.68rem] font-bold">
                     {user.name.split(' ').map(n => n[0]).join('')}
                   </div>
                   <div className="min-w-0">
@@ -2146,7 +2247,7 @@ function RolesSection() {
                   <select
                     value={currentRole}
                     onChange={e => handleRoleChange(user.email, e.target.value)}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[0.68rem] font-medium text-slate-900 focus:border-sky-400 focus:outline-none transition appearance-none"
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[0.68rem] font-medium text-slate-900 focus:border-orange-400 focus:outline-none transition appearance-none"
                   >
                     <option value="global">Global Admin</option>
                     <option value="admin">IT Admin</option>
@@ -2162,7 +2263,7 @@ function RolesSection() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-sky-600 px-4 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60 transition"
+            className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-orange-600 px-4 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-60 transition"
           >
             {saving && <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
             {saving ? 'Saving…' : 'Save Role Changes'}
@@ -2212,17 +2313,17 @@ export function SettingsPage() {
                   type="button"
                   onClick={() => setActive(item.key)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                  className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                     isActive
                       ? isDanger
                         ? 'bg-red-50 text-red-600 border border-red-200'
-                        : 'bg-sky-50 text-sky-700 border border-sky-200'
+                        : 'bg-orange-50 text-orange-700 border border-orange-200'
                       : isDanger
                         ? 'text-red-400 hover:bg-red-50 hover:text-red-600 border border-transparent'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                   }`}
                 >
-                  <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? (isDanger ? 'text-red-500' : 'text-sky-600') : isDanger ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                  <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? (isDanger ? 'text-red-500' : 'text-orange-600') : isDanger ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-600'}`} />
                   <span className="flex-1 text-xs font-medium">{item.label}</span>
                   {'badge' in item && item.badge && !isActive && (
                     <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-500">

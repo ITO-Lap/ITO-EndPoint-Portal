@@ -15,6 +15,13 @@ import { SourceModal } from './components/devices/SourceModal'
 import { ReportsPage } from './components/reports/ReportsPage'
 import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
 import { OpenIssuesPage } from './components/issues/OpenIssuesPage'
+import { RunbooksPage } from './pages/RunbooksPage'
+import { DiagnosticsPage } from './pages/DiagnosticsPage'
+import { ActivityLogPage } from './pages/ActivityLogPage'
+import { RemoteScriptsPage } from './pages/RemoteScriptsPage'
+import { SecurityPosturePage } from './pages/SecurityPosturePage'
+import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
+import { KandjiMacPage } from './pages/KandjiMacPage'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
@@ -25,7 +32,7 @@ import {
   getRunbookForDevice,
 } from './data/dashboardData'
 import {
-  Laptop2, AlertTriangle, ShieldCheck, ShieldAlert, ClipboardList,
+  Laptop2, AlertTriangle, ShieldCheck, ShieldAlert, ClipboardList, Monitor, Apple,
 } from 'lucide-react'
 import type { StatCardData } from './types'
 
@@ -51,11 +58,13 @@ function OfflineBanner({ onRetry }: { onRetry: () => void }) {
 
 // Static card templates — only icons/colors/titles, values come from live stats
 const STAT_CARD_TEMPLATES: Omit<StatCardData, 'value' | 'trend' | 'trendChange'>[] = [
-  { title: 'Total Devices',      icon: Laptop2,      accent: 'text-sky-700',     iconBg: 'bg-sky-100',     iconText: 'text-sky-600'     },
-  { title: 'Compliant Devices',  icon: ShieldCheck,  accent: 'text-emerald-700', iconBg: 'bg-emerald-100', iconText: 'text-emerald-600' },
-  { title: 'Non-Compliant',      icon: ShieldAlert,  accent: 'text-red-700',     iconBg: 'bg-red-100',     iconText: 'text-red-600'     },
-  { title: 'Warning Devices',      icon: AlertTriangle,accent: 'text-amber-700',   iconBg: 'bg-amber-100',   iconText: 'text-amber-600'   },
-  { title: 'Open Issues',        icon: ClipboardList,accent: 'text-orange-700',  iconBg: 'bg-orange-100',  iconText: 'text-orange-600'  },
+  { title: 'Total Devices',      icon: Laptop2,       accent: 'text-orange-700',     iconBg: 'bg-orange-100',     iconText: 'text-orange-600'     },
+  { title: 'Compliant Devices',  icon: ShieldCheck,   accent: 'text-emerald-700', iconBg: 'bg-emerald-100', iconText: 'text-emerald-600' },
+  { title: 'Non-Compliant',      icon: ShieldAlert,   accent: 'text-red-700',     iconBg: 'bg-red-100',     iconText: 'text-red-600'     },
+  { title: 'Warning Devices',    icon: AlertTriangle, accent: 'text-amber-700',   iconBg: 'bg-amber-100',   iconText: 'text-amber-600'   },
+  { title: 'Open Issues',        icon: ClipboardList, accent: 'text-orange-700',  iconBg: 'bg-orange-100',  iconText: 'text-orange-600'  },
+  { title: 'Windows Devices',    icon: Monitor,       accent: 'text-orange-700',    iconBg: 'bg-orange-100',    iconText: 'text-orange-600'    },
+  { title: 'Mac Devices',        icon: Apple,         accent: 'text-slate-700',   iconBg: 'bg-slate-100',   iconText: 'text-slate-600'   },
 ]
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -109,8 +118,8 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
 
   const liveStatCards = useMemo((): StatCardData[] => {
     const vals = stats
-      ? [stats.total, stats.compliant, stats.nonCompliant, stats.warning, stats.nonCompliant + stats.warning]
-      : [0, 0, 0, 0, 0]
+      ? [stats.total, stats.compliant, stats.nonCompliant, stats.warning, stats.nonCompliant + stats.warning, stats.windows, stats.mac]
+      : [0, 0, 0, 0, 0, 0, 0]
     return STAT_CARD_TEMPLATES.map((tmpl, i) => ({
       ...tmpl,
       value: vals[i].toLocaleString(),
@@ -231,7 +240,7 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
               onSignOut={onSignOut}
               viewerRole={viewerRole}
             />
-            <main className="flex-1 bg-[#f6f8fb] px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full">
+            <main className="flex-1 bg-[#faf9f0] px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full">
               <div className="mx-auto w-full max-w-[1600px]">
                 {activePage === 'Dashboard' ? (
                   <DashboardContent
@@ -249,6 +258,7 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                     countdown={countdown}
                     lastUpdated={lastUpdated}
                     onRefresh={refreshStats}
+                    onNavigate={setActivePage}
                   />
                 ) : activePage === 'Compliant Devices' ? (
                   <FilteredDevicesPage
@@ -271,6 +281,41 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                 ) : activePage === 'Warning Devices' ? (
                   <FilteredDevicesPage
                     filter="Warning"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'Windows Devices' ? (
+                  <FilteredDevicesPage
+                    filter="Windows"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'Intune Devices' ? (
+                  <FilteredDevicesPage
+                    filter="Intune"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'ManageEngine Devices' ? (
+                  <FilteredDevicesPage
+                    filter="ManageEngine"
+                    onBack={() => setActivePage('Dashboard')}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
+                ) : activePage === 'Mac Devices' ? (
+                  <KandjiMacPage
                     onBack={() => setActivePage('Dashboard')}
                     onViewDevice={async (deviceName) => {
                       await handleDeviceSelect(deviceName)
@@ -304,6 +349,18 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                   <DocsPage />
                 ) : activePage === 'Reports & Analytics' ? (
                   <ReportsPage />
+                ) : activePage === 'Runbooks' ? (
+                  <RunbooksPage />
+                ) : activePage === 'Diagnostics' ? (
+                  <DiagnosticsPage />
+                ) : activePage === 'Activity Log' ? (
+                  <ActivityLogPage />
+                ) : activePage === 'Remote Scripts' ? (
+                  <RemoteScriptsPage />
+                ) : activePage === 'Security Posture' ? (
+                  <SecurityPosturePage />
+                ) : activePage === 'Vulnerabilities' ? (
+                  <VulnerabilitiesPage />
                 ) : (
                   <PlaceholderPage
                     title={activePage}

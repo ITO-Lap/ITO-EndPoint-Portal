@@ -45,7 +45,7 @@ export function RunbookModal({ open, onClose, runbookData, onCopySteps, onStartA
           <ol className="space-y-2.5">
             {runbookData.steps.map((step, index) => (
               <li key={step} className="flex items-start gap-3 text-sm">
-                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-sky-100 text-[0.6rem] font-bold text-sky-700">
+                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 text-[0.6rem] font-bold text-orange-700">
                   {index + 1}
                 </span>
                 <span className="text-slate-700 leading-snug pt-0.5">{step}</span>

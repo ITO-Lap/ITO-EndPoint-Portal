@@ -69,8 +69,8 @@ function Toggle({ enabled, onChange, label, description }: ToggleProps) {
         role="switch"
         aria-checked={enabled}
         onClick={() => onChange(!enabled)}
-        className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-1 ${
-          enabled ? 'bg-sky-600' : 'bg-slate-200'
+        className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
+          enabled ? 'bg-orange-600' : 'bg-slate-200'
         }`}
       >
         <span
@@ -87,7 +87,7 @@ function StatPill({ label, value, sub }: { label: string; value: string; sub?: s
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur-sm px-4 py-3 min-w-[90px] text-center">
       <span className="text-lg font-bold text-white leading-tight">{value}</span>
-      <span className="text-[0.62rem] font-medium text-sky-200 mt-0.5 leading-tight">{label}</span>
+      <span className="text-[0.62rem] font-medium text-orange-200 mt-0.5 leading-tight">{label}</span>
       {sub && <span className="text-[0.55rem] text-white/50 mt-0.5">{sub}</span>}
     </div>
   )
@@ -214,19 +214,19 @@ export function ProfilePage() {
     <div className="space-y-5 w-full">
 
       {/* ── Hero card ─────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#071f49] via-[#0e3272] to-[#0a2860] border border-[#1a3a6e] shadow-xl shadow-slate-900/20">
+      <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-br from-[#141408] via-[#161602] to-[#0a0a03] border border-[#2a2a08] shadow-xl shadow-slate-900/20">
         {/* decorative rings */}
-        <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-blue-600/10 blur-2xl" />
+        <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-orange-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-orange-600/10 blur-2xl" />
 
         <div className="relative flex flex-col gap-5 px-6 py-6 sm:flex-row sm:items-center sm:gap-7">
 
           {/* Avatar */}
           <div className="relative flex-shrink-0">
-            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-900/40">
+            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-900/40">
               <span className="text-2xl font-bold text-white select-none">AV</span>
             </div>
-            <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-[#071f49]">
+            <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-[#141408]">
               <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={2.5} />
             </span>
           </div>
@@ -237,12 +237,12 @@ export function ProfilePage() {
               <h2 className="text-xl font-bold text-white leading-tight">
                 {profile.firstName} {profile.lastName}
               </h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 border border-sky-400/30 px-2 py-0.5 text-[0.62rem] font-semibold text-sky-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 border border-orange-400/30 px-2 py-0.5 text-[0.62rem] font-semibold text-orange-300">
                 <BadgeCheck className="h-2.5 w-2.5" />
                 Verified
               </span>
             </div>
-            <p className="text-sm font-medium text-sky-300">{profile.title}</p>
+            <p className="text-sm font-medium text-orange-300">{profile.title}</p>
             <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem] text-slate-400">
               <span className="flex items-center gap-1">
                 <Building2 className="h-3 w-3 text-slate-500" />
@@ -280,7 +280,7 @@ export function ProfilePage() {
               { icon: Activity, label: 'Active' },
             ].map(({ icon: Icon, label }) => (
               <span key={label} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/10 px-2.5 py-1 text-[0.62rem] font-medium text-slate-300">
-                <Icon className="h-3 w-3 text-sky-400" />
+                <Icon className="h-3 w-3 text-orange-400" />
                 {label}
               </span>
             ))}
@@ -289,7 +289,7 @@ export function ProfilePage() {
             <button
               type="button"
               onClick={() => setEditMode(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500 focus-visible:ring-2 focus-visible:ring-sky-300"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-500 focus-visible:ring-2 focus-visible:ring-orange-300"
             >
               <Edit3 className="h-3 w-3" />
               Edit Profile
@@ -351,7 +351,7 @@ export function ProfilePage() {
                   <input
                     value={draft[key]}
                     onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
                   />
                 </div>
               ))}
@@ -374,10 +374,10 @@ export function ProfilePage() {
         <DashboardCard title="Role & Permissions" icon={ShieldCheck}>
           <div className="space-y-4">
             {/* Role badge */}
-            <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-sky-50 to-slate-50 px-3.5 py-3">
+            <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-orange-50 to-slate-50 px-3.5 py-3">
               <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-100 flex-shrink-0">
-                  <Layers className="h-5 w-5 text-sky-600" />
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-orange-100 flex-shrink-0">
+                  <Layers className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-xs font-bold text-slate-900">Global Administrator</p>
@@ -418,7 +418,7 @@ export function ProfilePage() {
               <div className="space-y-1">
                 {['All tenants', 'All device platforms', 'All compliance policies', 'All integrations'].map((s) => (
                   <div key={s} className="flex items-center gap-1.5 text-[0.68rem] text-slate-700">
-                    <Globe className="h-3 w-3 text-sky-500 flex-shrink-0" />
+                    <Globe className="h-3 w-3 text-orange-500 flex-shrink-0" />
                     {s}
                   </div>
                 ))}
@@ -449,12 +449,12 @@ export function ProfilePage() {
                   key={s.device}
                   className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${
                     s.current
-                      ? 'border-sky-200 bg-sky-50'
+                      ? 'border-orange-200 bg-orange-50'
                       : 'border-slate-200/80 bg-slate-50'
                   }`}
                 >
-                  <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg ${s.current ? 'bg-sky-100' : 'bg-slate-200'}`}>
-                    <Icon className={`h-4 w-4 ${s.current ? 'text-sky-600' : 'text-slate-500'}`} />
+                  <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg ${s.current ? 'bg-orange-100' : 'bg-slate-200'}`}>
+                    <Icon className={`h-4 w-4 ${s.current ? 'text-orange-600' : 'text-slate-500'}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -568,7 +568,7 @@ export function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => notify('info', 'Security Tips', 'Enable hardware key for a perfect score')}
-                  className="text-sky-600 hover:underline focus-visible:ring-1 focus-visible:ring-sky-300 rounded"
+                  className="text-orange-600 hover:underline focus-visible:ring-1 focus-visible:ring-orange-300 rounded"
                 >
                   View tips
                 </button>
@@ -614,15 +614,15 @@ export function ProfilePage() {
                     key={ch.label}
                     type="button"
                     onClick={() => notify('info', 'Channel', `${ch.label} notifications — coming soon`)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[0.68rem] font-medium transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[0.68rem] font-medium transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                       ch.active
-                        ? 'border-sky-200 bg-sky-50 text-sky-700'
+                        ? 'border-orange-200 bg-orange-50 text-orange-700'
                         : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
                     }`}
                   >
                     <ch.icon className="h-3 w-3" />
                     {ch.label}
-                    {ch.active && <CheckCircle2 className="h-2.5 w-2.5 text-sky-500" />}
+                    {ch.active && <CheckCircle2 className="h-2.5 w-2.5 text-orange-500" />}
                   </button>
                 ))}
               </div>
@@ -672,7 +672,7 @@ export function ProfilePage() {
             {/* Quiet hours */}
             <div className={`rounded-xl border px-3.5 py-3 transition-colors ${
               quietHours.enabled
-                ? 'border-sky-200/80 bg-sky-50/60'
+                ? 'border-orange-200/80 bg-orange-50/60'
                 : 'border-slate-200/80 bg-slate-50'
             }`}>
               <div className="flex items-center justify-between mb-2">
@@ -697,7 +697,7 @@ export function ProfilePage() {
               <button
                 type="button"
                 onClick={() => setQuietHoursOpen(true)}
-                className="mt-2 flex items-center gap-1 text-[0.68rem] font-medium text-sky-600 hover:text-sky-700 focus-visible:ring-1 focus-visible:ring-sky-300 rounded transition"
+                className="mt-2 flex items-center gap-1 text-[0.68rem] font-medium text-orange-600 hover:text-orange-700 focus-visible:ring-1 focus-visible:ring-orange-300 rounded transition"
               >
                 Adjust schedule <ChevronRight className="h-3 w-3" />
               </button>

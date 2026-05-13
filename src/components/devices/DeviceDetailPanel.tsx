@@ -4,7 +4,7 @@ import {
   Network, Lock, LockOpen, CheckCircle2,
   AlertTriangle, XCircle, Building2, RefreshCw,
   Server, Fingerprint, ChevronRight, Package,
-  Key, RotateCcw, Clock, AlertCircle, Loader,
+  Key, RotateCcw, Clock, AlertCircle, Loader, Search,
 } from 'lucide-react'
 import { api } from '../../api'
 import type { ApiDevice, AppStatus } from '../../api'
@@ -23,14 +23,15 @@ const TABS: { id: Tab; label: string }[] = [
 interface Props {
   device: ApiDevice
   onBack: () => void
+  backLabel?: string
 }
 
 // ── Atoms ──────────────────────────────────────────────────────────────────
 
 function PlatformIcon({ p, size = 'md' }: { p: string; size?: 'sm' | 'md' | 'lg' }) {
   const cls = size === 'lg' ? 'h-8 w-8' : size === 'sm' ? 'h-3.5 w-3.5' : 'h-5 w-5'
-  if (p === 'Windows') return <Monitor className={`${cls} text-sky-500`} />
-  if (p === 'macOS')   return <Laptop  className={`${cls} text-violet-500`} />
+  if (p === 'Windows') return <Monitor className={`${cls} text-orange-500`} />
+  if (p === 'macOS')   return <Laptop  className={`${cls} text-lime-500`} />
   return                      <Globe   className={`${cls} text-emerald-500`} />
 }
 
@@ -56,9 +57,9 @@ function ComplianceBadge({ state }: { state: string }) {
 
 function SourcePill({ src }: { src: string }) {
   if (src === 'Microsoft Intune')
-    return <span className="inline-flex rounded-full bg-sky-50 border border-sky-200 px-2.5 py-0.5 text-xs font-semibold text-sky-700">Microsoft Intune</span>
+    return <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-semibold text-orange-700">Microsoft Intune</span>
   if (src === 'Kandji')
-    return <span className="inline-flex rounded-full bg-violet-50 border border-violet-200 px-2.5 py-0.5 text-xs font-semibold text-violet-700">Kandji</span>
+    return <span className="inline-flex rounded-full bg-lime-50 border border-lime-200 px-2.5 py-0.5 text-xs font-semibold text-lime-700">Kandji</span>
   return   <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-semibold text-orange-700">ManageEngine</span>
 }
 
@@ -322,9 +323,9 @@ function SecurityTab({ d }: { d: ApiDevice }) {
 function AppTypeBadge({ type }: { type?: string }) {
   if (!type) return null
   const [bg, text] =
-    type === 'App Store'    ? ['bg-blue-50 border-blue-200 text-blue-700', ''] :
+    type === 'App Store'    ? ['bg-orange-50 border-orange-200 text-orange-700', ''] :
     type === 'System'       ? ['bg-slate-100 border-slate-200 text-slate-500', ''] :
-    type === 'MDM Managed'  ? ['bg-violet-50 border-violet-200 text-violet-700', ''] :
+    type === 'MDM Managed'  ? ['bg-lime-50 border-lime-200 text-lime-700', ''] :
     ['bg-slate-50 border-slate-200 text-slate-500', '']
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${bg} ${text}`}>
@@ -339,21 +340,33 @@ function AppsTab({ d }: { d: ApiDevice }) {
   const [filter, setFilter] = useState<'all' | 'installed' | 'failed' | 'pending'>('all')
   const [fetchedApps, setFetchedApps] = useState<AppStatus[] | null>(null)
   const [appsLoading, setAppsLoading] = useState(false)
+  const [search, setSearch] = useState('')
 
-  // Lazy-fetch from server when device is Kandji (apps not bundled in sync payload)
+  // Lazy-fetch from server — Kandji stores apps separately; for other sources
+  // the endpoint returns what's available (mock data or live API).
+  // Only skip if the device already has app data bundled in the sync payload.
   useEffect(() => {
-    if (d.managementSource !== 'Kandji') return
+    if (d.apps && d.apps.length > 0) return   // already have data — no round-trip needed
     setAppsLoading(true)
     api.fetchDeviceApps(d.id)
-      .then(apps => setFetchedApps(apps))
-      .catch(() => setFetchedApps([]))
+      .then(apps => setFetchedApps(apps.length > 0 ? apps : null))
+      .catch(() => setFetchedApps(null))
       .finally(() => setAppsLoading(false))
-  }, [d.id, d.managementSource])
+  }, [d.id])
 
-  const apps = fetchedApps ?? d.apps ?? []
+  // fetchedApps=null means "fetch returned nothing useful", fall back to bundled data
+  const allApps = fetchedApps ?? d.apps ?? []
+  // Only show apps actively assigned to or installed on this device/user
+  const apps      = allApps.filter(a => a.status !== 'NotApplicable')
   const installed = apps.filter(a => a.status === 'Installed')
   const failed    = apps.filter(a => a.status === 'Failed')
   const pending   = apps.filter(a => a.status === 'Pending')
+
+  const q = search.trim().toLowerCase()
+  const matchesSearch = (a: AppStatus) =>
+    !q ||
+    a.name.toLowerCase().includes(q) ||
+    (a.publisher ?? '').toLowerCase().includes(q)
 
   if (appsLoading) {
     return (
@@ -376,8 +389,8 @@ function AppsTab({ d }: { d: ApiDevice }) {
 
   return (
     <div className="space-y-3">
-      {/* Summary strip */}
-      <div className="flex flex-wrap gap-2">
+      {/* Summary strip + search */}
+      <div className="flex flex-wrap items-center gap-2">
         {([
           { key: 'all',       label: 'All',          count: apps.length,      activeClass: 'bg-slate-900 text-white border-slate-900' },
           { key: 'installed', label: 'Installed',    count: installed.length, activeClass: 'bg-emerald-500 text-white border-emerald-500' },
@@ -388,7 +401,7 @@ function AppsTab({ d }: { d: ApiDevice }) {
             key={btn.key}
             type="button"
             onClick={() => setFilter(btn.key)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border transition focus-visible:ring-2 focus-visible:ring-sky-300 ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
               filter === btn.key ? btn.activeClass : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
             }`}
           >
@@ -398,17 +411,37 @@ function AppsTab({ d }: { d: ApiDevice }) {
             </span>
           </button>
         ))}
+        <div className="relative ml-auto">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search apps…"
+            className="h-7 w-44 rounded-full border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              aria-label="Clear search"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Failed apps — always surfaced at top when viewing "all" */}
-      {filter === 'all' && failed.length > 0 && (
+      {filter === 'all' && failed.filter(matchesSearch).length > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-red-100 border-b border-red-200">
             <XCircle className="h-4 w-4 text-red-600" />
-            <span className="text-sm font-semibold text-red-700">Failed Installations ({failed.length})</span>
+            <span className="text-sm font-semibold text-red-700">Failed Installations ({failed.filter(matchesSearch).length})</span>
           </div>
           <div className="divide-y divide-red-100">
-            {failed.map((app, i) => (
+            {failed.filter(matchesSearch).map((app, i) => (
               <div key={i} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -434,14 +467,14 @@ function AppsTab({ d }: { d: ApiDevice }) {
       )}
 
       {/* Pending apps */}
-      {filter === 'all' && pending.length > 0 && (
+      {filter === 'all' && pending.filter(matchesSearch).length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-100 border-b border-amber-200">
             <Loader className="h-4 w-4 text-amber-600" />
-            <span className="text-sm font-semibold text-amber-700">Pending ({pending.length})</span>
+            <span className="text-sm font-semibold text-amber-700">Pending ({pending.filter(matchesSearch).length})</span>
           </div>
           <div className="divide-y divide-amber-100">
-            {pending.map((app, i) => (
+            {pending.filter(matchesSearch).map((app, i) => (
               <div key={i} className="px-4 py-3">
                 <p className="text-sm font-semibold text-amber-800">{app.name}</p>
                 {app.errorDescription && <p className="text-xs text-amber-700 mt-1">{app.errorDescription}</p>}
@@ -454,20 +487,31 @@ function AppsTab({ d }: { d: ApiDevice }) {
 
       {/* App table — failed/pending when filter is active, installed when "all" or "installed" */}
       {(() => {
-        const tableApps = filter === 'failed'
+        const baseApps = filter === 'failed'
           ? failed
           : filter === 'pending'
           ? pending
           : installed
+        const tableApps = baseApps.filter(matchesSearch)
 
-        if (tableApps.length === 0) return null
+        if (baseApps.length === 0) return null
+
+        if (tableApps.length === 0 && q) {
+          return (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400 rounded-xl border border-slate-200 bg-white">
+              <Search className="h-7 w-7 text-slate-200" />
+              <p className="text-sm font-medium">No apps match "{search}"</p>
+              <button type="button" onClick={() => setSearch('')} className="text-xs text-orange-500 hover:underline">Clear search</button>
+            </div>
+          )
+        }
 
         return (
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
               <Package className="h-4 w-4 text-slate-500" />
               <span className="text-sm font-semibold text-slate-700">
-                {filter === 'failed' ? 'Failed Installations' : filter === 'pending' ? 'Pending Installations' : `Installed Applications (${installed.length})`}
+                {filter === 'failed' ? 'Failed Installations' : filter === 'pending' ? 'Pending Installations' : `Installed Applications (${q ? `${tableApps.length} of ${installed.length}` : installed.length})`}
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -529,7 +573,7 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Active Issue</p>
             <p className="text-sm text-red-700 font-medium">{d.primaryIssue}</p>
             <div className="flex gap-3 mt-1 text-xs text-slate-400">
-              <span>Severity: <span className={`font-semibold ${d.severity === 'Critical' || d.severity === 'High' ? 'text-red-600' : d.severity === 'Medium' ? 'text-amber-600' : 'text-blue-600'}`}>{d.severity}</span></span>
+              <span>Severity: <span className={`font-semibold ${d.severity === 'Critical' || d.severity === 'High' ? 'text-red-600' : d.severity === 'Medium' ? 'text-amber-600' : 'text-orange-600'}`}>{d.severity}</span></span>
               <span>Confidence: {d.confidence}</span>
             </div>
           </div>
@@ -560,23 +604,23 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
 
 // ── Main Component ────────────────────────────────────────────────────────
 
-export function DeviceDetailPanel({ device: d, onBack }: Props) {
+export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices' }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
   const failedApps = d.apps?.filter(a => a.status === 'Failed').length ?? 0
   const pendingApps = d.apps?.filter(a => a.status === 'Pending').length ?? 0
 
   return (
-    <div className="flex flex-col h-full bg-[#f6f8fb]">
+    <div className="flex flex-col h-full bg-[#faf9f0]">
       {/* ── Panel Header ── */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200">
         <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 transition focus-visible:ring-2 focus-visible:ring-sky-300 rounded"
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 transition focus-visible:ring-2 focus-visible:ring-orange-300 rounded"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> All Devices
+            <ArrowLeft className="h-3.5 w-3.5" /> {backLabel}
           </button>
         </div>
 
@@ -618,9 +662,9 @@ export function DeviceDetailPanel({ device: d, onBack }: Props) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex-shrink-0 px-3 py-2 text-xs font-semibold border-b-2 transition focus-visible:ring-2 focus-visible:ring-sky-300 rounded-t ${
+                className={`relative flex-shrink-0 px-3 py-2 text-xs font-semibold border-b-2 transition focus-visible:ring-2 focus-visible:ring-orange-300 rounded-t ${
                   activeTab === tab.id
-                    ? 'border-sky-500 text-sky-600'
+                    ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >

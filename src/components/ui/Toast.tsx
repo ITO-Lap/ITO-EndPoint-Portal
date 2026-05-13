@@ -12,7 +12,7 @@ export function Toast({ toast, onClose }: ToastProps) {
   const statusStyles = {
     success: 'border-emerald-200 bg-emerald-50 text-slate-900',
     error: 'border-red-200 bg-red-50 text-slate-900',
-    info: 'border-sky-200 bg-sky-50 text-slate-900',
+    info: 'border-orange-200 bg-orange-50 text-slate-900',
   }
 
   return (

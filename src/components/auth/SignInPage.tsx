@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  BookOpen, Eye, EyeOff, Mail, Lock, ArrowRight,
+  Eye, EyeOff, Mail, Lock, ArrowRight,
   ShieldCheck, Laptop2, Zap, CheckCircle2, AlertCircle,
   Layers, LifeBuoy, Users,
 } from 'lucide-react'
@@ -12,7 +12,7 @@ const DEMO_ACCOUNTS = [
     role: 'Global Admin',
     email: 'admin@zinnia.com',
     password: 'demo1234',
-    badge: 'bg-sky-100 text-sky-700 border-sky-200',
+    badge: 'bg-orange-100 text-orange-700 border-orange-200',
     icon: Layers,
     desc: 'Full access',
   },
@@ -20,7 +20,7 @@ const DEMO_ACCOUNTS = [
     role: 'IT Admin',
     email: 'itadmin@zinnia.com',
     password: 'demo1234',
-    badge: 'bg-violet-100 text-violet-700 border-violet-200',
+    badge: 'bg-lime-100 text-lime-700 border-lime-200',
     icon: ShieldCheck,
     desc: 'Operational access',
   },
@@ -46,19 +46,23 @@ function BrandPanel() {
   return (
     <div className="relative flex flex-col justify-between h-full px-10 py-10 overflow-hidden select-none">
       {/* Background decoration */}
-      <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-blue-600/10 blur-3xl" />
+      <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-orange-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-red-600/10 blur-3xl" />
       <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full border border-white/5" />
       <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[340px] w-[340px] rounded-full border border-white/5" />
 
       {/* Logo */}
       <div className="relative flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 shadow-lg shadow-sky-900/40 flex-shrink-0">
-          <BookOpen className="h-5 w-5 text-white" />
+        <div className="grid h-14 w-10 place-items-center flex-shrink-0">
+          <svg viewBox="0 0 115 160" className="h-full w-auto" fill="none">
+            <path d="M62 11C88 11 104 35 104 59C104 91 80 119 62 125C44 119 20 91 20 59C20 35 36 11 62 11Z" stroke="#E02020" strokeWidth="8" strokeLinejoin="round"/>
+            <path d="M71 35C93 35 108 55 108 75C108 101 88 125 71 131C54 125 36 101 36 75C36 55 49 35 71 35Z" stroke="#F07820" strokeWidth="7" strokeLinejoin="round"/>
+            <path d="M66 103C81 103 96 115 96 131C96 147 81 155 66 155C51 155 36 147 36 131C36 115 51 103 66 103Z" stroke="#F5C500" strokeWidth="6.5" strokeLinejoin="round"/>
+          </svg>
         </div>
         <div>
           <p className="text-sm font-bold text-white leading-tight tracking-tight">ITO Endpoint</p>
-          <p className="text-[0.62rem] text-sky-300/80 mt-0.5">Smart. Fast. Reliable.</p>
+          <p className="text-[0.62rem] text-orange-300/80 mt-0.5">Smart. Fast. Reliable.</p>
         </div>
       </div>
 
@@ -66,7 +70,7 @@ function BrandPanel() {
       <div className="relative space-y-4">
         <h1 className="text-[1.65rem] font-bold text-white leading-snug tracking-tight">
           Your AI-powered<br />
-          <span className="text-sky-300">endpoint control</span><br />
+          <span className="text-orange-300">endpoint control</span><br />
           center.
         </h1>
         <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
@@ -78,7 +82,7 @@ function BrandPanel() {
           {features.map(f => (
             <div key={f.label} className="flex items-start gap-3">
               <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-white/10">
-                <f.icon className="h-3.5 w-3.5 text-sky-300" />
+                <f.icon className="h-3.5 w-3.5 text-orange-300" />
               </div>
               <div>
                 <p className="text-xs font-semibold text-white leading-tight">{f.label}</p>
@@ -151,14 +155,14 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
         </div>
         <p className="text-center text-[0.68rem] text-slate-500">
           Didn't receive it? Check your spam folder or{' '}
-          <button type="button" onClick={() => setSent(false)} className="text-sky-600 font-semibold hover:underline">
+          <button type="button" onClick={() => setSent(false)} className="text-orange-600 font-semibold hover:underline">
             try again
           </button>
         </p>
         <button
           type="button"
           onClick={onBack}
-          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-sky-300"
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-orange-300"
         >
           ← Back to sign in
         </button>
@@ -183,7 +187,7 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
             onChange={e => setEmail(e.target.value)}
             placeholder="you@company.com"
             autoFocus
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
           />
         </div>
       </div>
@@ -191,7 +195,7 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
       <button
         type="submit"
         disabled={loading || !email}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 active:bg-sky-800 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-700 active:bg-orange-800 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading && <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
         {loading ? 'Sending…' : 'Send reset link'}
@@ -276,17 +280,21 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
     <div className="min-h-screen w-full flex">
 
       {/* ── Left: brand panel ── */}
-      <div className="hidden lg:flex lg:w-[48%] xl:w-[45%] flex-shrink-0 bg-gradient-to-br from-[#041a3c] via-[#071f49] to-[#0a2860] border-r border-white/5">
+      <div className="hidden lg:flex lg:w-[48%] xl:w-[45%] flex-shrink-0 bg-gradient-to-br from-[#141408] via-[#0f0f05] to-[#0a0a03] border-r border-white/5">
         <BrandPanel />
       </div>
 
       {/* ── Right: form panel ── */}
-      <div className="flex flex-1 flex-col items-center justify-center bg-[#f6f8fb] px-6 py-10 min-h-screen">
+      <div className="flex flex-1 flex-col items-center justify-center bg-[#faf9f0] px-6 py-10 min-h-screen">
 
         {/* Mobile logo (visible only when left panel is hidden) */}
         <div className="lg:hidden flex items-center gap-2.5 mb-8">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600">
-            <BookOpen className="h-4.5 w-4.5 text-white" />
+          <div className="grid h-11 w-8 place-items-center flex-shrink-0">
+            <svg viewBox="0 0 115 160" className="h-full w-auto" fill="none">
+              <path d="M62 11C88 11 104 35 104 59C104 91 80 119 62 125C44 119 20 91 20 59C20 35 36 11 62 11Z" stroke="#E02020" strokeWidth="8" strokeLinejoin="round"/>
+              <path d="M71 35C93 35 108 55 108 75C108 101 88 125 71 131C54 125 36 101 36 75C36 55 49 35 71 35Z" stroke="#F07820" strokeWidth="7" strokeLinejoin="round"/>
+              <path d="M66 103C81 103 96 115 96 131C96 147 81 155 66 155C51 155 36 147 36 131C36 115 51 103 66 103Z" stroke="#F5C500" strokeWidth="6.5" strokeLinejoin="round"/>
+            </svg>
           </div>
           <div>
             <p className="text-sm font-bold text-slate-900">ITO Endpoint</p>
@@ -308,7 +316,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
           <div className="rounded-[22px] border border-slate-200 bg-white shadow-xl shadow-slate-900/8 overflow-hidden">
 
             {/* Card header band */}
-            <div className="h-1 bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500" />
+            <div className="h-1 bg-gradient-to-r from-orange-500 via-orange-500 to-lime-500" />
 
             <div className="px-7 py-7">
               {showForgot ? (
@@ -342,7 +350,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                         onChange={e => { setEmail(e.target.value); setError('') }}
                         placeholder="you@company.com"
                         autoComplete="email"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
                       />
                     </div>
                   </div>
@@ -354,7 +362,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                       <button
                         type="button"
                         onClick={() => setShowForgot(true)}
-                        className="text-[0.68rem] text-sky-600 font-medium hover:text-sky-700 hover:underline focus-visible:ring-1 focus-visible:ring-sky-300 rounded transition"
+                        className="text-[0.68rem] text-orange-600 font-medium hover:text-orange-700 hover:underline focus-visible:ring-1 focus-visible:ring-orange-300 rounded transition"
                       >
                         Forgot password?
                       </button>
@@ -367,13 +375,13 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                         onChange={e => { setPassword(e.target.value); setError('') }}
                         placeholder="Enter your password"
                         autoComplete="current-password"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-300/40 transition"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(v => !v)}
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 transition focus-visible:ring-1 focus-visible:ring-sky-300"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 transition focus-visible:ring-1 focus-visible:ring-orange-300"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -386,8 +394,8 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                       onClick={() => setRememberMe(v => !v)}
                       className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition ${
                         rememberMe
-                          ? 'border-sky-500 bg-sky-500'
-                          : 'border-slate-300 bg-white hover:border-sky-400'
+                          ? 'border-orange-500 bg-orange-500'
+                          : 'border-slate-300 bg-white hover:border-orange-400'
                       }`}
                     >
                       {rememberMe && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
@@ -399,7 +407,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 py-2.5 text-sm font-bold text-white shadow-md shadow-sky-700/25 transition hover:bg-sky-700 active:bg-sky-800 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white shadow-md shadow-orange-700/25 transition hover:bg-orange-700 active:bg-orange-800 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -424,7 +432,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                     type="button"
                     onClick={handleSSO}
                     disabled={loading}
-                    className="w-full inline-flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-50"
+                    className="w-full inline-flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50"
                   >
                     {/* Microsoft logo mark */}
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -455,7 +463,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                       type="button"
                       onClick={() => handleDemoLogin(acct)}
                       disabled={loading}
-                      className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-center transition focus-visible:ring-2 focus-visible:ring-sky-300 hover:shadow-sm disabled:opacity-50 ${acct.badge} hover:brightness-95`}
+                      className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-center transition focus-visible:ring-2 focus-visible:ring-orange-300 hover:shadow-sm disabled:opacity-50 ${acct.badge} hover:brightness-95`}
                     >
                       <Icon className="h-4 w-4 flex-shrink-0" />
                       <p className="text-[0.68rem] font-bold leading-tight">{acct.role}</p>

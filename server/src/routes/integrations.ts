@@ -6,16 +6,21 @@ import {
   setKandjiConfig,
   setManageEngineConfig,
   setOpenAIConfig,
+  setEntraConfig,
+  setSlackConfig,
   getFetchResult,
   recordFetchResult,
   isConfigured,
   getIntuneConfig,
   getKandjiConfig,
   getManageEngineConfig,
+  getSlackConfig,
 } from '../store/integrationStore.js'
 import { getIntuneDevices } from '../services/intune.js'
 import { getKandjiDevices, invalidateKandjiCache, getKandjiLibraryApps } from '../services/kandji.js'
 import { getManageEngineDevices } from '../services/manageEngine.js'
+import { getEntraData, invalidateEntraTokenCache } from '../services/entra.js'
+import { testSlackConnection } from '../services/slack.js'
 
 const router = Router()
 
@@ -40,6 +45,16 @@ const credentialSchemas: Record<string, z.ZodObject<any>> = {
     apiKey: z.string().min(1, 'apiKey required'),
     orgId:  z.string().optional(),
     model:  z.string().optional(),
+  }),
+  entra: z.object({
+    tenantId:     z.string().min(1, 'tenantId required'),
+    clientId:     z.string().min(1, 'clientId required'),
+    clientSecret: z.string().min(1, 'clientSecret required'),
+  }),
+  slack: z.object({
+    botToken:      z.string().min(1, 'botToken required'),
+    signingSecret: z.string().optional(),
+    workspaceId:   z.string().optional(),
   }),
 }
 
@@ -91,6 +106,21 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
         ...(f['model'] ? { model: f['model'] as string } : {}),
       })
       break
+    case 'entra':
+      invalidateEntraTokenCache()
+      setEntraConfig({
+        tenantId:     f['tenantId']     as string,
+        clientId:     f['clientId']     as string,
+        clientSecret: f['clientSecret'] as string,
+      })
+      break
+    case 'slack':
+      setSlackConfig({
+        botToken:      f['botToken']      as string,
+        ...(f['signingSecret'] ? { signingSecret: f['signingSecret'] as string } : {}),
+        ...(f['workspaceId']   ? { workspaceId:   f['workspaceId']   as string } : {}),
+      })
+      break
   }
 
   res.json({ success: true, data: { id, configured: true } })
@@ -104,9 +134,10 @@ router.get('/kandji/apps', asyncHandler(async (_req, res) => {
 
 // GET /api/integrations/status — per-integration health snapshot
 router.get('/status', asyncHandler(async (_req, res) => {
-  const sources = ['intune', 'kandji', 'manageengine'] as const
+  const mdmSources = ['intune', 'kandji', 'manageengine'] as const
+  const entraResult = getFetchResult('entra')
   const data = [
-    ...sources.map(src => {
+    ...mdmSources.map(src => {
       const result = getFetchResult(src)
       return {
         id: src,
@@ -128,6 +159,26 @@ router.get('/status', asyncHandler(async (_req, res) => {
       latencyMs: null,
       error: null,
       healthy: isConfigured('openai') ? true : null,
+    },
+    {
+      id: 'entra',
+      name: 'Microsoft Entra ID',
+      configured: isConfigured('entra'),
+      deviceCount: entraResult?.deviceCount ?? null,
+      lastSyncAt:  entraResult ? new Date(entraResult.lastFetchAt).toISOString() : null,
+      latencyMs:   entraResult?.latencyMs ?? null,
+      error:       entraResult?.error ?? null,
+      healthy:     entraResult ? entraResult.error === null : (isConfigured('entra') ? true : null),
+    },
+    {
+      id: 'slack',
+      name: 'Slack',
+      configured: isConfigured('slack'),
+      deviceCount: getFetchResult('slack')?.deviceCount ?? null,
+      lastSyncAt:  getFetchResult('slack') ? new Date(getFetchResult('slack')!.lastFetchAt).toISOString() : null,
+      latencyMs:   getFetchResult('slack')?.latencyMs ?? null,
+      error:       getFetchResult('slack')?.error ?? null,
+      healthy:     isConfigured('slack') ? (getFetchResult('slack')?.error === null ? true : null) : null,
     },
   ]
 
@@ -165,6 +216,19 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
         deviceCount = devices.length
         break
       }
+      case 'entra': {
+        const data = await getEntraData()
+        deviceCount = data.users.length + data.signIns.length + data.directoryAudits.length
+        break
+      }
+      case 'slack': {
+        const cfg = getSlackConfig()
+        if (!cfg) throw new Error('Slack is not configured — push credentials first')
+        const result = await testSlackConnection(cfg)
+        if (!result.ok) throw new Error(result.error ?? 'Slack connection test failed')
+        deviceCount = 1
+        break
+      }
       default:
         res.status(400).json({ success: false, error: `Cannot sync: ${id}` })
         return
@@ -174,7 +238,7 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
   }
 
   const latencyMs = Date.now() - t0
-  recordFetchResult(id as 'intune' | 'kandji' | 'manageengine', {
+  recordFetchResult(id as 'intune' | 'kandji' | 'manageengine' | 'entra' | 'slack', {
     deviceCount,
     lastFetchAt: Date.now(),
     latencyMs,

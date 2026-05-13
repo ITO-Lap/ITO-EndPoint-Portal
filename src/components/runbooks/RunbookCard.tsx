@@ -19,12 +19,12 @@ export function RunbookCard({ data, aiLoading, onViewRunbook, onCopySteps }: Run
           <div className="flex items-center justify-between mb-1">
             <p className="text-[0.62rem] uppercase tracking-widest text-slate-400">Recommended Runbook</p>
             {aiLoading && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[0.58rem] font-semibold text-violet-600">
+              <span className="inline-flex items-center gap-1 rounded-full bg-lime-50 border border-lime-200 px-1.5 py-0.5 text-[0.58rem] font-semibold text-lime-600">
                 <Sparkles className="h-2.5 w-2.5 animate-pulse" /> AI analysing…
               </span>
             )}
             {!aiLoading && data.runbookLink === 'AI-generated runbook' && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[0.58rem] font-semibold text-violet-600">
+              <span className="inline-flex items-center gap-1 rounded-full bg-lime-50 border border-lime-200 px-1.5 py-0.5 text-[0.58rem] font-semibold text-lime-600">
                 <Sparkles className="h-2.5 w-2.5" /> AI
               </span>
             )}
@@ -32,7 +32,7 @@ export function RunbookCard({ data, aiLoading, onViewRunbook, onCopySteps }: Run
           <button
             type="button"
             onClick={onViewRunbook}
-            className="text-left text-xs font-semibold text-sky-600 hover:text-sky-700 focus-visible:ring-2 focus-visible:ring-sky-300 rounded leading-snug transition"
+            className="text-left text-xs font-semibold text-orange-600 hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-orange-300 rounded leading-snug transition"
           >
             {data.runbookName}
           </button>
