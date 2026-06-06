@@ -14,6 +14,7 @@ type DocSection =
   | 'dashboard' | 'identity' | 'runbooks' | 'scripts' | 'automation' | 'reports' | 'security'
   | 'configuration' | 'roles'
   | 'troubleshooting' | 'faq'
+  | 'featureguide'
 
 interface NavItem { key: DocSection; label: string; icon: React.ElementType; badge?: string }
 interface NavGroup { label: string; items: NavItem[] }
@@ -51,6 +52,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'troubleshooting', label: 'Troubleshooting', icon: Wrench     },
       { key: 'faq',             label: 'FAQ',             icon: HelpCircle },
+    ],
+  },
+  {
+    label: 'Showcase',
+    items: [
+      { key: 'featureguide', label: 'Full Feature Guide', icon: FileText, badge: 'New' },
     ],
   },
 ]
@@ -1813,6 +1820,403 @@ function SecuritySection() {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
+// ─── Section: Full Feature Guide ─────────────────────────────────────────────
+
+function CompareTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[0.68rem] border-collapse">
+        <thead>
+          <tr>
+            {headers.map((h, i) => (
+              <th key={i} className="bg-slate-800 text-white font-semibold px-3 py-2 text-left first:rounded-tl-lg last:rounded-tr-lg">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} className={ri % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
+              {row.map((cell, ci) => (
+                <td key={ci} className={`px-3 py-2 border-b border-slate-100 leading-snug ${ci === 0 ? 'font-semibold text-blue-800' : 'text-slate-700'}`}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function AdvantageBox({ title, points, color = 'emerald' }: { title: string; points: string[]; color?: string }) {
+  const cls: Record<string, string> = {
+    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    blue:    'bg-blue-50  border-blue-200  text-blue-800',
+    amber:   'bg-amber-50 border-amber-200 text-amber-800',
+  }
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${cls[color] ?? cls.emerald}`}>
+      <p className="text-xs font-bold mb-2">{title}</p>
+      <ul className="space-y-1">
+        {points.map((p, i) => (
+          <li key={i} className="flex items-start gap-2 text-[0.68rem] text-slate-700">
+            <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-emerald-500" />
+            {p}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TabFeatureList({ items }: { items: { tab: string; desc: string }[] }) {
+  return (
+    <div className="divide-y divide-slate-100">
+      {items.map(({ tab, desc }) => (
+        <div key={tab} className="flex items-start gap-3 px-5 py-2.5">
+          <span className="inline-flex min-w-[120px] rounded-lg bg-slate-100 px-2 py-1 text-[0.6rem] font-bold text-slate-700 flex-shrink-0 mt-0.5">{tab}</span>
+          <p className="text-[0.7rem] text-slate-600 leading-snug">{desc}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FeatureGuideSection() {
+  const [open, setOpen] = useState<string | null>('endpoint')
+  const toggle = (k: string) => setOpen(o => o === k ? null : k)
+
+  const Section = ({ id, title, color, children }: { id: string; title: string; color: string; children: React.ReactNode }) => (
+    <div className="rounded-[18px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => toggle(id)}
+        className={`flex w-full items-center justify-between px-5 py-3.5 text-left ${color}`}
+      >
+        <span className="text-sm font-bold text-white">{title}</span>
+        <ChevronRight className={`h-4 w-4 text-white/70 transition-transform ${open === id ? 'rotate-90' : ''}`} />
+      </button>
+      {open === id && <div className="px-5 py-4 space-y-5">{children}</div>}
+    </div>
+  )
+
+  return (
+    <SectionWrap
+      title="Full Feature Guide"
+      description="Comprehensive documentation of every module, connector, feature comparison, and advantage analysis"
+    >
+      {/* Download card */}
+      <DocCard>
+        <div className="flex items-center gap-4 px-5 py-4">
+          <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-blue-100">
+            <FileText className="h-5 w-5 text-blue-700" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-slate-900">ITO Endpoint AI Copilot — Full Documentation</p>
+            <p className="text-[0.65rem] text-slate-500 mt-0.5">Complete feature guide with connector comparisons, IRU analysis, and advantage breakdowns</p>
+          </div>
+          <a
+            href="/docs/ITO-Endpoint-AI-Copilot-Full-Documentation.docx"
+            download
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-[0.7rem] font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+          >
+            <Package className="h-3.5 w-3.5" /> Download .docx
+          </a>
+        </div>
+      </DocCard>
+
+      {/* ── Section 1: Endpoint Management ── */}
+      <Section id="endpoint" title="Section 1 — Endpoint Management" color="bg-blue-700">
+
+        <div>
+          <p className="text-xs font-bold text-slate-800 mb-2">1.1 Mac Devices — Kandji Connector</p>
+          <p className="text-[0.7rem] text-slate-600 mb-3">Primary hub for Apple macOS device management. Five tabs cover the full fleet lifecycle.</p>
+          <DocCard>
+            <CardHeader title="Tabs & Key Features" />
+            <TabFeatureList items={[
+              { tab: 'Devices',      desc: 'Full inventory with model/OS/blueprint filters, check-in staleness dots (green→today, amber→3-6d, red→7+d), FileVault & compliance badges.' },
+              { tab: 'Applications', desc: 'Library inventory (Auto App · VPP · Custom · Profile · Script) with enforcement type, blueprint, status filter, and CSV export.' },
+              { tab: 'Security',     desc: 'Per-device FileVault, CrowdStrike EDR agent, macOS Firewall, applied policy count, and aggregated risk level.' },
+              { tab: 'Automation',   desc: '5 Kandji-specific rules: FileVault Off Alert, Blueprint Drift, Stale Quarantine, CrowdStrike Health Alert, Weekly Fleet Report.' },
+              { tab: 'Reports',      desc: 'Fleet growth, patch compliance, macOS version mix, app currency, stale devices, blueprint rate, IRU Patch Report, and 18-KPI fleet dashboard.' },
+            ]} />
+          </DocCard>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-slate-800 mb-2">1.2 Intune Connector — Windows, iOS & Android</p>
+          <DocCard>
+            <CardHeader title="Tabs & Key Features" />
+            <TabFeatureList items={[
+              { tab: 'Devices',    desc: 'Multi-platform inventory (Windows · Android · iOS sub-tabs). Columns: device, user, platform, OS, serial, encryption, compliance, last check-in.' },
+              { tab: 'Compliance', desc: 'Policy-level compliance breakdown and top-10 non-compliant device list with failure reasons.' },
+              { tab: 'Security',   desc: 'BitLocker coverage %, Defender active rate, Azure AD MFA enrollment %, compliance policy pass/fail by policy name.' },
+              { tab: 'Automation', desc: 'BitLocker Auto-Remediation, Defender Health Alert, Non-Compliant Escalation, Windows Update Enforcement, Stale Device Quarantine.' },
+              { tab: 'Reports',    desc: 'BitLocker coverage, compliance rate, Defender coverage, and managed device count — all with PDF/CSV export.' },
+              { tab: 'Entra ID',   desc: 'Live or demo Microsoft Graph data: Users (risk/MFA/sign-in), Devices (join type/encryption), Groups (Security/M365/Distribution).' },
+            ]} />
+          </DocCard>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-slate-800 mb-2">1.3 IRU — Infrastructure & Remote Users Patch Report</p>
+          <p className="text-[0.7rem] text-slate-600 mb-3">
+            IRU is a specialised macOS patch-compliance and staleness report built on Kandji data —
+            not a separate connector. Accessible via Kandji → Reports → IRU Patch Report, and as a standalone full-page view.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <DocCard>
+              <CardHeader title="Patch Tiers (6)" />
+              <TabFeatureList items={[
+                { tab: 'Current (26.5)',       desc: 'Latest macOS Tahoe — no action needed.' },
+                { tab: 'Minor Patch (26.4)',   desc: 'One patch behind — Kandji nudge to upgrade.' },
+                { tab: 'Update Req (26.x)',    desc: 'Multiple versions behind — investigate dev/beta channel.' },
+                { tab: 'Sequoia (15.x)',       desc: 'Outdated major release — enforce upgrade to 26.x.' },
+                { tab: 'Sonoma (14.x)',        desc: '2-3 releases behind — direct outreach + force policy.' },
+                { tab: 'Ventura (13.x)',       desc: 'End of Life — no Apple patches — escalate for refresh.' },
+              ]} />
+            </DocCard>
+            <DocCard>
+              <CardHeader title="Staleness Tiers (4)" />
+              <TabFeatureList items={[
+                { tab: 'Active (0-13d)',    desc: 'Normal operation — no action.' },
+                { tab: 'Stale (14+d)',      desc: 'Amber alert — investigate connectivity or travel.' },
+                { tab: 'Critical (30+d)',   desc: 'Red alert — device may be lost or reassigned.' },
+                { tab: 'Abandoned (90+d)', desc: 'Cross-reference HR offboarding records immediately.' },
+              ]} />
+            </DocCard>
+          </div>
+          <DocCard className="mt-3">
+            <CardHeader title="IRU Views" />
+            <TabFeatureList items={[
+              { tab: 'Full Report',      desc: 'Executive summary: OS compliance table, regional breakdown, stale register preview, and 8 prioritised (P1–P4) admin recommendations.' },
+              { tab: 'Device List',      desc: 'Paginated, sortable table with search, region filter, stale filter, and OS tier filter.' },
+              { tab: 'Outdated & EOL',   desc: 'Filtered view of Sequoia/Sonoma/Ventura devices requiring urgent action.' },
+              { tab: 'Stale Register',   desc: 'Dedicated register with quick-filter buttons: Stale 14+d · Critical 30+d · Abandoned 90+d.' },
+              { tab: 'Regional Summary', desc: 'Patch compliance per office region (North/South/East/West/HQ/Remote) with compliance bar charts.' },
+            ]} />
+          </DocCard>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-slate-800 mb-3">1.4 Kandji vs Intune — Feature Comparison</p>
+          <CompareTable
+            headers={['Feature / Metric', 'Kandji (Mac)', 'Intune (Windows / Mobile)', 'Winner']}
+            rows={[
+              ['Primary Platform',     'macOS (M-series & Intel)',    'Windows 10/11, iOS, Android',     'Platform-specific'],
+              ['Disk Encryption',      'FileVault — 94% pass rate',   'BitLocker — 82% pass rate',       'Kandji'],
+              ['EDR / Antivirus',      'CrowdStrike Falcon — 96%',    'Microsoft Defender — 91%',        'Kandji'],
+              ['Firewall Compliance',  'macOS Firewall — 98%',        'Windows Firewall — 95%',          'Kandji'],
+              ['OS Patch Compliance',  'macOS updates — 81%',         'Windows Update — 68%',            'Kandji'],
+              ['Identity / MFA',       'Okta MFA — 92%',              'Azure AD MFA — 87%',              'Kandji'],
+              ['Overall Compliance',   '93% avg',                     '90% avg',                         'Kandji'],
+              ['Mobile Device Support','None (Mac only)',              'iOS + Android full MDM',          'Intune'],
+              ['Windows Management',   'None',                        'Full GPO + Intune policy stack',  'Intune'],
+              ['Patch Reporting',      'IRU (6-tier + regional)',      'Binary: compliant / not',         'Kandji'],
+              ['Identity Provider',    'Okta / SAML',                 'Azure AD / Entra ID',             'Context-dependent'],
+            ]}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <AdvantageBox color="emerald" title="Kandji Advantages over Intune" points={[
+              'Higher compliance rates across all macOS security pillars',
+              'Native Apple silicon optimisation — M1/M2/M3 support without legacy overhead',
+              'IRU provides 6-tier patch segmentation vs Intune\'s binary pass/fail',
+              'CrowdStrike Falcon offers deeper detection telemetry than Defender',
+              'Kandji check-in is more reliable on macOS than Intune MDM sync cycle',
+            ]} />
+            <AdvantageBox color="blue" title="Intune Advantages over Kandji" points={[
+              'Full Windows 10/11 management — GPO migration, Win32 app deployment',
+              'iOS and Android MDM in one platform',
+              'Microsoft Graph API is the richest identity + device data source',
+              'Azure AD Conditional Access and risk-based sign-in policies',
+              'Lower cost for orgs already on Microsoft 365 E3/E5 licensing',
+            ]} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-slate-800 mb-2">1.5 ManageEngine Connector</p>
+          <DocCard>
+            <CardHeader title="Tabs & Key Features" />
+            <TabFeatureList items={[
+              { tab: 'Devices',    desc: 'Windows + Linux inventory. Columns: device, user, platform, OS version, compliance, encryption, last scan.' },
+              { tab: 'Patches',    desc: 'Patch distribution: Fully Patched / Patches Available / Critical Missing / Severely Behind — per-device KB list.' },
+              { tab: 'Software',   desc: 'Full installed software inventory: name, version, publisher, install date — per device.' },
+              { tab: 'Automation', desc: 'Missing Critical Patches Alert, Auto-Deploy Security Patches, Unauthorized Software Alert, Offline Check-in, Weekly Patch Report.' },
+              { tab: 'Reports',    desc: 'Patch and software coverage metrics — % fully patched, % critical gaps, software currency.' },
+            ]} />
+          </DocCard>
+          <AdvantageBox color="amber" title="ManageEngine Advantages over Intune" points={[
+            'Full Linux endpoint management — Intune has only limited/preview Linux support',
+            'Granular KB-level patch control vs Intune\'s Windows Update ring abstraction',
+            'Complete installed software inventory (all software, not just managed apps)',
+            'On-premises deployment option for strict data residency requirements',
+            'Lower cost for orgs without Microsoft 365 E3/E5 — no Azure AD prerequisite',
+          ]} />
+        </div>
+      </Section>
+
+      {/* ── Section 2: Security & Compliance ── */}
+      <Section id="security" title="Section 2 — Security & Compliance" color="bg-purple-700">
+        <div>
+          <p className="text-xs font-bold text-slate-800 mb-2">2.1 Security Posture — Pillar Scores</p>
+          <CompareTable
+            headers={['Pillar', 'All Sources', 'Intune (Windows)', 'Kandji (macOS)', 'ManageEngine']}
+            rows={[
+              ['Encryption / FileVault / BitLocker', '87%', '82% BitLocker',  '94% FileVault',    '78%'],
+              ['EDR / Antivirus',                    '93%', '91% Defender',   '96% CrowdStrike',  '89% AV'],
+              ['Firewall',                           '96%', '95% Win FW',     '98% macOS FW',     '91% Host FW'],
+              ['OS Patching',                        '74%', '68% Win Update', '81% macOS Updates','71% ME Patch'],
+              ['Identity / MFA',                     '89%', '87% Azure MFA',  '92% Okta MFA',     '84% MFA'],
+              ['MDM Compliance',                     '91%', '90% Intune',     '93% Kandji',       '88% ME'],
+            ]}
+          />
+        </div>
+        <DocCard>
+          <CardHeader title="EDR — 4 Investigation Tabs" />
+          <TabFeatureList items={[
+            { tab: 'Detections',       desc: 'MITRE ATT&CK technique mapping, process forensics, file hashes, IOCs, detection timestamp.' },
+            { tab: 'Incidents',        desc: 'Grouped detections with investigation timeline and analyst notes.' },
+            { tab: 'Response Actions', desc: 'Network isolation, process kill, file quarantine — with success/failure tracking per action.' },
+            { tab: 'Investigation',    desc: 'Full forensic timeline: process tree, network events, file events, registry changes.' },
+          ]} />
+        </DocCard>
+      </Section>
+
+      {/* ── Section 3: Users & Identity ── */}
+      <Section id="identity" title="Section 3 — Users & Identity" color="bg-teal-700">
+        <DocCard>
+          <CardHeader title="User Detail Drawer — 8 Tabs" />
+          <TabFeatureList items={[
+            { tab: 'Profile',        desc: 'Identity card, contact info, employment, account security, directory & MDM sources.' },
+            { tab: 'Sign-in Logs',   desc: 'Sign-in attempts with success/failure, app, IP, location, MFA method, risk level, error reason.' },
+            { tab: 'Assigned Roles', desc: 'Entra ID directory role assignments.' },
+            { tab: 'Groups',         desc: 'Group membership: Microsoft 365 · Security · Distribution · Mail-enabled Security.' },
+            { tab: 'Applications',   desc: 'App role assignments with service names and access levels.' },
+            { tab: 'Licenses',       desc: 'M365 E3/E5, Intune, Entra ID P1/P2 licence assignments with service plan status.' },
+            { tab: 'Devices',        desc: 'Assigned devices: compliance, encryption, risk score, last check-in, sync button.' },
+            { tab: 'Jira',           desc: 'Open & resolved Jira tickets linked to this user — type, priority, status.' },
+          ]} />
+        </DocCard>
+        <DocCard>
+          <CardHeader title="Entra Intelligence — 10 Dashboard Sections" />
+          <TabFeatureList items={[
+            { tab: 'Compliance Over Time',       desc: '6-week stacked bar: Compliant / Non-Compliant / Grace Period per week.' },
+            { tab: 'Devices by Platform',        desc: 'Horizontal bars — Windows, macOS, iOS, Android, Linux with % and counts.' },
+            { tab: 'Top Compliance Issues',      desc: '6 issues with severity badge (High/Medium/Low) and affected device count.' },
+            { tab: 'Recent Alerts',              desc: 'Alert list with title, timestamp, and severity dot.' },
+            { tab: 'Risky Users',                desc: 'User · Department · Risk Level · Last Sign-In · MFA · Sessions — expandable rows.' },
+            { tab: 'Stale Devices',              desc: 'Devices >7d offline — amber >7d, red >14d highlight.' },
+            { tab: 'Device Inventory',           desc: 'Full table up to 100 rows: compliance, encryption, join type.' },
+            { tab: 'Relationship Intelligence',  desc: 'User → Device → Policy → App explorer for access path analysis.' },
+            { tab: 'Helpdesk Quick Lookup',      desc: 'Instant device/user search with device sync action.' },
+            { tab: 'Entra AI Copilot',           desc: 'AI-powered insights and anomaly recommendations from live Entra data.' },
+          ]} />
+        </DocCard>
+      </Section>
+
+      {/* ── Section 4: Automation ── */}
+      <Section id="automation" title="Section 4 — Automation" color="bg-emerald-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <DocCard>
+            <CardHeader title="Trigger Types (6)" />
+            <div className="px-5 py-3 space-y-1.5">
+              {['Device Non-Compliant','Encryption Off','Device Offline','Drift Detected','Scheduled (cron)','Script Failure'].map(t => (
+                <div key={t} className="flex items-center gap-2">
+                  <ToggleRight className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                  <span className="text-[0.7rem] text-slate-700">{t}</span>
+                </div>
+              ))}
+            </div>
+          </DocCard>
+          <DocCard>
+            <CardHeader title="Action Types (6)" />
+            <div className="px-5 py-3 space-y-1.5">
+              {['Send in-app notification','Send Slack message','Create Jira ticket','Trigger runbook','Run remote script','Generate report'].map(a => (
+                <div key={a} className="flex items-center gap-2">
+                  <Zap className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                  <span className="text-[0.7rem] text-slate-700">{a}</span>
+                </div>
+              ))}
+            </div>
+          </DocCard>
+        </div>
+        <DocCard>
+          <CardHeader title="Remote Scripts — Execution Status Badges" />
+          <div className="px-5 py-3 flex flex-wrap gap-2">
+            {[
+              { label: 'Queued',            color: 'bg-slate-100 text-slate-700' },
+              { label: 'Running',           color: 'bg-blue-100 text-blue-700' },
+              { label: 'Completed',         color: 'bg-emerald-100 text-emerald-700' },
+              { label: 'Failed',            color: 'bg-red-100 text-red-700' },
+              { label: 'Timeout',           color: 'bg-orange-100 text-orange-700' },
+              { label: 'Awaiting Approval', color: 'bg-purple-100 text-purple-700' },
+            ].map(s => (
+              <span key={s.label} className={`rounded-lg px-2.5 py-1 text-[0.65rem] font-bold ${s.color}`}>{s.label}</span>
+            ))}
+          </div>
+        </DocCard>
+      </Section>
+
+      {/* ── Section 5: Analytics & Reports ── */}
+      <Section id="analytics" title="Section 5 — Analytics & Reports" color="bg-amber-600">
+        <DocCard>
+          <CardHeader title="Mac Fleet Reports — KPI Groups (18+ metrics)" />
+          <TabFeatureList items={[
+            { tab: 'Fleet Health',     desc: 'Total Devices · Compliant · Non-Compliant · Devices at Risk' },
+            { tab: 'Patch Compliance', desc: 'Fully Patched (26.5) · Minor Patch Needed (26.4) · Update Required (26.x) · Critical Missing' },
+            { tab: 'Device Lifecycle', desc: 'Current macOS · Outdated (Sequoia/Sonoma/Ventura) · End of Life · Avg Days Since Check-in' },
+            { tab: 'Stale Devices',    desc: 'Stale 14+d · Critical 30+d · Abandoned 90+d · Active (< 14d)' },
+          ]} />
+        </DocCard>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { icon: BarChart2,    label: 'Reports & Analytics', desc: 'Pre-built templates + custom query builder. PDF & CSV export with scheduling.' },
+            { icon: Clock,        label: 'Activity Log',         desc: 'Full audit trail filterable by date, device, user, action type. CSV export.' },
+            { icon: Activity,     label: 'Diagnostics',          desc: '3 tabs: Infrastructure (API health), Device-level (control state), Fleet (aggregated counts).' },
+          ].map(c => (
+            <div key={c.label} className="rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3 flex items-start gap-3">
+              <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-amber-100 mt-0.5">
+                <c.icon className="h-4 w-4 text-amber-700" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-900">{c.label}</p>
+                <p className="text-[0.65rem] text-slate-500 mt-0.5 leading-snug">{c.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── Section 6: Platform ── */}
+      <Section id="platform" title="Section 6 — Platform & Roles" color="bg-slate-700">
+        <CompareTable
+          headers={['Role', 'Permissions']}
+          rows={[
+            ['Global Admin', 'Full read/write on all modules, settings, user management, and integration credentials'],
+            ['IT Admin',     'Full operational access — devices, runbooks, scripts, automation. No org-level configuration'],
+            ['Helpdesk',     'Read-only + device sync. Must escalate runbook execution to an IT Admin'],
+            ['End User',     'Limited view of own assigned devices and compliance status only'],
+          ]}
+        />
+        <DocCard>
+          <CardHeader title="Settings — 4 Configuration Categories" />
+          <TabFeatureList items={[
+            { tab: 'Integrations',          desc: 'Intune · Entra · Kandji · ManageEngine · Jira · Confluence · Slack — API credentials, connection test.' },
+            { tab: 'Notifications',         desc: 'Alert thresholds by severity, delivery channels (in-app/Slack/email), quiet hours.' },
+            { tab: 'Account Settings',      desc: 'User role assignment, API key management, session management.' },
+            { tab: 'Data & Privacy',        desc: 'Log retention policies, data export, compliance flags (GDPR / SOC 2).' },
+          ]} />
+        </DocCard>
+      </Section>
+
+    </SectionWrap>
+  )
+}
+
 const SECTION_MAP: Record<DocSection, React.ReactNode> = {
   overview:        <OverviewSection />,
   quickstart:      <QuickStartSection />,
@@ -1828,6 +2232,7 @@ const SECTION_MAP: Record<DocSection, React.ReactNode> = {
   roles:           <RolesSection />,
   troubleshooting: <TroubleshootingSection />,
   faq:             <FaqSection />,
+  featureguide:    <FeatureGuideSection />,
 }
 
 export function DocsPage() {

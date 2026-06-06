@@ -25,6 +25,7 @@ import {
   Laptop2,
   FileBarChart,
   Network,
+  Radar,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -52,6 +53,7 @@ export const navItems: NavItem[] = [
   // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
   { title: 'Security Posture',    icon: Shield,       group: 'Security & Compliance' },
   { title: 'Vulnerabilities',     icon: ShieldAlert,  group: 'Security & Compliance' },
+  { title: 'EDR',                 icon: Radar,        group: 'Security & Compliance' },
 
   // ── USERS & IDENTITY ──────────────────────────────────────────────────────────
   { title: 'Users',               icon: Users,        group: 'Users & Identity' },

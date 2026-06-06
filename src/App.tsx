@@ -28,6 +28,7 @@ import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
 import { WindowsDevicesPage } from './pages/WindowsDevicesPage'
 import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
 import { AutomationPage } from './components/automation/AutomationPage'
+import { EDRPage } from './pages/EDRPage'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
@@ -368,6 +369,8 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                   <VulnerabilitiesPage />
                 ) : activePage === 'Automation' ? (
                   <AutomationPage />
+                ) : activePage === 'EDR' ? (
+                  <EDRPage />
                 ) : (
                   <PlaceholderPage
                     title={activePage}
