@@ -22,6 +22,9 @@ server/node_modules
 !.env.example
 !server/.env.example
 
+# Runtime-persisted integration credentials (written by the backend on save)
+server/.integration-credentials.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

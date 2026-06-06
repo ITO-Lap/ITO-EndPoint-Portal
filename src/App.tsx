@@ -22,19 +22,26 @@ import { RemoteScriptsPage } from './pages/RemoteScriptsPage'
 import { SecurityPosturePage } from './pages/SecurityPosturePage'
 import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { KandjiMacPage } from './pages/KandjiMacPage'
+import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
+import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
+import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
+import { WindowsDevicesPage } from './pages/WindowsDevicesPage'
+import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
+import { AutomationPage } from './components/automation/AutomationPage'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
 import { useNotifications } from './hooks/useNotifications'
-import { useAiAnalysis } from './hooks/useAiAnalysis'
 import type { ConnectedSource, DeviceData } from './types'
 import {
   getRunbookForDevice,
 } from './data/dashboardData'
 import {
-  Laptop2, AlertTriangle, ShieldCheck, ShieldAlert, ClipboardList, Monitor, Apple,
+  Laptop2, AlertTriangle, ShieldCheck, ShieldAlert, ClipboardList, Monitor, Apple, Lock,
 } from 'lucide-react'
-import type { StatCardData } from './types'
+import { ZinniaBadge } from './components/ui/ZinniaLogo'
+import type { StatCardData, UserToolRole } from './types'
+import { canAccess } from './lib/permissions'
 
 function OfflineBanner({ onRetry }: { onRetry: () => void }) {
   return (
@@ -51,6 +58,28 @@ function OfflineBanner({ onRetry }: { onRetry: () => void }) {
         className="ml-auto flex-shrink-0 rounded border border-white/40 bg-white/10 px-2.5 py-0.5 text-xs font-semibold hover:bg-white/20 transition"
       >
         Retry
+      </button>
+    </div>
+  )
+}
+
+function AccessDenied({ page, onBack }: { page: string; onBack: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-28 gap-5 text-center">
+      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-red-100">
+        <Lock className="h-7 w-7 text-red-600" />
+      </div>
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-slate-900">Access Restricted</h2>
+        <p className="text-sm text-slate-500">You don't have permission to view <span className="font-medium text-slate-700">{page}</span>.</p>
+        <p className="text-sm text-slate-400">Contact your Global Admin to request access.</p>
+      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        className="rounded-lg bg-orange-500 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition"
+      >
+        Back to Dashboard
       </button>
     </div>
   )
@@ -102,8 +131,6 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
   const { items: activityItems } = useActivity()
   const { notifications, markAllRead } = useNotifications()
 
-  const { analysis: aiAnalysis, loading: aiLoading } = useAiAnalysis(selectedDevice, false)
-
   // Auto-select first non-compliant device when live data first arrives
   const autoLoaded = useRef(false)
   useEffect(() => {
@@ -148,16 +175,8 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
   }, [stats])
 
   const liveRunbookData = useMemo(() => {
-    const base = selectedDevice ? getRunbookForDevice(selectedDevice) : null
-    if (!aiAnalysis || !base) return base
-    return {
-      runbookName: aiAnalysis.suggestedRunbook || base.runbookName,
-      runbookLink: 'AI-generated runbook',
-      steps: aiAnalysis.steps.length ? aiAnalysis.steps : base.steps,
-      escalation: (aiAnalysis.riskLevel === 'High' || aiAnalysis.riskLevel === 'Critical') ? 'Yes' : 'No',
-      automation: base.automation,
-    }
-  }, [selectedDevice, aiAnalysis])
+    return selectedDevice ? getRunbookForDevice(selectedDevice) : null
+  }, [selectedDevice])
 
   const handleDeviceSelect = useCallback(async (deviceName: string) => {
     setSearchLoading(true)
@@ -223,6 +242,7 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
             activePage={activePage}
             onNavSelect={setActivePage}
             onSourceClick={setSelectedSource}
+            viewerRole={viewerRole as UserToolRole}
           />
           <div className="flex min-h-full flex-col w-full">
             {offline && <OfflineBanner onRetry={refreshStats} />}
@@ -240,9 +260,11 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
               onSignOut={onSignOut}
               viewerRole={viewerRole}
             />
-            <main className="flex-1 bg-[#faf9f0] px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full">
+            <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
               <div className="mx-auto w-full max-w-[1600px]">
-                {activePage === 'Dashboard' ? (
+                {!canAccess(viewerRole as UserToolRole, activePage) ? (
+                  <AccessDenied page={activePage} onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Dashboard' ? (
                   <DashboardContent
                     statCards={liveStatCards}
                     selectedDevice={selectedDevice}
@@ -250,7 +272,7 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                     onActivityDeviceClick={handleActivityDeviceClick}
                     onStatCardNavigate={setActivePage}
                     runbookData={liveRunbookData}
-                    aiRunbookLoading={aiLoading}
+                    aiRunbookLoading={false}
                     complianceSegments={liveComplianceSegments}
                     issueCategories={liveIssueCategories}
                     recentActivityItems={activityItems}
@@ -287,33 +309,6 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                       setActivePage('Dashboard')
                     }}
                   />
-                ) : activePage === 'Windows Devices' ? (
-                  <FilteredDevicesPage
-                    filter="Windows"
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
-                ) : activePage === 'Intune Devices' ? (
-                  <FilteredDevicesPage
-                    filter="Intune"
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
-                ) : activePage === 'ManageEngine Devices' ? (
-                  <FilteredDevicesPage
-                    filter="ManageEngine"
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
                 ) : activePage === 'Mac Devices' ? (
                   <KandjiMacPage
                     onBack={() => setActivePage('Dashboard')}
@@ -322,6 +317,16 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                       setActivePage('Dashboard')
                     }}
                   />
+                ) : activePage === 'Intune Devices' ? (
+                  <IntuneDevicesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Windows Devices' ? (
+                  <WindowsDevicesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'ManageEngine Devices' ? (
+                  <ManageEngineDevicesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Mac Fleet Reports' ? (
+                  <MacFleetReportsPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Entra Intelligence' ? (
+                  <EntraIntelligenceDashboard />
                 ) : activePage === 'Open Issues' ? (
                   <OpenIssuesPage
                     onBack={() => setActivePage('Dashboard')}
@@ -361,13 +366,18 @@ function AppContent({ onSignOut, viewerRole }: { onSignOut: () => void; viewerRo
                   <SecurityPosturePage />
                 ) : activePage === 'Vulnerabilities' ? (
                   <VulnerabilitiesPage />
+                ) : activePage === 'Automation' ? (
+                  <AutomationPage />
                 ) : (
                   <PlaceholderPage
                     title={activePage}
                     description={PAGE_META[activePage]?.description ?? `Manage ${activePage.toLowerCase()} across your endpoint environment.`}
                   />
                 )}
-                <footer className="mt-6 text-center text-xs text-slate-500">© 2026 ITO Endpoint. All rights reserved.</footer>
+                <footer className="mt-6 flex flex-col items-center gap-2">
+                  <ZinniaBadge />
+                  <p className="text-[0.62rem] text-slate-400">© 2026 Zinnia Technologies · ITO Endpoint · All rights reserved.</p>
+                </footer>
               </div>
             </main>
           </div>

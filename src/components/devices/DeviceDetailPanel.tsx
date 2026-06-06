@@ -3,7 +3,7 @@ import {
   ArrowLeft, Monitor, Laptop, Globe, Shield, ShieldCheck,
   Network, Lock, LockOpen, CheckCircle2,
   AlertTriangle, XCircle, Building2, RefreshCw,
-  Server, Fingerprint, ChevronRight, Package,
+  Server, Fingerprint, Package,
   Key, RotateCcw, Clock, AlertCircle, Loader, Search,
 } from 'lucide-react'
 import { api } from '../../api'
@@ -70,6 +70,32 @@ function StatusDot({ ok, label }: { ok: boolean; label: string }) {
       {label}
     </span>
   )
+}
+
+function stalenessDays(lastCheckIn: string): number {
+  const s = lastCheckIn.toLowerCase()
+  if (!s || s.includes('just') || s.includes('min') || s.includes('hour') || s.includes('today') || s.includes('added')) return 0
+  if (s.includes('yesterday') || s === '1 day ago') return 1
+  const dayM = s.match(/(\d+)\s*day/);   if (dayM)  return parseInt(dayM[1])
+  const weekM = s.match(/(\d+)\s*week/); if (weekM) return parseInt(weekM[1]) * 7
+  if (s.includes('week'))  return 7
+  const monM = s.match(/(\d+)\s*month/); if (monM)  return parseInt(monM[1]) * 30
+  if (s.includes('month')) return 30
+  const parsed = new Date(lastCheckIn)
+  if (!isNaN(parsed.getTime())) return Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 86400000))
+  return 0
+}
+
+function CheckInBadge({ days }: { days: number }) {
+  const label = days === 0 ? 'Today' : days === 1 ? '1d ago' : `${days}d ago`
+  const cls = days === 0
+    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+    : days <= 2
+    ? 'bg-lime-50 border-lime-200 text-lime-700'
+    : days <= 6
+    ? 'bg-amber-50 border-amber-200 text-amber-700'
+    : 'bg-red-50 border-red-200 text-red-600'
+  return <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[0.58rem] font-bold ${cls}`}>{label}</span>
 }
 
 function Field({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
@@ -150,8 +176,20 @@ function OverviewTab({ d }: { d: ApiDevice }) {
       </SectionCard>
 
       <SectionCard title="Device Status" icon={<Server className="h-4 w-4" />}>
-        <Field label="Last Check-in" value={d.lastCheckIn} />
-        <Field label="Last Compliance Check" value={d.lastComplianceCheck} />
+        {d.lastCheckIn && (
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Last Check-in</p>
+            <p className="text-sm font-medium text-slate-800">{d.lastCheckIn}</p>
+            <CheckInBadge days={stalenessDays(d.lastCheckIn)} />
+          </div>
+        )}
+        {d.lastComplianceCheck && (
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Last Compliance Check</p>
+            <p className="text-sm font-medium text-slate-800">{d.lastComplianceCheck}</p>
+            <CheckInBadge days={stalenessDays(d.lastComplianceCheck)} />
+          </div>
+        )}
         <Field label="OS Version" value={d.osVersion} />
         <Field label="OS Build" value={d.osBuildNumber} mono />
       </SectionCard>
@@ -227,10 +265,6 @@ function SecurityTab({ d }: { d: ApiDevice }) {
   const avOk  = d.antivirusStatus?.toLowerCase() === 'active'
   const sbOk  = d.secureBoot?.toLowerCase() === 'enabled'
   const laps  = d.laps
-
-  const lapsRotatedAgo = laps?.passwordLastRotated
-    ? `Rotated ${laps.passwordLastRotated}`
-    : undefined
 
   return (
     <div className="space-y-3">
@@ -565,7 +599,13 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
           <ComplianceBadge state={d.complianceState} />
           {d.managementSource && <SourcePill src={d.managementSource} />}
         </div>
-        <Field label="Last Compliance Check" value={d.lastComplianceCheck} />
+        {d.lastComplianceCheck && (
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Last Compliance Check</p>
+            <p className="text-sm font-medium text-slate-800">{d.lastComplianceCheck}</p>
+            <CheckInBadge days={stalenessDays(d.lastComplianceCheck)} />
+          </div>
+        )}
         <Field label="Issue Source" value={d.issueSource} />
         {hasIssue && <Field label="Failed Policy" value={d.policyFailed} />}
         {hasIssue && (
@@ -647,8 +687,10 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
                 </>
               )}
             </div>
-            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-              <RefreshCw className="h-3 w-3" /> Last sync: {d.lastCheckIn}
+            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+              <RefreshCw className="h-3 w-3 flex-shrink-0" />
+              <span>Last sync: {d.lastCheckIn}</span>
+              <CheckInBadge days={stalenessDays(d.lastCheckIn)} />
             </p>
           </div>
         </div>

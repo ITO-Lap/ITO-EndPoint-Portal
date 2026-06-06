@@ -16,7 +16,6 @@ const COLS = [
   { key: 'issue',      label: 'Issue',          min: 100, default: 200 },
   { key: 'actions',    label: '',               min:  60, default:  80, noResize: true },
 ] as const
-type ColKey = typeof COLS[number]['key']
 
 const SOURCE_TABS = [
   { id: 'all',          label: 'All Sources',  activeClass: 'bg-slate-900 text-white' },

@@ -1,3 +1,7 @@
+import { readFileSync, writeFileSync } from 'fs'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
 export interface RuntimeIntuneConfig {
   tenantId: string
   clientId: string
@@ -41,13 +45,16 @@ export interface IntegrationFetchResult {
   error: string | null
 }
 
-interface Store {
-  intune?: RuntimeIntuneConfig
-  kandji?: RuntimeKandjiConfig
+interface PersistedCredentials {
+  intune?:       RuntimeIntuneConfig
+  kandji?:       RuntimeKandjiConfig
   manageengine?: RuntimeManageEngineConfig
-  openai?: RuntimeOpenAIConfig
-  entra?: RuntimeEntraConfig
-  slack?: RuntimeSlackConfig
+  openai?:       RuntimeOpenAIConfig
+  entra?:        RuntimeEntraConfig
+  slack?:        RuntimeSlackConfig
+}
+
+interface Store extends PersistedCredentials {
   fetchResults: {
     intune: IntegrationFetchResult | null
     kandji: IntegrationFetchResult | null
@@ -57,18 +64,52 @@ interface Store {
   }
 }
 
+// ─ Persistence ───────────────────────────────────────────────────────────────
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const CREDS_FILE = resolve(__dirname, '../../../../server/.integration-credentials.json')
+
+function loadPersistedCredentials(): PersistedCredentials {
+  try {
+    const raw = readFileSync(CREDS_FILE, 'utf-8')
+    return JSON.parse(raw) as PersistedCredentials
+  } catch {
+    return {}
+  }
+}
+
+function persistCredentials(): void {
+  const snapshot: PersistedCredentials = {}
+  if (store.intune)       snapshot.intune       = store.intune
+  if (store.kandji)       snapshot.kandji       = store.kandji
+  if (store.manageengine) snapshot.manageengine = store.manageengine
+  if (store.openai)       snapshot.openai       = store.openai
+  if (store.entra)        snapshot.entra        = store.entra
+  if (store.slack)        snapshot.slack        = store.slack
+  try {
+    writeFileSync(CREDS_FILE, JSON.stringify(snapshot, null, 2), 'utf-8')
+  } catch (e) {
+    console.error('[integrationStore] Failed to persist credentials:', e)
+  }
+}
+
+// ─ Store init — load from disk first ─────────────────────────────────────────
+
+const persisted = loadPersistedCredentials()
+
 const store: Store = {
+  ...persisted,
   fetchResults: { intune: null, kandji: null, manageengine: null, entra: null, slack: null },
 }
 
 // ─ Credential setters ────────────────────────────────────────────────────────
 
-export function setIntuneConfig(c: RuntimeIntuneConfig) { store.intune = c }
-export function setKandjiConfig(c: RuntimeKandjiConfig) { store.kandji = c }
-export function setManageEngineConfig(c: RuntimeManageEngineConfig) { store.manageengine = c }
-export function setOpenAIConfig(c: RuntimeOpenAIConfig) { store.openai = c }
-export function setEntraConfig(c: RuntimeEntraConfig) { store.entra = c }
-export function setSlackConfig(c: RuntimeSlackConfig) { store.slack = c }
+export function setIntuneConfig(c: RuntimeIntuneConfig) { store.intune = c; persistCredentials() }
+export function setKandjiConfig(c: RuntimeKandjiConfig) { store.kandji = c; persistCredentials() }
+export function setManageEngineConfig(c: RuntimeManageEngineConfig) { store.manageengine = c; persistCredentials() }
+export function setOpenAIConfig(c: RuntimeOpenAIConfig) { store.openai = c; persistCredentials() }
+export function setEntraConfig(c: RuntimeEntraConfig) { store.entra = c; persistCredentials() }
+export function setSlackConfig(c: RuntimeSlackConfig) { store.slack = c; persistCredentials() }
 
 // ─ Credential getters — store first, then env vars ───────────────────────────
 

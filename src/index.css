@@ -1,24 +1,414 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════
+   APPLE GLASS — Glassmorphism Design System
+   Clean · Translucent · Frosted · Futuristic · Premium
+   ═══════════════════════════════════════════════════════════════ */
+
 :root {
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  color: #0f172a;
-  background: #f5f7fb;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    Inter, ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* ── Zinnia brand ── */
+  --z-orange:   #F46C00;
+  --z-coral:    #FB471F;
+  --z-gold:     #FFC600;
+
+  /* ── Glass surfaces ── */
+  --glass-bg:         rgba(255, 255, 255, 0.60);
+  --glass-bg-light:   rgba(255, 255, 255, 0.75);
+  --glass-bg-strong:  rgba(255, 255, 255, 0.85);
+  --glass-border:     rgba(255, 255, 255, 0.80);
+  --glass-border-dim: rgba(148, 163, 184, 0.20);
+  --glass-shadow:     0 8px 32px rgba(100, 130, 200, 0.10), inset 0 1px 0 rgba(255,255,255,0.90);
+
+  /* ── Blue water glow ── */
+  --water-base:     #0EA5E9;
+  --water-mid:      #38BDF8;
+  --water-light:    #7DD3FC;
+  --water-deep:     #0284C7;
+  --water-glow-sm:  0 0 0 1.5px rgba(14,165,233,0.35), 0 4px 16px rgba(14,165,233,0.18), 0 0 40px rgba(56,189,248,0.10);
+  --water-glow-md:  0 0 0 2px rgba(14,165,233,0.45), 0 8px 32px rgba(14,165,233,0.25), 0 0 60px rgba(56,189,248,0.15);
+  --water-glow-lg:  0 0 0 2.5px rgba(14,165,233,0.55), 0 0 30px rgba(14,165,233,0.40), 0 0 80px rgba(56,189,248,0.20), inset 0 0 20px rgba(14,165,233,0.08);
+
+  /* ── Text ── */
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+  --text-faint:     #CBD5E1;
+
+  /* ── Background pearls ── */
+  --bg-gradient: linear-gradient(145deg,
+    #EFF6FF 0%,
+    #F5F3FF 20%,
+    #F0F9FF 40%,
+    #FFF7F0 60%,
+    #F0FAFB 80%,
+    #EFF6FF 100%
+  );
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-html,
-body,
-#root {
-  min-height: 100%;
-}
+html, body, #root { min-height: 100%; }
 
 body {
   margin: 0;
-  background: #f5f7fb;
+  color: var(--text-primary);
 }
+
+/* ── Animated pearl background ────────────────────────────────── */
+.glass-bg {
+  background: var(--bg-gradient);
+  background-size: 400% 400%;
+  animation: pearl-drift 20s ease infinite;
+}
+
+@keyframes pearl-drift {
+  0%   { background-position: 0%   50%; }
+  33%  { background-position: 100% 50%; }
+  66%  { background-position: 50%  0%;  }
+  100% { background-position: 0%   50%; }
+}
+
+/* ── Custom scrollbar (light/glass style) ─────────────────────── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.35); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(14,165,233,0.45); }
+
+/* ══════════════════════════════════════════════════════════════
+   GLASS SURFACE UTILITIES
+══════════════════════════════════════════════════════════════ */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-light {
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(32px) saturate(2.0);
+  -webkit-backdrop-filter: blur(32px) saturate(2.0);
+  border: 1px solid rgba(255,255,255,0.90);
+  box-shadow: 0 4px 24px rgba(100,130,200,0.08), inset 0 1px 0 rgba(255,255,255,0.95);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(40px) saturate(2.2);
+  -webkit-backdrop-filter: blur(40px) saturate(2.2);
+  border: 1px solid rgba(255,255,255,0.95);
+  box-shadow: 0 12px 48px rgba(100,130,200,0.12), inset 0 1px 0 rgba(255,255,255,1);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLUE WATER GLOW — The signature interaction effect
+   Applied to ALL interactive elements
+══════════════════════════════════════════════════════════════ */
+
+/* Base water-glow class — add to any interactive element */
+.water-glow {
+  transition:
+    box-shadow 0.30s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.25s ease,
+    background 0.25s ease,
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: box-shadow, transform;
+}
+
+/* ── Hover: soft blue liquid light ── */
+.water-glow:hover:not(:disabled) {
+  box-shadow: var(--water-glow-md);
+  border-color: rgba(14,165,233,0.45) !important;
+  transform: translateY(-1px);
+}
+
+/* ── Click/active: deep blue water ripple ── */
+.water-glow:active:not(:disabled),
+.water-glow[aria-pressed="true"] {
+  box-shadow: var(--water-glow-lg);
+  border-color: rgba(14,165,233,0.65) !important;
+  transform: translateY(0) scale(0.985);
+}
+
+/* Smaller variant for pills / badges */
+.water-glow-sm {
+  transition: box-shadow 0.25s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.water-glow-sm:hover:not(:disabled) {
+  box-shadow: var(--water-glow-sm);
+  border-color: rgba(14,165,233,0.4) !important;
+  transform: translateY(-0.5px);
+}
+.water-glow-sm:active:not(:disabled) {
+  box-shadow: var(--water-glow-md);
+  transform: scale(0.97);
+}
+
+/* Cards — slower, gentler spring */
+.water-glow-card {
+  transition:
+    box-shadow 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.3s ease,
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.water-glow-card:hover {
+  box-shadow:
+    0 0 0 1.5px rgba(14,165,233,0.30),
+    0 12px 40px rgba(14,165,233,0.14),
+    0 0 80px rgba(56,189,248,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.95);
+  border-color: rgba(14,165,233,0.35) !important;
+  transform: translateY(-2px);
+}
+.water-glow-card:active {
+  box-shadow: var(--water-glow-md);
+  transform: translateY(-1px) scale(0.995);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BUTTON VARIANTS
+══════════════════════════════════════════════════════════════ */
+
+/* Primary: blue water gradient */
+.btn-water {
+  background: linear-gradient(135deg, #0EA5E9 0%, #6366F1 100%);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 14px rgba(14,165,233,0.35), 0 2px 4px rgba(14,165,233,0.20);
+  transition: all 0.30s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-water:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.25), 0 8px 24px rgba(14,165,233,0.45), 0 0 60px rgba(99,102,241,0.20);
+  transform: translateY(-1.5px);
+  filter: brightness(1.08);
+}
+.btn-water:active:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.40), 0 0 30px rgba(14,165,233,0.50), inset 0 2px 8px rgba(0,0,0,0.10);
+  transform: translateY(0) scale(0.97);
+  filter: brightness(0.97);
+}
+
+/* Zinnia brand button */
+.btn-zinnia {
+  background: linear-gradient(135deg, #F46C00 0%, #FB471F 100%);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 14px rgba(244,108,0,0.35), 0 2px 4px rgba(244,108,0,0.20);
+  transition: all 0.30s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-zinnia:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(244,108,0,0.25), 0 8px 24px rgba(244,108,0,0.40), 0 0 60px rgba(251,71,31,0.20);
+  transform: translateY(-1.5px);
+  filter: brightness(1.06);
+}
+.btn-zinnia:active:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(244,108,0,0.40), 0 0 20px rgba(244,108,0,0.45), inset 0 2px 6px rgba(0,0,0,0.12);
+  transform: translateY(0) scale(0.97);
+}
+
+/* ── Water focus ring for inputs ── */
+.water-input {
+  transition: all 0.25s ease;
+  background: rgba(255,255,255,0.65);
+  border: 1px solid rgba(148,163,184,0.30);
+}
+.water-input:focus {
+  outline: none;
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(14,165,233,0.50);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.15), 0 4px 12px rgba(14,165,233,0.10);
+}
+.water-input::placeholder { color: rgba(148,163,184,0.80); }
+
+/* ── Gradient text ── */
+.gradient-text-blue {
+  background: linear-gradient(135deg, #0EA5E9, #6366F1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-zinnia {
+  background: linear-gradient(135deg, #F46C00, #FB471F);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-aurora {
+  background: linear-gradient(135deg, #0EA5E9 0%, #6366F1 50%, #F46C00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Monospace numbers ── */
+.mono-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════════════════════════════ */
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes water-ripple {
+  0%   { transform: scale(0.92); opacity: 0; }
+  60%  { transform: scale(1.04); opacity: 0.6; }
+  100% { transform: scale(1);    opacity: 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0);    }
+  50%       { transform: translateY(-6px); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+@keyframes pulse-water {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(14,165,233,0.3); }
+  50%       { box-shadow: 0 0 0 6px rgba(14,165,233,0); }
+}
+@keyframes number-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-slide-up   { animation: slide-up   0.30s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-fade-in    { animation: fade-in    0.20s ease-out; }
+.animate-float      { animation: float      3s ease-in-out infinite; }
+.animate-pulse-water{ animation: pulse-water 2s ease-in-out infinite; }
+.animate-number-enter{ animation: number-enter 0.40s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* ── Shimmer skeleton ── */
+.shimmer {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.2) 25%,
+    rgba(255,255,255,0.5) 50%,
+    rgba(255,255,255,0.2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── AI chip ── */
+.ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(14,165,233,0.12), rgba(99,102,241,0.12));
+  border: 1px solid rgba(14,165,233,0.30);
+  color: #0EA5E9;
+  backdrop-filter: blur(8px);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ENTERPRISE TABLE (glass)
+══════════════════════════════════════════════════════════════ */
+
+.z-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8125rem;
+}
+
+.z-table thead th {
+  padding: 0.625rem 1rem;
+  text-align: left;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: #94A3B8;
+  border-bottom: 1px solid rgba(148,163,184,0.20);
+  background: rgba(255,255,255,0.40);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  backdrop-filter: blur(8px);
+}
+
+.z-table tbody tr { transition: all 0.2s ease; }
+.z-table tbody tr:hover {
+  background: rgba(14,165,233,0.04);
+  box-shadow: inset 0 0 0 1px rgba(14,165,233,0.10);
+}
+.z-table tbody td {
+  padding: 0.75rem 1rem;
+  color: #475569;
+  border-bottom: 1px solid rgba(148,163,184,0.12);
+  vertical-align: middle;
+}
+.z-table tbody tr:last-child td { border-bottom: none; }
+
+.z-table .z-th-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  font-weight: inherit;
+}
+.z-table .z-th-btn:hover { color: #0EA5E9; }
+
+/* ── Pagination ── */
+.z-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(148,163,184,0.12);
+  font-size: 0.75rem;
+  color: #94A3B8;
+}
+.z-pagination button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(148,163,184,0.25);
+  background: rgba(255,255,255,0.65);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(8px);
+}
+.z-pagination button:hover:not(:disabled) {
+  border-color: rgba(14,165,233,0.40);
+  color: #0EA5E9;
+  box-shadow: var(--water-glow-sm);
+}
+.z-pagination button:disabled { opacity: 0.35; cursor: not-allowed; }

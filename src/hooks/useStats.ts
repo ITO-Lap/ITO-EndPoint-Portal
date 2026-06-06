@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api'
 import type { ApiStats } from '../api'
 
-const REFRESH_INTERVAL = 30 // seconds
+const REFRESH_INTERVAL = 10 // seconds
 
 export function useStats() {
   const [stats, setStats] = useState<ApiStats | null>(null)
@@ -32,7 +32,7 @@ export function useStats() {
     fetchStats(true)
   }, [fetchStats])
 
-  // Auto-refresh every 30 s
+  // Auto-refresh every 10 s (real-time)
   useEffect(() => {
     const id = setInterval(() => fetchStats(), REFRESH_INTERVAL * 1000)
     return () => clearInterval(id)

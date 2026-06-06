@@ -17,6 +17,14 @@ import {
   Users,
   Hash,
   MessageSquare,
+  Zap,
+  AlertTriangle,
+  Monitor,
+  GitBranch,
+  Layers,
+  Laptop2,
+  FileBarChart,
+  Network,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -27,35 +35,70 @@ import type {
   BadgeVariant,
 } from '../types'
 
+// ── Navigation — grouped into enterprise architecture sections ─────────────────
+
 export const navItems: NavItem[] = [
-  { title: 'Dashboard', icon: Home, active: true },
-  { title: 'Device Lookup', icon: Search },
-  { title: 'Users', icon: Users },
-  { title: 'Runbooks', icon: BookOpen },
-  { title: 'Diagnostics', icon: Activity },
-  { title: 'Reports & Analytics', icon: BarChart3 },
-  { title: 'Activity Log', icon: Clock3 },
-  { title: 'Remote Scripts', icon: Terminal },
-  { title: 'Security Posture', icon: Shield },
-  { title: 'Vulnerabilities', icon: ShieldAlert },
-  { title: 'Settings', icon: Settings },
-  { title: 'Documentation', icon: BookMarked },
+  // ── OVERVIEW ──────────────────────────────────────────────────────────────────
+  { title: 'Dashboard',           icon: Home,         group: 'Overview',               active: true },
+
+  // ── ENDPOINT MANAGEMENT ───────────────────────────────────────────────────────
+  { title: 'Device Lookup',           icon: Search,       group: 'Endpoint Management' },
+  { title: 'Mac Devices',             icon: Monitor,      group: 'Endpoint Management' },
+  { title: 'Intune Devices',          icon: Server,       group: 'Endpoint Management' },
+  { title: 'Windows Devices',         icon: Laptop2,      group: 'Endpoint Management' },
+  { title: 'ManageEngine Devices',    icon: Layers,       group: 'Endpoint Management' },
+  { title: 'Open Issues',             icon: AlertTriangle,  group: 'Endpoint Management' },
+
+  // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
+  { title: 'Security Posture',    icon: Shield,       group: 'Security & Compliance' },
+  { title: 'Vulnerabilities',     icon: ShieldAlert,  group: 'Security & Compliance' },
+
+  // ── USERS & IDENTITY ──────────────────────────────────────────────────────────
+  { title: 'Users',               icon: Users,        group: 'Users & Identity' },
+
+  // ── AUTOMATION ────────────────────────────────────────────────────────────────
+  { title: 'Automation',          icon: Zap,          group: 'Automation' },
+  { title: 'Runbooks',            icon: BookOpen,     group: 'Automation' },
+  { title: 'Remote Scripts',      icon: Terminal,     group: 'Automation' },
+
+  // ── ANALYTICS & REPORTS ───────────────────────────────────────────────────────
+  { title: 'Reports & Analytics', icon: BarChart3,    group: 'Analytics & Reports' },
+  { title: 'Activity Log',        icon: Clock3,       group: 'Analytics & Reports' },
+  { title: 'Diagnostics',         icon: Activity,     group: 'Analytics & Reports' },
+
+  // ── PLATFORM ──────────────────────────────────────────────────────────────────
+  { title: 'Settings',            icon: Settings,     group: 'Platform' },
+  { title: 'Documentation',       icon: BookMarked,   group: 'Platform' },
 ]
+
+// ── Group order — controls render sequence in sidebar ─────────────────────────
+export const NAV_GROUP_ORDER = [
+  'Overview',
+  'Endpoint Management',
+  'Security & Compliance',
+  'Users & Identity',
+  'Automation',
+  'Analytics & Reports',
+  'Platform',
+] as const
+
+// ── Automation group gets a distinct accent treatment ─────────────────────────
+export const AUTOMATION_GROUP = 'Automation'
+
+// ── Connected integration sources ─────────────────────────────────────────────
 
 export const connectedSources: ConnectedSource[] = [
   { name: 'Microsoft Intune',   label: 'Intune',       status: 'Connected', icon: Server,        integrationId: 'intune'        },
   { name: 'Microsoft Entra ID', label: 'Entra ID',     status: 'Connected', icon: ShieldCheck,   integrationId: 'entra'         },
   { name: 'Kandji',             label: 'Kandji',       status: 'Connected', icon: Cloud,         integrationId: 'kandji'        },
   { name: 'Manage Engine',      label: 'ManageEngine', status: 'Connected', icon: Settings,      integrationId: 'manageengine'  },
-  { name: 'OpenAI',             label: 'OpenAI',       status: 'Connected', icon: Cpu,           integrationId: 'openai'        },
   { name: 'Jira',               label: 'Jira',         status: 'Connected', icon: Hash,          integrationId: 'jira'          },
   { name: 'Confluence',         label: 'Confluence',   status: 'Connected', icon: BookOpen,      integrationId: 'confluence'    },
   { name: 'Slack',              label: 'Slack',        status: 'Connected', icon: MessageSquare, integrationId: 'slack'         },
 ]
 
-// ── Device-state helpers (derive from real device data) ───────────────────────
+// ── Device-state helpers ───────────────────────────────────────────────────────
 
-// Get runbook appropriate for a specific device's state and platform
 export function getRunbookForDevice(device: DeviceData): RunbookData {
   if (device.complianceState === 'Compliant') {
     return {
@@ -113,10 +156,10 @@ export function getRunbookForDevice(device: DeviceData): RunbookData {
   }
 }
 
-// Build compliance detail rows from a real device
 export function getComplianceRowsForDevice(device: DeviceData): ComplianceDetailRow[] {
   const getSeverityVariant = (severity: string): BadgeVariant => {
     switch (severity) {
+      case 'Critical': return 'red'
       case 'High':   return 'red'
       case 'Medium': return 'orange'
       case 'Low':    return 'green'
@@ -132,12 +175,14 @@ export function getComplianceRowsForDevice(device: DeviceData): ComplianceDetail
       value: device.severity,
       badge: { label: device.severity, variant: getSeverityVariant(device.severity) },
     },
-    {
-      label: 'Confidence',
-      value: device.confidence,
-      badge: { label: 'High', variant: 'green' },
-    },
+    { label: 'Issue Category',  value: device.issueCategory },
+    { label: 'Issue Source',    value: device.issueSource },
     { label: 'First Detected',  value: device.firstDetected },
     { label: 'Last Detected',   value: device.lastDetected },
+    { label: 'Confidence',      value: device.confidence },
   ]
 }
+
+// Suppress unused-import warnings for icons used only in JSX context via navItems
+void GitBranch
+void Layers

@@ -553,7 +553,7 @@ function formatDate(dateStr: string): string {
 // ─── Detail Panel ──────────────────────────────────────────────────────────────
 
 function DetailPanel({ cve, onClose }: { cve: CVE; onClose: () => void }) {
-  const { badge, text } = cvssColorClasses(cve.cvss)
+  const { badge } = cvssColorClasses(cve.cvss)
   const days = cve.patchDeadline ? daysUntil(cve.patchDeadline) : null
 
   return (
@@ -822,6 +822,14 @@ export function VulnerabilitiesPage() {
         </div>
       </div>
 
+      {/* ── Baseline data notice ── */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <p className="text-[0.68rem] text-amber-800 leading-snug">
+          <span className="font-bold">CVE data is based on your fleet baseline.</span> Kandji (macOS) is live-connected. Intune and ManageEngine figures are estimated from fleet configuration. Connect all integrations in Settings for fully live vulnerability tracking.
+        </p>
+      </div>
+
       {/* ── MDM Source Tabs ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
         <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Filter by MDM Source</p>
@@ -831,6 +839,7 @@ export function VulnerabilitiesPage() {
             const style = sourceTabStyle(src.id, isActive)
             const SrcIcon = src.icon
             const count = MOCK_CVES.filter(c => cveMatchesSource(c, src.id)).length
+            const isMock = src.id === 'intune' || src.id === 'manageengine'
             return (
               <button
                 key={src.id}
@@ -851,6 +860,12 @@ export function VulnerabilitiesPage() {
                   <span className="hidden md:inline text-[0.58rem] font-medium opacity-60">· {src.platform}</span>
                 )}
                 <span className={`rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold ${style.count}`}>{count}</span>
+                {isMock && (
+                  <span className="hidden md:inline rounded-full bg-slate-200 text-slate-500 px-1.5 py-0.5 text-[0.52rem] font-bold">est.</span>
+                )}
+                {src.id === 'kandji' && (
+                  <span className="hidden md:inline rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[0.52rem] font-bold">live</span>
+                )}
               </button>
             )
           })}

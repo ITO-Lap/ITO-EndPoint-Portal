@@ -13,6 +13,7 @@ export interface ApiStats {
   mock: boolean
 }
 
+// Kept for type-compat with RunbookCard — no longer populated at runtime
 export interface DeviceAnalysis {
   summary: string
   rootCause: string
@@ -125,6 +126,8 @@ export interface LibraryApp {
   category: string
   active: boolean
   enforcement: string
+  blueprint?: string    // Kandji Blueprint this app belongs to
+  groupId?: string      // Kandji Group ID associated with this app
 }
 
 export interface IntegrationStatusItem {
@@ -329,12 +332,158 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data.data as T
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`${path}: ${res.status}`)
+  const data = await res.json()
+  if (!data.success) throw new Error(data.error ?? 'API error')
+  return data.data as T
+}
+
 async function del<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${path}: ${res.status}`)
   const data = await res.json()
   if (!data.success) throw new Error(data.error ?? 'API error')
   return data.data as T
+}
+
+// ── Automation Engine ─────────────────────────────────────────────────────────
+
+export type AutomationCategory = 'compliance' | 'security' | 'patching' | 'reporting' | 'drift'
+
+export type AutomationTriggerType =
+  | 'device_non_compliant' | 'compliance_threshold' | 'device_offline'
+  | 'new_enrollment' | 'scheduled' | 'risky_signin' | 'drift_detected'
+  | 'encryption_off' | 'script_failure'
+
+export type AutomationActionType =
+  | 'slack_notify' | 'create_jira' | 'execute_runbook'
+  | 'execute_script' | 'generate_report' | 'send_notification'
+
+export interface AutomationRule {
+  id: string
+  name: string
+  description: string
+  category: AutomationCategory
+  enabled: boolean
+  trigger: {
+    type: AutomationTriggerType
+    config: Record<string, string | number | boolean>
+  }
+  conditions: {
+    platform: 'Windows' | 'macOS' | 'Linux' | 'all'
+    source: 'intune' | 'kandji' | 'manageengine' | 'all'
+    severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'all'
+    complianceState: 'Non-Compliant' | 'Warning' | 'all'
+  }
+  actions: Array<{
+    type: AutomationActionType
+    label: string
+    config: Record<string, string>
+  }>
+  lastTriggered?: string
+  triggerCount: number
+  createdAt: string
+  createdBy: string
+}
+
+export interface AutomationExecution {
+  id: string
+  ruleId: string
+  ruleName: string
+  category: AutomationCategory
+  triggeredAt: string
+  deviceId?: string
+  deviceName?: string
+  triggerReason: string
+  status: 'success' | 'failed' | 'partial'
+  actionsExecuted: Array<{
+    type: AutomationActionType
+    label: string
+    status: 'success' | 'failed'
+    result: string
+    detail?: {
+      runbookSteps?:   string[]
+      script?:         string
+      jiraKey?:        string
+      jiraUrl?:        string
+      slackTs?:        string
+      slackChannel?:   string
+      reportMarkdown?: string
+      reportSummary?:  string
+    }
+  }>
+  durationMs: number
+  matchedDeviceCount?: number
+}
+
+export interface AutomationScanResult {
+  rulesEvaluated: number
+  rulesFired:     number
+  totalMatches:   number
+  executions:     AutomationExecution[]
+}
+
+export interface AiBuiltRule {
+  name:        string
+  description: string
+  category:    AutomationCategory
+  enabled:     boolean
+  trigger:     AutomationRule['trigger']
+  conditions:  AutomationRule['conditions']
+  actions:     AutomationRule['actions']
+  createdBy:   string
+  _meta?: {
+    aiGenerated: boolean
+    reasoning:   string
+    usedOpenAI:  boolean
+  }
+}
+
+export interface AutomationStats {
+  total: number
+  active: number
+  inactive: number
+  triggersToday: number
+  successRate: number
+}
+
+export interface CreateAutomationRuleInput {
+  name: string
+  description: string
+  category: AutomationCategory
+  enabled: boolean
+  trigger: AutomationRule['trigger']
+  conditions: AutomationRule['conditions']
+  actions: AutomationRule['actions']
+  createdBy: string
+}
+
+export interface UserSignIn {
+  id: string
+  createdDateTime: string
+  appDisplayName: string
+  ipAddress: string | null
+  location: { city: string; countryOrRegion: string } | null
+  status: { errorCode: number; failureReason: string | null }
+  conditionalAccessStatus: string
+  riskLevelDuringSignIn: string
+  mfaDetail: { authMethod: string } | null
+  clientAppUsed: string
+}
+
+export interface UserDetails {
+  signIns:  UserSignIn[]
+  roles:    Array<{ id: string; displayName: string }>
+  groups:   Array<{ id: string; displayName: string; groupTypes: string[]; mailEnabled: boolean; securityEnabled: boolean }>
+  apps:     Array<{ id: string; appDisplayName: string; resourceDisplayName: string; createdDateTime: string }>
+  licenses: Array<{ id: string; skuPartNumber: string; servicePlans: Array<{ servicePlanName: string; provisioningStatus: string }> }>
+  devices:  Array<{ deviceName: string; platform: string; complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'; managementSource: string; lastCheckIn: string; encryptionStatus: string; riskScore: number }>
 }
 
 export const api = {
@@ -368,12 +517,21 @@ export const api = {
   fetchKandjiApps: () =>
     get<LibraryApp[]>('/api/integrations/kandji/apps'),
 
-  // AI analysis — pass live device fields directly (no device-ID lookup needed)
-  analyzeDeviceFields: (fields: {
-    deviceName: string; user: string; platform: string; osVersion: string
-    managementSource: string; complianceState: string; encryptionStatus: string
-    primaryIssue: string; policyFailed: string; severity: string
-  }) => post<DeviceAnalysis>('/api/ai/analyze', fields),
+  fetchKandjiSelfServiceCategories: () =>
+    get<{ id: string; name: string }[]>('/api/integrations/kandji/self-service/categories'),
+
+  fetchKandjiLibraryPathCoverage: () =>
+    get<{ results: { path: string; status: number; count: number; isJson: boolean }[]; working: { path: string }[] }>('/api/integrations/kandji/debug-library-paths'),
+
+  fetchKandjiLibraryItemStatus: (libraryItemId: string) =>
+    get<{ device_id: string; device_name: string; status: string; status_message?: string; last_audit_date?: string }[]>(
+      `/api/integrations/kandji/library-items/${encodeURIComponent(libraryItemId)}/status`
+    ),
+
+  fetchKandjiLibraryItemActivity: (libraryItemId: string) =>
+    get<{ id: string; action: string; actor_type: string; occurred_at: string; target_component?: string }[]>(
+      `/api/integrations/kandji/library-items/${encodeURIComponent(libraryItemId)}/activity`
+    ),
 
   // Reports
   listReports: () =>
@@ -382,6 +540,8 @@ export const api = {
     post<ReportResult>(`/api/reports/${encodeURIComponent(id)}/run`, params),
   exportReportCsvUrl: (id: string) =>
     `${BASE_URL}/api/reports/${encodeURIComponent(id)}/export/csv`,
+  invalidateReport: (id: string) =>
+    post<{ invalidated: string }>(`/api/reports/${encodeURIComponent(id)}/invalidate`, {}),
 
   // Integration management
   fetchIntegrationStatus: () =>
@@ -390,6 +550,12 @@ export const api = {
     post<{ id: string; configured: boolean }>(`/api/integrations/${id}/credentials`, { fields }),
   syncIntegration: (id: string) =>
     post<IntegrationSyncResult>(`/api/integrations/${id}/sync`, {}),
+
+  // Users (Microsoft Entra ID)
+  fetchUsers: () =>
+    get<import('../types').AppUser[]>('/api/users'),
+  fetchUserDetails: (id: string, email?: string) =>
+    get<UserDetails>(`/api/users/${encodeURIComponent(id)}${email ? `?email=${encodeURIComponent(email)}` : ''}`),
 
   // Jira
   jiraStatus: () =>
@@ -402,6 +568,18 @@ export const api = {
   // Confluence
   searchConfluence: (q: string) =>
     get<ConfluencePage[]>(`/api/jira/confluence/search?q=${encodeURIComponent(q)}`),
+
+  // Slack
+  slackStatus: () =>
+    get<{ configured: boolean; connected?: boolean | null; workspace?: { teamName: string } | null; error?: string | null; lastCheckedAt?: number | null; consecutiveFails?: number }>('/api/slack/status'),
+  slackHealth: () =>
+    get<{ configured: boolean; healthy: boolean | null; lastCheckedAt: number | null; lastSuccessAt: number | null; consecutiveFails: number; error: string | null; workspace: string | null; autoRetryCount: number; nextCheckInMs: number | null }>('/api/slack/health'),
+  testSlackConnection: () =>
+    post<{ workspace: { teamId: string; teamName: string; url: string } }>('/api/slack/test', {}),
+  reconnectSlack: () =>
+    post<{ reconnected: boolean; workspace: string | null; consecutiveFails: number; error: string | null }>('/api/slack/reconnect', {}),
+  fetchSlackAuditLogs: (limit?: number) =>
+    get<{ entries: Record<string, unknown>[]; configured: boolean }>(`/api/slack/audit-logs${limit ? `?limit=${limit}` : ''}`),
 
   // Remote Scripts
   fetchScripts: (params?: { q?: string; os?: string; type?: string }) => {
@@ -416,6 +594,8 @@ export const api = {
     get<Script>(`/api/scripts/${encodeURIComponent(id)}`),
   createScript: (input: CreateScriptInput) =>
     post<Script>('/api/scripts', input),
+  updateScript: (id: string, input: Partial<CreateScriptInput>) =>
+    put<Script>(`/api/scripts/${encodeURIComponent(id)}`, input),
   deleteScript: (id: string) =>
     del<{ id: string }>(`/api/scripts/${encodeURIComponent(id)}`),
   executeScript: (id: string, input: ExecuteScriptInput) =>
@@ -431,6 +611,73 @@ export const api = {
   },
   fetchExecution: (id: string) =>
     get<ScriptExecution>(`/api/scripts/executions/${encodeURIComponent(id)}`),
+
+  // Automation Engine
+  fetchAutomationStats: () =>
+    get<AutomationStats>('/api/automations/stats'),
+  fetchAutomationRules: (category?: string) => {
+    const qs = category && category !== 'all' ? `?category=${encodeURIComponent(category)}` : ''
+    return get<AutomationRule[]>(`/api/automations${qs}`)
+  },
+  fetchAutomationRule: (id: string) =>
+    get<AutomationRule>(`/api/automations/${encodeURIComponent(id)}`),
+  createAutomationRule: (input: CreateAutomationRuleInput) =>
+    post<AutomationRule>('/api/automations', input),
+  updateAutomationRule: (id: string, input: Partial<CreateAutomationRuleInput>) =>
+    put<AutomationRule>(`/api/automations/${encodeURIComponent(id)}`, input),
+  toggleAutomationRule: (id: string) =>
+    patch<AutomationRule>(`/api/automations/${encodeURIComponent(id)}/toggle`),
+  deleteAutomationRule: (id: string) =>
+    del<{ id: string }>(`/api/automations/${encodeURIComponent(id)}`),
+  testAutomationRule: (id: string) =>
+    post<AutomationExecution>(`/api/automations/${encodeURIComponent(id)}/test`, {}),
+  fetchAutomationExecutions: (params?: { ruleId?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.ruleId) qs.set('ruleId', params.ruleId)
+    if (params?.limit) qs.set('limit', String(params.limit))
+    const query = qs.toString()
+    return get<AutomationExecution[]>(`/api/automations/executions${query ? `?${query}` : ''}`)
+  },
+  scanAutomations: () =>
+    post<AutomationScanResult>('/api/automations/scan', {}),
+  aiBuildAutomationRule: (prompt: string) =>
+    post<AiBuiltRule>('/api/automations/ai-build', { prompt }),
+
+  // ── Entra Intelligence ──────────────────────────────────────────────────────
+
+  fetchEntraOverview: () =>
+    get<Record<string, number>>('/api/entra/overview'),
+
+  fetchEntraDevices: (params?: { compliance?: string; os?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.compliance) qs.set('compliance', params.compliance)
+    if (params?.os)         qs.set('os', params.os)
+    if (params?.limit)      qs.set('limit', String(params.limit))
+    const query = qs.toString()
+    return get<unknown[]>(`/api/entra/devices${query ? `?${query}` : ''}`)
+  },
+
+  fetchEntraUsers: (params?: { riskLevel?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.riskLevel) qs.set('riskLevel', params.riskLevel)
+    const query = qs.toString()
+    return get<unknown[]>(`/api/entra/users${query ? `?${query}` : ''}`)
+  },
+
+  fetchEntraGroups: () =>
+    get<unknown[]>('/api/entra/groups'),
+
+  fetchEntraRelationships: (userId?: string) =>
+    get<unknown[]>(`/api/entra/relationships${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
+
+  fetchEntraSecurity: () =>
+    get<Record<string, number>>('/api/entra/security'),
+
+  syncEntraDevice: (deviceId: string) =>
+    post<{ success: boolean; message: string }>(`/api/entra/devices/${encodeURIComponent(deviceId)}/sync`, {}),
+
+  diagnoseEntraDevice: (deviceId: string) =>
+    post<{ summary: string; issues: string[] }>(`/api/entra/devices/${encodeURIComponent(deviceId)}/diagnose`, {}),
 }
 
 /** Map a server Device to the frontend DeviceData shape. */

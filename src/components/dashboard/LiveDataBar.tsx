@@ -70,7 +70,7 @@ const SOURCES: SourcePill[] = [
   },
 ]
 
-type PopoverType = 'jira' | 'confluence' | 'slack' | null
+type PopoverType = 'jira' | 'confluence' | null
 
 function formatLastUpdated(d: Date): string {
   const diffSec = Math.round((Date.now() - d.getTime()) / 1000)
@@ -279,97 +279,6 @@ function ConfluencePopover({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ─── Slack Popover ─────────────────────────────────────────────────────────────
-
-function SlackPopover({ onClose }: { onClose: () => void }) {
-  const [status, setStatus] = useState<{ configured: boolean; healthy: boolean | null; error: string | null; lastSyncAt: string | null } | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    api.fetchIntegrationStatus()
-      .then(items => {
-        const slack = items.find(i => i.id === 'slack')
-        if (slack) setStatus({ configured: slack.configured, healthy: slack.healthy, error: slack.error, lastSyncAt: slack.lastSyncAt })
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  const AUDIT_HIGHLIGHTS = [
-    { icon: '🔐', label: 'Login Events',          desc: 'SSO sign-ins, failed logins, MFA challenges tracked in audit log' },
-    { icon: '👤', label: 'User Management',        desc: 'Provisioning, deactivation, role changes, channel membership' },
-    { icon: '📋', label: 'Compliance Signals',     desc: 'Data export requests, app install/removal, permission changes' },
-    { icon: '🔔', label: 'Alert Notifications',    desc: 'IT alerts and remediation updates pushed to designated channels' },
-  ]
-
-  return (
-    <div className="w-80">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <div className="grid h-6 w-6 place-items-center rounded-md bg-purple-100">
-            <MessageSquare className="h-3.5 w-3.5 text-purple-600" />
-          </div>
-          <span className="text-xs font-bold text-slate-800">Slack Integration</span>
-        </div>
-        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="px-4 py-3 border-b border-slate-100">
-        {loading ? (
-          <div className="flex items-center gap-2 text-slate-400">
-            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            <span className="text-xs">Checking status…</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-700">Connection Status</p>
-              {status?.lastSyncAt && (
-                <p className="text-[0.62rem] text-slate-400 mt-0.5">Last checked: {new Date(status.lastSyncAt).toLocaleString()}</p>
-              )}
-            </div>
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.62rem] font-bold ${
-              status?.configured && status?.healthy !== false
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : status?.configured
-                ? 'bg-amber-50 border-amber-200 text-amber-700'
-                : 'bg-slate-50 border-slate-200 text-slate-500'
-            }`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                status?.configured && status?.healthy !== false ? 'bg-emerald-400' : 'bg-slate-300'
-              }`} />
-              {status?.configured ? (status?.healthy !== false ? 'Connected' : 'Error') : 'Not configured'}
-            </span>
-          </div>
-        )}
-        {status?.error && (
-          <p className="mt-1.5 text-[0.62rem] text-red-500 flex items-center gap-1">
-            <AlertCircle className="h-3 w-3 flex-shrink-0" />{status.error}
-          </p>
-        )}
-      </div>
-
-      <div className="divide-y divide-slate-50">
-        {AUDIT_HIGHLIGHTS.map(item => (
-          <div key={item.label} className="flex items-start gap-3 px-4 py-2.5">
-            <span className="text-sm flex-shrink-0 mt-0.5">{item.icon}</span>
-            <div>
-              <p className="text-xs font-semibold text-slate-700">{item.label}</p>
-              <p className="text-[0.62rem] text-slate-500 leading-snug mt-0.5">{item.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="px-4 py-2 border-t border-slate-100 bg-slate-50 rounded-b-xl">
-        <span className="text-[0.6rem] text-slate-400">Audit Logs · Login Events · Notifications · Configure in Settings</span>
-      </div>
-    </div>
-  )
-}
-
 // ─── Popover wrapper ───────────────────────────────────────────────────────────
 
 function Popover({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -495,27 +404,16 @@ export function LiveDataBar({
           )}
         </div>
 
-        {/* Slack */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => togglePopover('slack')}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold transition ${
-              activePopover === 'slack'
-                ? 'bg-purple-100 border-purple-400 text-purple-700 ring-1 ring-purple-200'
-                : 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 hover:border-purple-300'
-            }`}
-            title="Slack — integration status"
-          >
-            <MessageSquare className="h-2.5 w-2.5" />
-            <span>Slack</span>
-          </button>
-          {activePopover === 'slack' && (
-            <Popover onClose={() => setActivePopover(null)}>
-              <SlackPopover onClose={() => setActivePopover(null)} />
-            </Popover>
-          )}
-        </div>
+        {/* Slack — direct link to Activity Log */}
+        <button
+          type="button"
+          onClick={() => onNavigate?.('Activity Log')}
+          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold transition bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 hover:border-purple-300"
+          title="Slack — view audit activity log"
+        >
+          <MessageSquare className="h-2.5 w-2.5" />
+          <span>Slack</span>
+        </button>
 
       </div>
 

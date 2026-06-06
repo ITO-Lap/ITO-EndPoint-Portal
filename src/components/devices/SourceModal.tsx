@@ -32,11 +32,6 @@ const SOURCE_META: Record<string, { lastSync: string; description: string }> = {
     description:
       'ManageEngine Desktop Central tracks Windows desktop inventory, patch compliance, software licensing, and remote management workflows.',
   },
-  'OpenAI': {
-    lastSync: 'Real-time',
-    description:
-      'OpenAI GPT-4o powers the AI Copilot — generating compliance analysis, remediation recommendations, and natural-language answers about device issues.',
-  },
   'Jira': {
     lastSync: 'On demand',
     description:

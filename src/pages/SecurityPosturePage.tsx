@@ -2,8 +2,90 @@ import { useState } from 'react'
 import {
   Shield, HardDrive, Flame, Download, UserCheck, ClipboardCheck,
   AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Minus,
-  ChevronRight, Clock, Target, Globe, Monitor, Apple, Server,
+  Clock, Target, Globe, Monitor, Apple, Server,
+  X, Info, Wrench, ChevronDown,
 } from 'lucide-react'
+
+// ─── Remediation step library ──────────────────────────────────────────────────
+
+const PILLAR_REMEDIATION: Record<string, string[]> = {
+  encryption: [
+    'Identify non-encrypted devices in your MDM console under Compliance → Encryption.',
+    'Push a BitLocker (Windows) or FileVault (macOS) enforcement policy via Intune or Kandji.',
+    'Set a compliance policy that marks devices without encryption as Non-Compliant.',
+    'For Windows: Settings → Update & Security → Device Encryption → Turn On.',
+    'For macOS: System Preferences → Privacy & Security → FileVault → Turn On.',
+    'Monitor enrollment: re-scan after 48 hours and follow up with non-compliant users.',
+  ],
+  bitlocker: [
+    'Open Intune → Devices → Configuration Policies and create a BitLocker policy.',
+    'Assign the policy to the non-compliant device group.',
+    'Force a device sync via Intune to apply immediately: Devices → [Device] → Sync.',
+    'Verify encryption status: Get-BitLockerVolume in PowerShell on the target device.',
+    'Store recovery keys in Entra ID — enable "Save BitLocker recovery key to Azure AD" in policy.',
+  ],
+  filevault: [
+    'In Kandji, create or update a Filevault library item and enable enforcement.',
+    'Assign the Blueprint containing the FileVault item to the device.',
+    'The user will see a prompt on next login — they must enter their password to enable.',
+    'Verify in Kandji: Devices → [Device] → Library → FileVault status.',
+    'Escrow the recovery key: confirm personal recovery key is synced to Kandji.',
+  ],
+  edr: [
+    'Open your EDR console (CrowdStrike Falcon / Microsoft Defender) and filter for inactive sensors.',
+    'Re-deploy the agent via MDM push to devices with inactive status.',
+    'Set a compliance policy that requires an active, up-to-date EDR agent.',
+    'Review the quarantine queue for any flagged threats on recently re-activated agents.',
+    'Enable real-time protection and tamper protection to prevent agent deactivation.',
+  ],
+  crowdstrike: [
+    'In Falcon, go to Hosts → Host Management and filter Status = Reduced Functionality.',
+    'Re-deploy Falcon sensor via Kandji (Library → Managed Software) or Intune (App deployment).',
+    'Verify sensor version is current — update via Sensor Update policies in Falcon.',
+    'Check prevention policy assignment — ensure devices are in an enforced policy group.',
+  ],
+  defender: [
+    'In Intune, go to Endpoint Security → Microsoft Defender for Endpoint.',
+    'Review the Defender health report and identify devices with inactive protection.',
+    'Push a remediation script or compliance policy to re-enable Defender.',
+    'Run: Start-Service -Name WinDefend in an elevated PowerShell session if Defender was manually disabled.',
+  ],
+  firewall: [
+    'Create or update an Endpoint Security → Firewall policy in Intune (Windows) or Kandji (macOS).',
+    'Assign the policy to non-compliant devices.',
+    'For Windows: Configure Windows Defender Firewall via Group Policy or Intune → Domain/Private/Public profiles.',
+    'For macOS: Set Application Firewall to On in the Kandji Firewall library item.',
+    'Set compliance rule: Firewall must be enabled → mark devices without it as Non-Compliant.',
+  ],
+  patching: [
+    'Open your MDM patch report and filter for devices with critical updates outstanding.',
+    'Force-push critical patches immediately via Intune (Software Updates) or Kandji (Auto-update enforcement).',
+    'For Intune (Windows): Configure Windows Update for Business → set deadline policies for critical updates.',
+    'For Kandji (macOS): Enable macOS update enforcement in Blueprint settings.',
+    'Notify device owners whose machines require a restart to complete patching.',
+    'Re-run the patch compliance report in 24 hours to confirm coverage improvement.',
+  ],
+  identity: [
+    'Run the MFA registration report from Entra ID: Security → Authentication Methods → User Registration Details.',
+    'Export the list of users without MFA enrolled and contact them directly.',
+    'Create a Conditional Access policy: Require MFA → assign to All Users → exclude break-glass accounts.',
+    'Set a registration campaign in Entra ID: Security → Authentication Methods → Registration Campaign.',
+    'After grace period, set CA policy to Block for non-MFA-enrolled users.',
+  ],
+  compliance: [
+    'Review compliance policy failures in Intune: Devices → Monitor → Device Compliance or Kandji: Devices → Compliance.',
+    'Identify the most common failing policies and prioritize those for remediation.',
+    'Force MDM check-in for devices that haven\'t synced recently: Intune → [Device] → Sync.',
+    'Re-assign failed policies to the affected device groups.',
+    'Consider retiring or wiping devices that have been offline for more than 30 days.',
+  ],
+}
+
+function getPillarSteps(pillarId: string): string[] {
+  return PILLAR_REMEDIATION[pillarId]
+    ?? PILLAR_REMEDIATION[pillarId.replace(/^me_|^win|^aad|^mac|^okta|^intune|^kandji/, '')]
+    ?? PILLAR_REMEDIATION['compliance']
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -279,7 +361,7 @@ function ScoreGauge({ score }: { score: number }) {
 
 // ─── Pillar Card ───────────────────────────────────────────────────────────────
 
-function PillarCard({ pillar }: { pillar: Pillar }) {
+function PillarCard({ pillar, isSelected, onClick }: { pillar: Pillar; isSelected: boolean; onClick: () => void }) {
   const cls = pillarColorClasses(pillar.color)
   const PillarIcon = pillar.icon
   const TrendIcon = pillar.positive
@@ -287,11 +369,15 @@ function PillarCard({ pillar }: { pillar: Pillar }) {
     : TrendingDown
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-4 flex flex-col gap-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left bg-white rounded-2xl border shadow-sm px-4 py-4 flex flex-col gap-3 transition-all hover:shadow-md ${isSelected ? 'border-orange-400 ring-2 ring-orange-200' : 'border-slate-200 hover:border-orange-200'}`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className={`rounded-xl p-2 ${cls.iconBg} flex-shrink-0`}>
-            <PillarIcon className={`h-4 w-4 ${cls.icon}`} />
+          <div className={`rounded-xl p-2 ${isSelected ? 'bg-orange-100' : cls.iconBg} flex-shrink-0 transition-colors`}>
+            <PillarIcon className={`h-4 w-4 ${isSelected ? 'text-orange-600' : cls.icon}`} />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-800">{pillar.label}</p>
@@ -325,6 +411,92 @@ function PillarCard({ pillar }: { pillar: Pillar }) {
           <AlertTriangle className="h-3 w-3 text-red-400" />
           <span className="text-[0.68rem] font-semibold text-slate-700">{pillar.failing.toLocaleString()}</span>
           <span className="text-[0.62rem] text-slate-400">failing</span>
+        </div>
+        <div className="ml-auto flex items-center gap-1 text-[0.6rem] text-slate-400">
+          <ChevronDown className={`h-3 w-3 transition-transform ${isSelected ? 'rotate-180 text-orange-500' : ''}`} />
+          {isSelected ? 'close' : 'details'}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ─── Pillar Detail Panel ────────────────────────────────────────────────────────
+
+function PillarDetailPanel({ pillar, onClose }: { pillar: Pillar; onClose: () => void }) {
+  const cls = pillarColorClasses(pillar.color)
+  const PillarIcon = pillar.icon
+  const steps = getPillarSteps(pillar.id)
+  const failPct = Math.round((pillar.failing / (pillar.passing + pillar.failing)) * 100)
+
+  return (
+    <div className="bg-white rounded-2xl border border-orange-200 shadow-md overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 bg-orange-50 border-b border-orange-100">
+        <div className="flex items-center gap-2.5">
+          <div className={`rounded-xl p-2 ${cls.iconBg}`}>
+            <PillarIcon className={`h-4 w-4 ${cls.icon}`} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800">{pillar.label}</p>
+            <p className="text-[0.62rem] text-slate-500">{pillar.description}</p>
+          </div>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-100 hover:text-slate-600 transition">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+        {/* Stats */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-center">
+              <p className="text-lg font-black text-slate-800">{pillar.score}%</p>
+              <p className="text-[0.58rem] text-slate-400 font-medium">Coverage</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center">
+              <p className="text-lg font-black text-emerald-600">{pillar.passing}</p>
+              <p className="text-[0.58rem] text-emerald-600/70 font-medium">Passing</p>
+            </div>
+            <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center">
+              <p className="text-lg font-black text-red-600">{pillar.failing}</p>
+              <p className="text-[0.58rem] text-red-500/70 font-medium">Failing</p>
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between text-[0.62rem] text-slate-500 mb-1">
+              <span>Devices meeting this control</span>
+              <span className="font-bold">{100 - failPct}%</span>
+            </div>
+            <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className={`h-2.5 rounded-full ${cls.bar} transition-all duration-700`} style={{ width: `${pillar.score}%` }} />
+            </div>
+          </div>
+          <div className={`rounded-xl border px-3 py-2 flex items-center gap-2 ${pillar.positive ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+            {pillar.positive
+              ? <TrendingUp className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+              : <TrendingDown className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+            }
+            <p className="text-[0.68rem] font-semibold text-slate-700">
+              Trend: <span className={pillar.positive ? 'text-emerald-600' : 'text-red-500'}>{pillar.trend}</span>
+              {' '}{pillar.positive ? '— improving' : '— needs attention'}
+            </p>
+          </div>
+        </div>
+
+        {/* Remediation steps */}
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Wrench className="h-3.5 w-3.5 text-orange-500" />
+            <p className="text-[0.65rem] font-bold text-slate-700 uppercase tracking-wide">Remediation Steps</p>
+          </div>
+          <ol className="space-y-1.5">
+            {steps.map((step, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="flex-shrink-0 h-4 w-4 rounded-full bg-orange-100 text-orange-700 text-[0.55rem] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                <p className="text-[0.65rem] text-slate-600 leading-snug">{step}</p>
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
     </div>
@@ -371,7 +543,8 @@ function SourceTabBar({ active, onChange }: { active: MDMSource; onChange: (s: M
 
 export function SecurityPosturePage() {
   const [activeSource, setActiveSource] = useState<MDMSource>('all')
-  const [remediateToast, setRemediateToast] = useState<string | null>(null)
+  const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null)
+  const [expandedRisk, setExpandedRisk]   = useState<number | null>(null)
 
   const sourceCfg = SOURCE_CONFIGS[activeSource]
   const { pillars, risks } = sourceCfg
@@ -383,9 +556,10 @@ export function SecurityPosturePage() {
   const atRiskCount = risks.reduce((acc, r) => Math.max(acc, r.count), 0)
   const passingControls = CIS_CONTROLS.filter(c => c.status === 'Implemented').length
 
-  const handleRemediate = (title: string) => {
-    setRemediateToast(title)
-    setTimeout(() => setRemediateToast(null), 3000)
+  const handleSourceChange = (s: MDMSource) => {
+    setActiveSource(s)
+    setSelectedPillar(null)
+    setExpandedRisk(null)
   }
 
   // Per-source accent for non-all sources
@@ -417,10 +591,18 @@ export function SecurityPosturePage() {
         )}
       </div>
 
+      {/* ── Mock data notice ── */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <Info className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <p className="text-[0.68rem] text-amber-800 leading-snug">
+          <span className="font-bold">Baseline estimates</span> — scores are derived from your fleet configuration. Kandji and Entra ID are connected for live data; Intune and ManageEngine figures are estimated from mock device data. Connect all integrations in Settings for fully live posture tracking.
+        </p>
+      </div>
+
       {/* ── MDM Source Tabs ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
         <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Filter by MDM Source</p>
-        <SourceTabBar active={activeSource} onChange={setActiveSource} />
+        <SourceTabBar active={activeSource} onChange={handleSourceChange} />
       </div>
 
       {/* ── Row 1: Score card + 3 mini stats ── */}
@@ -501,8 +683,23 @@ export function SecurityPosturePage() {
       </div>
 
       {/* ── Row 2: 6 pillar cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {pillars.map(pillar => <PillarCard key={pillar.id} pillar={pillar} />)}
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {pillars.map(pillar => (
+            <PillarCard
+              key={pillar.id}
+              pillar={pillar}
+              isSelected={selectedPillar?.id === pillar.id}
+              onClick={() => setSelectedPillar(selectedPillar?.id === pillar.id ? null : pillar)}
+            />
+          ))}
+        </div>
+        {selectedPillar && (
+          <PillarDetailPanel
+            pillar={selectedPillar}
+            onClose={() => setSelectedPillar(null)}
+          />
+        )}
       </div>
 
       {/* ── Row 3: Top Risks + CIS Controls ── */}
@@ -525,26 +722,44 @@ export function SecurityPosturePage() {
           <div className="divide-y divide-slate-100">
             {risks.map((risk, i) => {
               const sc = severityCfg(risk.severity)
+              const isExpanded = expandedRisk === i
+              const steps = getPillarSteps(risk.pillar.toLowerCase())
               return (
-                <div key={i} className="flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50/60 transition group">
-                  <span className={`flex-shrink-0 mt-0.5 h-2 w-2 rounded-full ${sc.dot}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${sc.badge}`}>
-                        {risk.severity}
-                      </span>
-                      <span className="text-[0.62rem] text-slate-400">{risk.pillar}</span>
-                    </div>
-                    <p className="text-xs text-slate-700 font-medium leading-snug">{risk.title}</p>
-                  </div>
+                <div key={i}>
                   <button
                     type="button"
-                    onClick={() => handleRemediate(risk.title)}
-                    className="flex-shrink-0 inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[0.65rem] font-semibold text-orange-700 opacity-0 group-hover:opacity-100 transition hover:bg-orange-100"
+                    onClick={() => setExpandedRisk(isExpanded ? null : i)}
+                    className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition ${isExpanded ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}
                   >
-                    Remediate
-                    <ChevronRight className="h-3 w-3" />
+                    <span className={`flex-shrink-0 mt-1.5 h-2 w-2 rounded-full ${sc.dot}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${sc.badge}`}>
+                          {risk.severity}
+                        </span>
+                        <span className="text-[0.62rem] text-slate-400">{risk.pillar}</span>
+                        <span className="text-[0.6rem] text-slate-400">· {risk.count} device{risk.count !== 1 ? 's' : ''}</span>
+                      </div>
+                      <p className="text-xs text-slate-700 font-medium leading-snug">{risk.title}</p>
+                    </div>
+                    <ChevronDown className={`flex-shrink-0 h-3.5 w-3.5 text-slate-400 mt-1 transition-transform ${isExpanded ? 'rotate-180 text-orange-500' : ''}`} />
                   </button>
+                  {isExpanded && (
+                    <div className="px-5 pb-4 bg-orange-50/40 border-t border-orange-100">
+                      <div className="pt-3 flex items-center gap-1.5 mb-2">
+                        <Wrench className="h-3 w-3 text-orange-500" />
+                        <p className="text-[0.6rem] font-bold text-slate-600 uppercase tracking-wide">Recommended Remediation</p>
+                      </div>
+                      <ol className="space-y-1.5">
+                        {steps.slice(0, 4).map((step, j) => (
+                          <li key={j} className="flex items-start gap-2">
+                            <span className="flex-shrink-0 h-4 w-4 rounded-full bg-orange-100 text-orange-700 text-[0.55rem] font-bold flex items-center justify-center mt-0.5">{j + 1}</span>
+                            <p className="text-[0.65rem] text-slate-600 leading-snug">{step}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -609,18 +824,6 @@ export function SecurityPosturePage() {
         </div>
       </div>
 
-      {/* ── Toast notification ── */}
-      {remediateToast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm rounded-2xl border border-orange-200 bg-white shadow-lg px-4 py-3 flex items-start gap-3 animate-in slide-in-from-bottom-4">
-          <div className="rounded-xl bg-orange-100 p-1.5 flex-shrink-0">
-            <ChevronRight className="h-3.5 w-3.5 text-orange-600" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-slate-800">Remediation initiated</p>
-            <p className="text-[0.68rem] text-slate-500 mt-0.5 line-clamp-2">{remediateToast}</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

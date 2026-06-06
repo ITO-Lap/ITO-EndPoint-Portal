@@ -2,44 +2,26 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown,
   UserPlus, Mail, Phone, MapPin, Globe, Building2,
-  ShieldCheck, ShieldAlert, AlertTriangle, CheckCircle2,
+  ShieldCheck, ShieldAlert, CheckCircle2,
   Lock, Unlock, Laptop2, Monitor, Clock, Activity,
-  Shield, Eye, EyeOff, RefreshCw, ChevronLeft, ChevronRight,
+  Shield, RefreshCw, ChevronLeft, ChevronRight,
   Filter, Layers, LifeBuoy, Users, Key, LogIn, LogOut,
-  Zap, Edit2, Ban, RotateCcw, Trash2, Copy,
+  Zap, Edit2, Ban, RotateCcw, Copy,
   Cloud, Smartphone, Ticket, Database,
 } from 'lucide-react'
-// Users data is loaded from connected directory sources (Azure AD, Okta, etc.) via future API integration
 import { useToast } from '../components/ui/ToastProvider'
-import type { AppUser, UserToolRole, UserStatus, UserRiskLevel, UserActivityEvent, JiraTicket } from '../types'
+import { api } from '../api'
+import type { UserDetails } from '../api'
+import type { AppUser, UserToolRole, UserStatus, UserRiskLevel, JiraTicket } from '../types'
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
 type SortKey = 'firstName' | 'email' | 'toolRole' | 'department' | 'status' | 'lastActive' | 'riskLevel'
 type SortDir = 'asc' | 'desc' | null
-type DrawerTab = 'profile' | 'devices' | 'activity' | 'permissions' | 'jira'
+type DrawerTab = 'profile' | 'signins' | 'roles' | 'groups' | 'apps' | 'licenses' | 'devices' | 'jira'
 
 const ROLE_ORDER: Record<UserToolRole, number> = { 'Global Admin': 0, 'IT Admin': 1, 'Helpdesk': 2, 'End User': 3 }
 const RISK_ORDER: Record<UserRiskLevel, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
-
-const PERMISSION_MATRIX = [
-  { category: 'Devices', capability: 'View all devices', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'Allow', endUser: 'None' },
-  { category: 'Devices', capability: 'Sync / force check-in', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'Allow', endUser: 'None' },
-  { category: 'Devices', capability: 'Run remediation runbook', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'None', endUser: 'None' },
-  { category: 'Devices', capability: 'Modify device policies', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'None', endUser: 'None' },
-  { category: 'Users', capability: 'View user profiles', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'Limited', endUser: 'None' },
-  { category: 'Users', capability: 'Invite users', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Users', capability: 'Change user roles', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Users', capability: 'Suspend / activate users', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Security', capability: 'View security reports', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'None', endUser: 'None' },
-  { category: 'Security', capability: 'Reset MFA', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Security', capability: 'Revoke sessions', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Reports', capability: 'Export compliance data', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'None', endUser: 'None' },
-  { category: 'Reports', capability: 'View audit logs', globalAdmin: 'Allow', itAdmin: 'Allow', helpdesk: 'None', endUser: 'None' },
-  { category: 'Settings', capability: 'Manage integrations', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Settings', capability: 'Configure policies', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-  { category: 'Settings', capability: 'Danger Zone actions', globalAdmin: 'Allow', itAdmin: 'None', helpdesk: 'None', endUser: 'None' },
-]
 
 // ─── style helpers ────────────────────────────────────────────────────────────
 
@@ -67,12 +49,6 @@ function riskCfg(level: UserRiskLevel) {
     case 'Medium':   return { color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', bar: 'bg-amber-500', pct: 45 }
     case 'Low':      return { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', bar: 'bg-emerald-500', pct: 12 }
   }
-}
-
-function permCfg(val: string) {
-  if (val === 'Allow')   return { label: 'Allow', color: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: CheckCircle2 }
-  if (val === 'Limited') return { label: 'Limited', color: 'text-amber-700 bg-amber-50 border-amber-200', icon: Eye }
-  return { label: 'Deny', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: X }
 }
 
 // ─── small components ─────────────────────────────────────────────────────────
@@ -535,20 +511,22 @@ function ProfileTab({ user, viewerRole }: { user: AppUser; viewerRole: UserToolR
   )
 }
 
-function DevicesTab({ user, viewerRole, onSyncDevice }: { user: AppUser; viewerRole: UserToolRole; onSyncDevice: (name: string) => void }) {
+function DevicesTab({ details, loading, viewerRole, onSyncDevice }: { details: UserDetails | null; loading: boolean; viewerRole: UserToolRole; onSyncDevice: (name: string) => void }) {
   const canSync = viewerRole !== 'End User'
+  if (loading) return <TabLoading />
+  const assignedDevices = details?.devices ?? []
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-1">
-        <p className="text-xs text-slate-500">{user.assignedDevices.length} device{user.assignedDevices.length !== 1 ? 's' : ''} assigned</p>
+        <p className="text-xs text-slate-500">{assignedDevices.length} device{assignedDevices.length !== 1 ? 's' : ''} assigned</p>
       </div>
-      {user.assignedDevices.length === 0 ? (
+      {assignedDevices.length === 0 ? (
         <div className="flex flex-col items-center py-10 text-center rounded-2xl border border-slate-200 bg-slate-50">
           <Laptop2 className="h-7 w-7 text-slate-300 mb-2" />
           <p className="text-sm font-medium text-slate-500">No devices assigned</p>
         </div>
       ) : (
-        user.assignedDevices.map(d => {
+        assignedDevices.map(d => {
           const stateColor = d.complianceState === 'Compliant' ? 'border-emerald-200 bg-emerald-50'
             : d.complianceState === 'Warning' ? 'border-amber-200 bg-amber-50'
             : 'border-red-200 bg-red-50'
@@ -609,51 +587,45 @@ function DevicesTab({ user, viewerRole, onSyncDevice }: { user: AppUser; viewerR
   )
 }
 
-function ActivityTab({ user, viewerRole }: { user: AppUser; viewerRole: UserToolRole }) {
-  const isHelpdesk = viewerRole === 'Helpdesk'
-  const actCfg = (type: UserActivityEvent['type']) => {
-    switch (type) {
-      case 'Login':        return { icon: LogIn, color: 'text-orange-600', bg: 'bg-orange-100' }
-      case 'Logout':       return { icon: LogOut, color: 'text-slate-500', bg: 'bg-slate-100' }
-      case 'MFA':          return { icon: Key, color: 'text-lime-600', bg: 'bg-lime-100' }
-      case 'DeviceSync':   return { icon: RefreshCw, color: 'text-emerald-600', bg: 'bg-emerald-100' }
-      case 'PolicyChange': return { icon: Shield, color: 'text-orange-600', bg: 'bg-orange-100' }
-      case 'Alert':        return { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-100' }
-      case 'RoleChange':   return { icon: Edit2, color: 'text-orange-600', bg: 'bg-orange-100' }
-    }
-  }
+// ─── Sign-in Logs Tab ─────────────────────────────────────────────────────────
 
-  if (isHelpdesk) {
+function SignInsTab({ details, loading }: { details: UserDetails | null; loading: boolean }) {
+  if (loading) return <TabLoading />
+  if (!details || details.signIns.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-14 text-center">
-        <div className="rounded-full bg-slate-100 p-4 mb-3"><EyeOff className="h-6 w-6 text-slate-400" /></div>
-        <p className="text-sm font-semibold text-slate-600">Activity Restricted</p>
-        <p className="text-xs text-slate-400 mt-1 max-w-[220px]">Helpdesk role does not have access to user activity logs.</p>
-      </div>
+      <EmptyTabState icon={LogIn} title="No sign-in logs" subtitle="No recent sign-in activity found for this user." />
     )
   }
-
   return (
     <div className="space-y-2">
-      {user.recentActivity.map((ev, i) => {
-        const cfg = actCfg(ev.type)
-        const Icon = cfg.icon
-        const isAlert = ev.type === 'Alert'
+      {details.signIns.map(s => {
+        const failed = s.status.errorCode !== 0
+        const riskColor = s.riskLevelDuringSignIn === 'high' ? 'text-red-600'
+          : s.riskLevelDuringSignIn === 'medium' ? 'text-amber-600' : 'text-slate-400'
+        const loc = s.location ? `${s.location.city}, ${s.location.countryOrRegion}` : null
         return (
-          <div key={i} className={`flex items-start gap-3 rounded-xl border px-3 py-3 ${isAlert ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
-            <div className={`rounded-full p-1.5 flex-shrink-0 ${cfg.bg}`}>
-              <Icon className={`h-3 w-3 ${cfg.color}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <span className={`text-[0.62rem] font-bold uppercase tracking-wide ${isAlert ? 'text-red-700' : 'text-slate-500'}`}>{ev.type}</span>
-                <span className="text-[0.62rem] text-slate-400">{ev.time}</span>
+          <div key={s.id} className={`rounded-xl border px-3 py-3 space-y-1.5 ${failed ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${failed ? 'bg-red-100 border-red-200 text-red-700' : 'bg-emerald-100 border-emerald-200 text-emerald-700'}`}>
+                  {failed ? 'Failed' : 'Success'}
+                </span>
+                <span className="text-[0.72rem] font-semibold text-slate-800 truncate max-w-[160px]">{s.appDisplayName || '—'}</span>
               </div>
-              <p className="text-[0.72rem] text-slate-700 leading-snug">{ev.description}</p>
-              {ev.ip && viewerRole === 'Global Admin' && (
-                <p className="text-[0.62rem] text-slate-400 mt-0.5">IP: {ev.ip} · {ev.location}</p>
+              <span className="text-[0.62rem] text-slate-400 flex-shrink-0">{new Date(s.createdDateTime).toLocaleString()}</span>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {s.ipAddress && <span className="text-[0.65rem] text-slate-500 flex items-center gap-1"><Globe className="h-2.5 w-2.5" />{s.ipAddress}</span>}
+              {loc && <span className="text-[0.65rem] text-slate-500 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />{loc}</span>}
+              {s.clientAppUsed && <span className="text-[0.65rem] text-slate-500">{s.clientAppUsed}</span>}
+              {s.mfaDetail?.authMethod && <span className="text-[0.65rem] text-lime-600 flex items-center gap-1"><Key className="h-2.5 w-2.5" />{s.mfaDetail.authMethod}</span>}
+              {s.riskLevelDuringSignIn && s.riskLevelDuringSignIn !== 'none' && (
+                <span className={`text-[0.65rem] font-semibold flex items-center gap-1 ${riskColor}`}><ShieldAlert className="h-2.5 w-2.5" />Risk: {s.riskLevelDuringSignIn}</span>
               )}
             </div>
+            {failed && s.status.failureReason && (
+              <p className="text-[0.62rem] text-red-600">{s.status.failureReason}</p>
+            )}
           </div>
         )
       })}
@@ -661,77 +633,166 @@ function ActivityTab({ user, viewerRole }: { user: AppUser; viewerRole: UserTool
   )
 }
 
-function PermissionsTab({ user, viewerRole }: { user: AppUser; viewerRole: UserToolRole }) {
-  const isHelpdesk = viewerRole === 'Helpdesk'
+// ─── Assigned Roles Tab ───────────────────────────────────────────────────────
 
-  if (isHelpdesk) {
-    return (
-      <div className="flex flex-col items-center justify-center py-14 text-center">
-        <div className="rounded-full bg-slate-100 p-4 mb-3"><EyeOff className="h-6 w-6 text-slate-400" /></div>
-        <p className="text-sm font-semibold text-slate-600">Permissions Restricted</p>
-        <p className="text-xs text-slate-400 mt-1 max-w-[220px]">Helpdesk role does not have access to the permissions matrix.</p>
-      </div>
-    )
+function RolesTab({ details, loading }: { details: UserDetails | null; loading: boolean }) {
+  if (loading) return <TabLoading />
+  if (!details || details.roles.length === 0) {
+    return <EmptyTabState icon={Shield} title="No directory roles" subtitle="This user has no Microsoft Entra directory roles assigned." />
   }
-
-  if (user.toolRole === 'End User') {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 flex items-center gap-3">
-          <div className="rounded-xl bg-slate-200 p-2.5"><Users className="h-4 w-4 text-slate-500" /></div>
-          <div>
-            <p className="text-xs font-bold text-slate-700">No Tool Access</p>
-            <p className="text-[0.68rem] text-slate-500 mt-0.5">This user has no access to the ITO Endpoint dashboard.</p>
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 px-1">To grant access, edit this user and assign a tool role (Helpdesk, IT Admin, or Global Admin).</p>
-      </div>
-    )
-  }
-
-  const roleKey = user.toolRole === 'Global Admin' ? 'globalAdmin'
-    : user.toolRole === 'IT Admin' ? 'itAdmin'
-    : user.toolRole === 'Helpdesk' ? 'helpdesk'
-    : 'endUser'
-
-  const categories = [...new Set(PERMISSION_MATRIX.map(p => p.category))]
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 rounded-xl border px-4 py-3" style={{ borderColor: roleCfg(user.toolRole).border }}>
-        <div className={`rounded-lg p-1.5 ${roleCfg(user.toolRole).bg}`}>
-          {(() => { const Icon = roleCfg(user.toolRole).icon; return <Icon className={`h-3.5 w-3.5 ${roleCfg(user.toolRole).text}`} /> })()}
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-slate-400 uppercase font-bold tracking-wide px-1">{details.roles.length} role{details.roles.length !== 1 ? 's' : ''} assigned</p>
+      {details.roles.map(r => (
+        <div key={r.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="rounded-lg bg-orange-100 p-1.5 flex-shrink-0"><Shield className="h-3.5 w-3.5 text-orange-600" /></div>
+          <p className="text-xs font-semibold text-slate-800">{r.displayName}</p>
         </div>
-        <div>
-          <p className="text-xs font-bold text-slate-800">{user.toolRole}</p>
-          <p className="text-[0.65rem] text-slate-500">
-            {user.toolRole === 'Global Admin' ? 'Full unrestricted access to all features and settings'
-              : user.toolRole === 'IT Admin' ? 'Operational access — can manage devices and run runbooks'
-              : 'Read-only access — can view and sync assigned devices'}
-          </p>
-        </div>
-      </div>
+      ))}
+    </div>
+  )
+}
 
-      {categories.map(cat => (
-        <div key={cat}>
-          <p className="text-[0.62rem] font-bold text-slate-400 uppercase tracking-wide mb-1.5 px-1">{cat}</p>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-100">
-            {PERMISSION_MATRIX.filter(p => p.category === cat).map(p => {
-              const val = p[roleKey as keyof typeof p] as string
-              const cfg = permCfg(val)
-              const Icon = cfg.icon
-              return (
-                <div key={p.capability} className="flex items-center justify-between px-4 py-2.5">
-                  <span className="text-[0.72rem] text-slate-700">{p.capability}</span>
-                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold ${cfg.color}`}>
-                    <Icon className="h-2.5 w-2.5" />{cfg.label}
-                  </span>
-                </div>
-              )
-            })}
+// ─── Groups Tab ───────────────────────────────────────────────────────────────
+
+function GroupsTab({ details, loading }: { details: UserDetails | null; loading: boolean }) {
+  if (loading) return <TabLoading />
+  if (!details || details.groups.length === 0) {
+    return <EmptyTabState icon={Users} title="No groups" subtitle="This user is not a member of any groups." />
+  }
+  const getGroupType = (g: UserDetails['groups'][0]) => {
+    if (g.groupTypes.includes('Unified')) return { label: 'Microsoft 365', color: 'bg-blue-100 border-blue-200 text-blue-700' }
+    if (g.securityEnabled && !g.mailEnabled) return { label: 'Security', color: 'bg-orange-100 border-orange-200 text-orange-700' }
+    if (g.mailEnabled && !g.securityEnabled) return { label: 'Distribution', color: 'bg-slate-100 border-slate-200 text-slate-600' }
+    return { label: 'Mail-enabled Security', color: 'bg-lime-100 border-lime-200 text-lime-700' }
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-slate-400 uppercase font-bold tracking-wide px-1">{details.groups.length} group{details.groups.length !== 1 ? 's' : ''}</p>
+      {details.groups.map(g => {
+        const t = getGroupType(g)
+        return (
+          <div key={g.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="rounded-lg bg-slate-200 p-1.5 flex-shrink-0"><Users className="h-3 w-3 text-slate-500" /></div>
+              <p className="text-xs font-medium text-slate-800 truncate">{g.displayName}</p>
+            </div>
+            <span className={`flex-shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold ${t.color}`}>{t.label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Applications Tab ─────────────────────────────────────────────────────────
+
+function AppsTab({ details, loading }: { details: UserDetails | null; loading: boolean }) {
+  if (loading) return <TabLoading />
+  if (!details || details.apps.length === 0) {
+    return <EmptyTabState icon={Cloud} title="No applications" subtitle="No app role assignments found for this user." />
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-slate-400 uppercase font-bold tracking-wide px-1">{details.apps.length} app{details.apps.length !== 1 ? 's' : ''} assigned</p>
+      {details.apps.map(a => (
+        <div key={a.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-lg bg-lime-100 p-1.5 flex-shrink-0"><Cloud className="h-3.5 w-3.5 text-lime-600" /></div>
+            <p className="text-xs font-semibold text-slate-800 truncate">{a.appDisplayName}</p>
+          </div>
+          <div className="flex items-center justify-between pl-8">
+            <span className="text-[0.65rem] text-slate-500">{a.resourceDisplayName}</span>
+            <span className="text-[0.62rem] text-slate-400">{new Date(a.createdDateTime).toLocaleDateString()}</span>
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ─── Licenses Tab ─────────────────────────────────────────────────────────────
+
+const SKU_LABELS: Record<string, string> = {
+  SPE_E3: 'Microsoft 365 E3',
+  SPE_E5: 'Microsoft 365 E5',
+  O365_BUSINESS_PREMIUM: 'Microsoft 365 Business Premium',
+  O365_BUSINESS_ESSENTIALS: 'Microsoft 365 Business Basic',
+  ENTERPRISEPACK: 'Office 365 E3',
+  ENTERPRISEPREMIUM: 'Office 365 E5',
+  EMS: 'Enterprise Mobility + Security E3',
+  EMSPREMIUM: 'Enterprise Mobility + Security E5',
+  AAD_PREMIUM: 'Entra ID P1',
+  AAD_PREMIUM_P2: 'Entra ID P2',
+  INTUNE_A: 'Microsoft Intune Plan 1',
+}
+
+function LicensesTab({ details, loading }: { details: UserDetails | null; loading: boolean }) {
+  if (loading) return <TabLoading />
+  if (!details || details.licenses.length === 0) {
+    return <EmptyTabState icon={Database} title="No licenses" subtitle="No license assignments found for this user." />
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-[0.62rem] text-slate-400 uppercase font-bold tracking-wide px-1">{details.licenses.length} license{details.licenses.length !== 1 ? 's' : ''} assigned</p>
+      {details.licenses.map(l => {
+        const name = SKU_LABELS[l.skuPartNumber] ?? l.skuPartNumber.replace(/_/g, ' ')
+        const enabled = l.servicePlans.filter(p => p.provisioningStatus === 'Success')
+        const disabled = l.servicePlans.filter(p => p.provisioningStatus !== 'Success')
+        return (
+          <div key={l.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="rounded-lg bg-orange-100 p-1.5 flex-shrink-0"><Database className="h-3.5 w-3.5 text-orange-600" /></div>
+              <p className="text-xs font-bold text-slate-800">{name}</p>
+            </div>
+            {enabled.length > 0 && (
+              <div>
+                <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Active services ({enabled.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {enabled.map(p => (
+                    <span key={p.servicePlanName} className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-medium text-emerald-700">
+                      {p.servicePlanName.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {disabled.length > 0 && (
+              <div>
+                <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Disabled ({disabled.length})</p>
+                <div className="flex flex-wrap gap-1">
+                  {disabled.map(p => (
+                    <span key={p.servicePlanName} className="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[0.6rem] font-medium text-slate-400">
+                      {p.servicePlanName.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Shared tab helpers ───────────────────────────────────────────────────────
+
+function TabLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center py-14">
+      <RefreshCw className="h-5 w-5 text-slate-400 animate-spin mb-2" />
+      <p className="text-xs text-slate-400">Loading…</p>
+    </div>
+  )
+}
+
+function EmptyTabState({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle: string }) {
+  return (
+    <div className="flex flex-col items-center py-12 text-center">
+      <div className="rounded-full bg-slate-100 p-4 mb-3"><Icon className="h-6 w-6 text-slate-300" /></div>
+      <p className="text-sm font-semibold text-slate-500">{title}</p>
+      <p className="text-xs text-slate-400 mt-1 max-w-[220px]">{subtitle}</p>
     </div>
   )
 }
@@ -906,28 +967,44 @@ function UserDetailDrawer({
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
-  useEffect(() => { if (user) { drawerRef.current?.focus(); setActiveTab('profile') } }, [user])
+  const [details, setDetails] = useState<UserDetails | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+
+  useEffect(() => {
+    if (user) {
+      drawerRef.current?.focus()
+      setActiveTab('profile')
+      setDetails(null)
+      setDetailsLoading(true)
+      api.fetchUserDetails(user.id, user.email)
+        .then(setDetails)
+        .catch(() => setDetails({ signIns: [], roles: [], groups: [], apps: [], licenses: [], devices: [] }))
+        .finally(() => setDetailsLoading(false))
+    }
+  }, [user])
 
   const handleSyncDevice = (name: string) => {
     notify('success', 'Sync Triggered', `Device ${name} sync initiated`)
   }
 
   const openJiraCount = user?.jiraTickets.filter(t => t.status !== 'Resolved').length ?? 0
-  const alertCount = user?.recentActivity.filter(a => a.type === 'Alert').length ?? 0
 
   const tabs: { id: DrawerTab; label: string }[] = [
-    { id: 'profile', label: 'Profile' },
-    { id: 'devices', label: `Devices (${user?.assignedDevices.length ?? 0})` },
-    { id: 'activity', label: 'Activity' },
-    { id: 'permissions', label: 'Permissions' },
-    { id: 'jira', label: `Jira${openJiraCount > 0 ? ` (${openJiraCount})` : ''}` },
+    { id: 'profile',  label: 'Profile' },
+    { id: 'signins',  label: 'Sign-in Logs' },
+    { id: 'roles',    label: 'Assigned Roles' },
+    { id: 'groups',   label: `Groups${details ? ` (${details.groups.length})` : ''}` },
+    { id: 'apps',     label: 'Applications' },
+    { id: 'licenses', label: 'Licenses' },
+    { id: 'devices',  label: `Devices (${details?.devices.length ?? 0})` },
+    { id: 'jira',     label: `Jira${openJiraCount > 0 ? ` (${openJiraCount})` : ''}` },
   ]
 
   return (
     <>
       <div className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ${user ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose} aria-hidden />
       <div ref={drawerRef} tabIndex={-1} role="dialog" aria-modal aria-label={user ? `User: ${user.firstName} ${user.lastName}` : 'User details'}
-        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-[540px] flex-col bg-white shadow-2xl shadow-slate-950/20 transition-transform duration-300 ease-out outline-none ${user ? 'translate-x-0' : 'translate-x-full'}`}>
+        className={`fixed inset-y-0 right-0 z-50 flex w-[50vw] min-w-[560px] flex-col bg-white shadow-2xl shadow-slate-950/20 transition-transform duration-300 ease-out outline-none ${user ? 'translate-x-0' : 'translate-x-full'}`}>
         {user && (
           <>
             {/* Header */}
@@ -944,11 +1021,6 @@ function UserDetailDrawer({
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                {alertCount > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[0.55rem] font-bold text-white" title={`${alertCount} security alerts`}>
-                    {alertCount}
-                  </span>
-                )}
                 <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-slate-300 hover:bg-white/10 hover:text-white transition">
                   <X className="h-4 w-4" />
                 </button>
@@ -956,16 +1028,13 @@ function UserDetailDrawer({
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-slate-100 bg-slate-50 px-3 overflow-x-auto">
+            <div className="flex border-b border-slate-100 bg-slate-50 px-1">
               {tabs.map(tab => (
                 <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-2.5 text-xs font-semibold transition whitespace-nowrap focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
+                  className={`relative flex-1 flex items-center justify-center gap-1 px-2 py-2.5 text-[0.7rem] font-semibold transition whitespace-nowrap focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
                     activeTab === tab.id ? 'text-orange-700 border-b-2 border-orange-600 -mb-px bg-white' : 'text-slate-500 hover:text-slate-700'
                   }`}>
                   {tab.label}
-                  {tab.id === 'activity' && alertCount > 0 && (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[0.5rem] font-bold text-white">{alertCount}</span>
-                  )}
                   {tab.id === 'jira' && openJiraCount > 0 && (
                     <span className="flex h-4 min-w-4 px-0.5 items-center justify-center rounded-full bg-orange-500 text-[0.5rem] font-bold text-white">{openJiraCount}</span>
                   )}
@@ -974,12 +1043,15 @@ function UserDetailDrawer({
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              {activeTab === 'profile'     && <ProfileTab user={user} viewerRole={viewerRole} />}
-              {activeTab === 'devices'     && <DevicesTab user={user} viewerRole={viewerRole} onSyncDevice={handleSyncDevice} />}
-              {activeTab === 'activity'    && <ActivityTab user={user} viewerRole={viewerRole} />}
-              {activeTab === 'permissions' && <PermissionsTab user={user} viewerRole={viewerRole} />}
-              {activeTab === 'jira'        && <JiraTab user={user} />}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4">
+              {activeTab === 'profile'  && <ProfileTab user={user} viewerRole={viewerRole} />}
+              {activeTab === 'signins'  && <SignInsTab details={details} loading={detailsLoading} />}
+              {activeTab === 'roles'    && <RolesTab details={details} loading={detailsLoading} />}
+              {activeTab === 'groups'   && <GroupsTab details={details} loading={detailsLoading} />}
+              {activeTab === 'apps'     && <AppsTab details={details} loading={detailsLoading} />}
+              {activeTab === 'licenses' && <LicensesTab details={details} loading={detailsLoading} />}
+              {activeTab === 'devices'  && <DevicesTab details={details} loading={detailsLoading} viewerRole={viewerRole} onSyncDevice={handleSyncDevice} />}
+              {activeTab === 'jira'     && <JiraTab user={user} />}
             </div>
 
             {/* Footer */}
@@ -1046,8 +1118,16 @@ const PAGE_SIZE = 10
 
 export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserToolRole }) {
   const { notify } = useToast()
-  const allUsers: AppUser[] = []
+  const [allUsers, setAllUsers] = useState<AppUser[]>([])
+  const [loading, setLoading] = useState(true)
   const isGlobalAdmin = viewerRole === 'Global Admin'
+
+  useEffect(() => {
+    api.fetchUsers()
+      .then(setAllUsers)
+      .catch(err => notify('error', 'Failed to load users', err.message))
+      .finally(() => setLoading(false))
+  }, [notify])
 
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('All')
@@ -1221,7 +1301,12 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
 
         {/* Table */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5 overflow-hidden">
-          {paginated.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+              <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mb-3" />
+              <p className="text-sm font-semibold text-slate-700">Loading users from Microsoft Entra ID…</p>
+            </div>
+          ) : paginated.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center px-4">
               <div className="rounded-full bg-slate-100 p-4 mb-3"><Search className="h-6 w-6 text-slate-400" /></div>
               <p className="text-sm font-semibold text-slate-700">No users found</p>
@@ -1270,7 +1355,7 @@ export function UsersPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserTo
                                   {user.sources.map(s => {
                                     const SIcon = s.type === 'directory' ? Cloud : s.type === 'mdm' ? Smartphone : Ticket
                                     const sc = s.status === 'Error' ? 'text-red-400' : s.status === 'Pending' ? 'text-amber-400' : s.type === 'directory' ? 'text-orange-400' : 'text-lime-400'
-                                    return <SIcon key={s.name} className={`h-2.5 w-2.5 ${sc}`} title={`${s.name}: ${s.status}`} />
+                                    return <span key={s.name} title={`${s.name}: ${s.status}`}><SIcon className={`h-2.5 w-2.5 ${sc}`} /></span>
                                   })}
                                 </div>
                               )}

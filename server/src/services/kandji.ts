@@ -408,17 +408,37 @@ export interface LibraryApp {
   category: string
   active: boolean
   enforcement: string
+  blueprint?: string   // first blueprint name this item is assigned to
+  groupId?: string     // blueprint ID (Kandji uses blueprints as assignment groups)
 }
 
-// Kandji exposes library items per-type, not as a single /library-items endpoint
+// IRU / Kandji Library Item endpoints — all known path variants tested against
+// the actual tenant API. Paths that return 404 are silently skipped.
+//
+// CONFIRMED WORKING  (tested against zinnia.api.kandji.io):
+//   /api/v1/library/custom-apps      ← Custom Apps (pkg, dmg, etc.)
+//   /api/v1/library/custom-scripts   ← Custom Scripts (bash, zsh, python)
+//   /api/v1/library/custom-profiles  ← MDM Config Profiles (mobileconfig)
+//   /api/v1/library/ipa-apps         ← In-House IPA apps
+//
+// REQUIRE ADDITIONAL API TOKEN PERMISSIONS (return 404 if not scoped):
+//   /api/v1/library/auto-apps        ← Managed auto-updating apps (VPP)
+//   /api/v1/library/vpp-apps         ← Apple Business Manager VPP apps
+//   /api/v1/library/web-apps         ← Web clips / web apps
+//   /api/v1/library/custom-printers  ← Printer configurations
+//
+// To access the locked types, update the API token in Kandji/IRU Settings
+// → Access → API Token → enable read access for Auto Apps and VPP Apps.
+
 const LIBRARY_TYPES = [
-  { path: '/api/v1/library/auto-apps',       category: 'Auto App'   },
-  { path: '/api/v1/library/custom-apps',     category: 'Custom App' },
-  { path: '/api/v1/library/vpp-apps',        category: 'VPP App'    },
-  { path: '/api/v1/library/custom-scripts',  category: 'Script'     },
-  { path: '/api/v1/library/profiles',        category: 'Profile'    },
-  { path: '/api/v1/library/web-apps',        category: 'Web App'    },
-  { path: '/api/v1/library/custom-printers', category: 'Printer'    },
+  { path: '/api/v1/library/auto-apps',       category: 'Auto App',   requiredScope: 'auto-apps'    },
+  { path: '/api/v1/library/custom-apps',     category: 'Custom App', requiredScope: 'custom-apps'  },
+  { path: '/api/v1/library/vpp-apps',        category: 'VPP App',    requiredScope: 'vpp-apps'     },
+  { path: '/api/v1/library/custom-scripts',  category: 'Script',     requiredScope: 'scripts'      },
+  { path: '/api/v1/library/custom-profiles', category: 'Profile',    requiredScope: 'profiles'     },
+  { path: '/api/v1/library/web-apps',        category: 'Web App',    requiredScope: 'web-apps'     },
+  { path: '/api/v1/library/custom-printers', category: 'Printer',    requiredScope: 'printers'     },
+  { path: '/api/v1/library/ipa-apps',        category: 'IPA App',    requiredScope: 'ipa-apps'     },
 ] as const
 
 interface KandjiLibraryItem {
@@ -428,6 +448,18 @@ interface KandjiLibraryItem {
   active?: boolean
   install_enforcement?: string // custom-apps / vpp-apps
   execution_frequency?: string // custom-scripts
+  blueprints?: string[]        // array of blueprint IDs this item is assigned to
+}
+
+interface KandjiBlueprint {
+  id: string
+  name: string
+}
+
+interface KandjiBlueprintResponse {
+  count?: number
+  next?: string | null
+  results?: KandjiBlueprint[]
 }
 
 // Kandji library endpoints return either a plain array OR paginated
@@ -482,27 +514,197 @@ async function fetchLibraryType(
   return all
 }
 
+// ── IRU / Kandji Blueprint → Library Items reverse map ───────────────────────
+// Uses GET /api/v1/blueprints/{id}/list-library-items (correct endpoint per IRU API docs)
+// to build a map of libraryItemId → { blueprintName, blueprintId }.
+
+interface BlueprintItemEntry { id?: string; library_item_id?: string; name?: string }
+
+async function fetchBlueprintItemMap(
+  config: RuntimeKandjiConfig,
+): Promise<Map<string, { name: string; id: string }>> {
+  const base    = baseUrl(config)
+  const headers = authHeaders(config)
+  // itemId → { blueprintName, blueprintId }
+  const itemToBp = new Map<string, { name: string; id: string }>()
+
+  try {
+    // Step 1: get all blueprints
+    const bpRes = await fetch(`${base}/api/v1/blueprints`, { headers })
+    if (!bpRes.ok) return itemToBp
+    const bpBody = await bpRes.json() as KandjiBlueprintResponse | KandjiBlueprint[]
+    const blueprints: KandjiBlueprint[] = Array.isArray(bpBody)
+      ? bpBody
+      : (bpBody.results ?? [])
+
+    console.log(`[Kandji] Found ${blueprints.length} blueprints — fetching library item associations`)
+
+    // Step 2: for each blueprint, GET /api/v1/blueprints/{id}/list-library-items
+    await Promise.all(blueprints.map(async bp => {
+      try {
+        const controller = new AbortController()
+        const timeout    = setTimeout(() => controller.abort(), 10_000)
+        const res = await fetch(`${base}/api/v1/blueprints/${bp.id}/list-library-items`, { headers, signal: controller.signal })
+        clearTimeout(timeout)
+        if (!res.ok) return
+        const body = await res.json() as BlueprintItemEntry[] | { results?: BlueprintItemEntry[] }
+        const items: BlueprintItemEntry[] = Array.isArray(body) ? body : (body.results ?? [])
+        items.forEach(item => {
+          const itemId = item.library_item_id ?? item.id
+          if (itemId && !itemToBp.has(itemId)) {
+            itemToBp.set(itemId, { name: bp.name, id: bp.id })
+          }
+        })
+      } catch { /* non-critical per blueprint */ }
+    }))
+
+    console.log(`[Kandji] Blueprint item map built: ${itemToBp.size} library item associations`)
+  } catch (e) {
+    console.warn('[Kandji] fetchBlueprintItemMap failed:', (e as Error).message)
+  }
+
+  return itemToBp
+}
+
 export async function getKandjiLibraryApps(cfg?: RuntimeKandjiConfig): Promise<LibraryApp[]> {
   const config = cfg ?? getKandjiConfig()
   if (!config) throw new Error('Kandji credentials not configured')
 
   const headers = authHeaders(config)
-  const settled = await Promise.allSettled(
-    LIBRARY_TYPES.map(async ({ path, category }) => {
-      const items = await fetchLibraryType(`${baseUrl(config)}${path}`, headers)
-      return items.map((item, i): LibraryApp => ({
+  const base    = baseUrl(config)
+
+  // Probe every known path. fetchLibraryType returns [] silently on 404/403,
+  // so inaccessible endpoints are skipped without failing the whole request.
+  const [bpItemMap, ...typeResults] = await Promise.all([
+    fetchBlueprintItemMap(config),
+    ...LIBRARY_TYPES.map(async ({ path, category }) => {
+      const items   = await fetchLibraryType(`${base}${path}`, headers)
+      const reached = items.length > 0  // true = endpoint was accessible
+      return { path, category, items, reached }
+    }),
+  ])
+
+  // Log which paths are accessible (helps diagnose token scope issues)
+  const accessible = typeResults.filter(r => r.reached)
+  const blocked    = typeResults.filter(r => !r.reached)
+  console.log(`[Kandji Library] Accessible: [${accessible.map(r => r.category).join(', ')}]`)
+  if (blocked.length) {
+    console.warn(`[Kandji Library] No data from: [${blocked.map(r => r.category).join(', ')}] — token may lack scope. In Kandji/IRU Settings → API Tokens, ensure read access for all Library types.`)
+  }
+
+  const all: LibraryApp[] = []
+  for (const { category, items } of typeResults) {
+    for (let i = 0; i < items.length; i++) {
+      const item    = items[i]!
+      const bpEntry = item.id ? bpItemMap.get(item.id) : undefined
+      const entry: LibraryApp = {
         id:          item.id ?? `${category}-${i}`,
         name:        item.name ?? item.app_name ?? 'Unknown',
         category,
         active:      item.active ?? false,
         enforcement: enforcementLabel(item.install_enforcement ?? item.execution_frequency ?? ''),
-      }))
-    })
-  )
+      }
+      if (bpEntry) {
+        entry.blueprint = bpEntry.name
+        entry.groupId   = bpEntry.id
+      }
+      all.push(entry)
+    }
+  }
 
-  const all: LibraryApp[] = []
-  settled.forEach(r => { if (r.status === 'fulfilled') all.push(...r.value) })
+  console.log(`[Kandji Library] Total items returned: ${all.length}`)
   return all.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// ── Library Item detail endpoints (per IRU API docs) ─────────────────────────
+
+export interface LibraryItemStatus {
+  device_id: string
+  device_name: string
+  status: 'pass' | 'fail' | 'pending' | 'error' | 'incompatible' | 'remediated' | string
+  status_message?: string
+  last_audit_date?: string
+}
+
+export interface LibraryItemActivity {
+  id: string
+  action: string
+  actor_type: string
+  actor_id?: string
+  occurred_at: string
+  target_component?: string
+  new_state?: Record<string, unknown>
+}
+
+export async function getLibraryItemStatuses(
+  libraryItemId: string,
+  cfg?: RuntimeKandjiConfig,
+): Promise<LibraryItemStatus[]> {
+  const config = cfg ?? getKandjiConfig()
+  if (!config) return []
+  try {
+    const res = await fetch(
+      `${baseUrl(config)}/api/v1/library/library-items/${libraryItemId}/status`,
+      { headers: authHeaders(config) },
+    )
+    if (!res.ok) return []
+    const body = await res.json() as { results?: LibraryItemStatus[] } | LibraryItemStatus[]
+    return Array.isArray(body) ? body : (body.results ?? [])
+  } catch { return [] }
+}
+
+// ── Self Service categories ───────────────────────────────────────────────────
+// GET /api/v1/self-service/categories
+// Returns the flat list of category IDs + names configured in the IRU tenant.
+// These IDs are used when assigning library items to the self-service catalogue.
+
+export interface SelfServiceCategory {
+  id:   string
+  name: string
+}
+
+export async function getKandjiSelfServiceCategories(
+  cfg?: RuntimeKandjiConfig,
+): Promise<SelfServiceCategory[]> {
+  const config = cfg ?? getKandjiConfig()
+  if (!config) return []
+  try {
+    const controller = new AbortController()
+    const timeout    = setTimeout(() => controller.abort(), 10_000)
+    const res = await fetch(
+      `${baseUrl(config)}/api/v1/self-service/categories`,
+      { headers: authHeaders(config), signal: controller.signal },
+    )
+    clearTimeout(timeout)
+    if (!res.ok) {
+      console.warn(`[Kandji] self-service/categories: HTTP ${res.status}`)
+      return []
+    }
+    const body = await res.json() as SelfServiceCategory[] | { results?: SelfServiceCategory[] }
+    const list = Array.isArray(body) ? body : (body.results ?? [])
+    console.log(`[Kandji] ✓ Self Service categories: ${list.length} categories`)
+    return list
+  } catch (e) {
+    console.warn('[Kandji] self-service/categories failed:', (e as Error).message)
+    return []
+  }
+}
+
+export async function getLibraryItemActivity(
+  libraryItemId: string,
+  cfg?: RuntimeKandjiConfig,
+): Promise<LibraryItemActivity[]> {
+  const config = cfg ?? getKandjiConfig()
+  if (!config) return []
+  try {
+    const res = await fetch(
+      `${baseUrl(config)}/api/v1/library/library-items/${libraryItemId}/activity?limit=50`,
+      { headers: authHeaders(config) },
+    )
+    if (!res.ok) return []
+    const body = await res.json() as { results?: LibraryItemActivity[] } | LibraryItemActivity[]
+    return Array.isArray(body) ? body : (body.results ?? [])
+  } catch { return [] }
 }
 
 // ─ Kandji app shape ───────────────────────────────────────────────────────────

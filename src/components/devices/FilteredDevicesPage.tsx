@@ -484,7 +484,7 @@ export function FilteredDevicesPage({ filter, onBack, onViewDevice }: Props) {
                           {col.label}
                           {isSortable && <SortIcon field={col.key as SortField} sortField={sortField} sortDir={sortDir} />}
                         </span>
-                        {!col.noResize && (
+                        {!('noResize' in col && col.noResize) && (
                           <span
                             className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
                             onMouseDown={e => startResize(col.key as FColKey, e)}

@@ -6,17 +6,41 @@ export interface SlackWorkspaceInfo {
   url:      string
 }
 
+// Wrap fetch with a hard deadline so hung Slack endpoints don't block forever.
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw new Error(`Slack API timed out after ${timeoutMs / 1000}s`)
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function testSlackConnection(
   cfg: RuntimeSlackConfig,
 ): Promise<{ ok: boolean; error?: string; workspace?: SlackWorkspaceInfo }> {
-  const res = await fetch('https://slack.com/api/auth.test', {
-    headers: { Authorization: `Bearer ${cfg.botToken}` },
-  })
-  const data = (await res.json()) as {
-    ok: boolean; error?: string
-    team_id?: string; team?: string; url?: string
+  let res: Response
+  try {
+    res = await fetchWithTimeout(
+      'https://slack.com/api/auth.test',
+      { headers: { Authorization: `Bearer ${cfg.botToken}` } },
+    )
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' }
   }
-  if (!data.ok) return { ok: false, error: data.error ?? 'auth.test failed' }
+
+  let data: { ok: boolean; error?: string; team_id?: string; team?: string; url?: string }
+  try {
+    data = await res.json()
+  } catch {
+    return { ok: false, error: `Slack returned non-JSON response (HTTP ${res.status})` }
+  }
+
+  if (!data.ok) return { ok: false, error: data.error ?? 'auth.test returned ok=false' }
   return {
     ok: true,
     workspace: { teamId: data.team_id ?? '', teamName: data.team ?? '', url: data.url ?? '' },
@@ -28,11 +52,25 @@ export async function fetchSlackAuditLogs(
   limit = 100,
 ): Promise<{ entries: Record<string, unknown>[]; ok: boolean; error?: string }> {
   const params = new URLSearchParams({ limit: String(limit) })
-  const res = await fetch(`https://api.slack.com/audit/v1/logs?${params}`, {
-    headers: { Authorization: `Bearer ${cfg.botToken}` },
-  })
+  let res: Response
+  try {
+    res = await fetchWithTimeout(
+      `https://api.slack.com/audit/v1/logs?${params}`,
+      { headers: { Authorization: `Bearer ${cfg.botToken}` } },
+    )
+  } catch (err) {
+    return { entries: [], ok: false, error: err instanceof Error ? err.message : 'Network error' }
+  }
+
   if (!res.ok) return { entries: [], ok: false, error: `HTTP ${res.status}` }
-  const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
+
+  let data: { entries?: Record<string, unknown>[]; error?: string }
+  try {
+    data = await res.json()
+  } catch {
+    return { entries: [], ok: false, error: `Slack returned non-JSON response (HTTP ${res.status})` }
+  }
+
   if (data.error) return { entries: [], ok: false, error: data.error }
   return { entries: data.entries ?? [], ok: true }
 }

@@ -98,8 +98,10 @@ function mapGraphDevice(d: GraphDevice): Device {
   }
   const compliance = complianceMap[d.complianceState] ?? 'Warning'
   const platform: Device['platform'] =
-    d.operatingSystem === 'macOS' ? 'macOS' :
-    d.operatingSystem === 'Linux' ? 'Linux' : 'Windows'
+    d.operatingSystem === 'macOS'   ? 'macOS'   :
+    d.operatingSystem === 'Linux'   ? 'Linux'   :
+    d.operatingSystem === 'Android' ? 'Android' :
+    d.operatingSystem === 'iOS'     ? 'iOS'     : 'Windows'
 
   const totalStorage = fmtBytes(d.totalStorageSpaceInBytes, 'GB')
   const freeStorage  = fmtBytes(d.freeStorageSpaceInBytes,  'GB')
@@ -155,29 +157,167 @@ function mapGraphDevice(d: GraphDevice): Device {
   }
 }
 
-const GRAPH_SELECT = [
-  'id', 'deviceName', 'userPrincipalName', 'serialNumber',
-  'operatingSystem', 'osVersion', 'osBuildNumber',
-  'complianceState', 'lastSyncDateTime', 'enrolledDateTime',
-  'isEncrypted', 'manufacturer', 'model',
-  'totalStorageSpaceInBytes', 'freeStorageSpaceInBytes', 'physicalMemoryInBytes',
-  'processorArchitecture', 'wiFiMacAddress', 'ethernetMacAddress', 'ipAddressV4',
-  'joinType', 'azureADRegistered', 'managedDeviceOwnerType', 'userDisplayName', 'notes',
-].join(',')
+// No $select — let Graph return all available fields for this tenant;
+// avoids 400 errors when optional properties aren't supported by a tenant's license tier.
+const GRAPH_SELECT = ''
+
+// Follows @odata.nextLink to page through all managed devices
+async function graphGetAll(token: string, initialUrl: string): Promise<GraphDevice[]> {
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  const results: GraphDevice[] = []
+  let url: string | null = initialUrl
+  while (url) {
+    const res = await fetch(url, { headers })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      const hint =
+        res.status === 401 ? ' — check client ID / secret are correct and not expired' :
+        res.status === 403 ? ' — ensure the app registration has DeviceManagementManagedDevices.Read.All (Application) permission in Azure' :
+        res.status === 400 ? ' — one or more $select fields may be unsupported by this tenant' : ''
+      throw new Error(`Microsoft Graph ${res.status}${hint}: ${body.slice(0, 400)}`)
+    }
+    const data = await res.json() as { value?: GraphDevice[]; '@odata.nextLink'?: string }
+    results.push(...(data.value ?? []))
+    url = data['@odata.nextLink'] ?? null
+  }
+  return results
+}
 
 export async function getIntuneDevices(cfg?: RuntimeIntuneConfig): Promise<Device[]> {
   const config = cfg ?? getIntuneConfig()
   if (!config) throw new Error('Intune credentials not configured')
 
   const token = await getAccessToken(config)
-  const url = `https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=${GRAPH_SELECT}&$top=100`
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(`Microsoft Graph error: ${res.status} ${res.statusText}`)
+  const selectParam = GRAPH_SELECT ? `&$select=${GRAPH_SELECT}` : ''
+  const initialUrl = `https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$top=999${selectParam}`
+  const raw = await graphGetAll(token, initialUrl)
+  console.log(`[Intune] ✓ Fetched ${raw.length} managed device(s)`)
+  return raw.map(mapGraphDevice)
+}
 
-  const data = await res.json() as { value: GraphDevice[] }
-  return data.value.map(mapGraphDevice)
+// Lightweight health-check: token + one Graph call, returns diagnostic info (never throws)
+export async function diagnoseIntune(): Promise<{
+  configured: boolean
+  tokenOk: boolean
+  tokenError: string | null
+  graphStatus: number | null
+  graphOk: boolean
+  graphError: string | null
+  deviceCount: number
+}> {
+  const config = getIntuneConfig()
+  if (!config) return { configured: false, tokenOk: false, tokenError: 'Not configured', graphStatus: null, graphOk: false, graphError: null, deviceCount: 0 }
+
+  let token: string | null = null
+  let tokenError: string | null = null
+  try {
+    token = await getAccessToken(config)
+  } catch (e) {
+    tokenError = (e as Error).message
+    return { configured: true, tokenOk: false, tokenError, graphStatus: null, graphOk: false, graphError: null, deviceCount: 0 }
+  }
+
+  try {
+    const res = await fetch(
+      'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$top=1&$select=id,deviceName,complianceState',
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    const body = await res.text().catch(() => '')
+    let count = 0
+    let graphError: string | null = null
+    if (res.ok) {
+      try { count = (JSON.parse(body) as { value?: unknown[] }).value?.length ?? 0 } catch { /* ignore */ }
+    } else {
+      graphError = body.slice(0, 400)
+    }
+    return { configured: true, tokenOk: true, tokenError: null, graphStatus: res.status, graphOk: res.ok, graphError, deviceCount: count }
+  } catch (e) {
+    return { configured: true, tokenOk: true, tokenError: null, graphStatus: null, graphOk: false, graphError: (e as Error).message, deviceCount: 0 }
+  }
 }
 
 export function isIntuneConfigured(): boolean {
   return !!getIntuneConfig()
+}
+
+// ── User summaries derived from managed devices ────────────────────────────────
+
+export interface IntuneUserSummary {
+  upn: string
+  displayName: string
+  lastSyncDateTime: string
+  complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
+  devices: Array<{
+    deviceName: string
+    platform: string
+    complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
+    lastCheckIn: string
+    encryptionStatus: string
+    managementSource: 'Microsoft Intune'
+  }>
+}
+
+const COMPLIANCE_MAP: Record<string, 'Compliant' | 'Warning' | 'Non-Compliant'> = {
+  compliant:     'Compliant',
+  noncompliant:  'Non-Compliant',
+  unknown:       'Warning',
+  inGracePeriod: 'Warning',
+  error:         'Warning',
+}
+
+export async function getIntuneUserSummaries(cfg?: RuntimeIntuneConfig): Promise<IntuneUserSummary[]> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+
+  const token = await getAccessToken(config)
+
+  // Page through all devices
+  const allDevices: GraphDevice[] = []
+  const selectParam = GRAPH_SELECT ? `&$select=${GRAPH_SELECT}` : ''
+  let nextUrl: string | null =
+    `https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$top=999${selectParam}`
+  while (nextUrl) {
+    const res = await fetch(nextUrl, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) throw new Error(`Microsoft Graph error: ${res.status} ${res.statusText}`)
+    const data = await res.json() as { value: GraphDevice[]; '@odata.nextLink'?: string }
+    allDevices.push(...data.value)
+    nextUrl = data['@odata.nextLink'] ?? null
+  }
+
+  // Group by userPrincipalName
+  const byUpn = new Map<string, { displayName: string; devices: GraphDevice[]; latestSync: Date }>()
+  for (const d of allDevices) {
+    const upn = (d.userPrincipalName ?? '').toLowerCase()
+    if (!upn) continue
+    const entry = byUpn.get(upn)
+    const syncDate = new Date(d.lastSyncDateTime)
+    if (!entry) {
+      byUpn.set(upn, { displayName: d.userDisplayName ?? d.userPrincipalName, devices: [d], latestSync: syncDate })
+    } else {
+      entry.devices.push(d)
+      if (syncDate > entry.latestSync) entry.latestSync = syncDate
+    }
+  }
+
+  return Array.from(byUpn.entries()).map(([upn, { displayName, devices, latestSync }]) => {
+    const mappedDevices = devices.map(d => {
+      const platform = d.operatingSystem === 'macOS' ? 'macOS' : d.operatingSystem === 'Linux' ? 'Linux' : 'Windows'
+      return {
+        deviceName:       d.deviceName,
+        platform,
+        complianceState:  COMPLIANCE_MAP[d.complianceState] ?? 'Warning' as 'Compliant' | 'Warning' | 'Non-Compliant',
+        lastCheckIn:      new Date(d.lastSyncDateTime).toLocaleString(),
+        encryptionStatus: d.isEncrypted
+          ? (platform === 'macOS' ? 'FileVault On' : 'BitLocker On')
+          : (platform === 'macOS' ? 'FileVault Off' : 'BitLocker Off'),
+        managementSource: 'Microsoft Intune' as const,
+      }
+    })
+
+    const overall: 'Compliant' | 'Warning' | 'Non-Compliant' =
+      mappedDevices.some(d => d.complianceState === 'Non-Compliant') ? 'Non-Compliant' :
+      mappedDevices.some(d => d.complianceState === 'Warning')       ? 'Warning'       : 'Compliant'
+
+    return { upn, displayName, lastSyncDateTime: latestSync.toISOString(), complianceState: overall, devices: mappedDevices }
+  })
 }

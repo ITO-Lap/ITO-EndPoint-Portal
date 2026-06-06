@@ -104,6 +104,21 @@ async function graphGet<T>(token: string, path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// Follows @odata.nextLink to retrieve all pages of a collection
+async function graphGetAll<T>(token: string, initialPath: string): Promise<T[]> {
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  const results: T[] = []
+  let url: string | null = `https://graph.microsoft.com/v1.0${initialPath}`
+  while (url) {
+    const res = await fetch(url, { headers })
+    if (!res.ok) throw new Error(`Graph ${url}: ${res.status} ${res.statusText}`)
+    const data = await res.json() as { value: T[]; '@odata.nextLink'?: string }
+    results.push(...(data.value ?? []))
+    url = data['@odata.nextLink'] ?? null
+  }
+  return results
+}
+
 // ── Graph API fetchers (each silently returns [] on permission error) ──────────
 
 async function fetchSignIns(token: string): Promise<EntraSignIn[]> {
@@ -138,22 +153,52 @@ async function fetchRiskySignIns(token: string): Promise<EntraRiskySignIn[]> {
 
 async function fetchUsers(token: string): Promise<EntraUser[]> {
   try {
-    const data = await graphGet<{ value: EntraUser[] }>(
+    return await graphGetAll<EntraUser>(
       token,
-      '/users?$top=200&$select=id,displayName,userPrincipalName,department,accountEnabled,createdDateTime,signInActivity&$orderby=displayName',
+      '/users?$top=999&$select=id,displayName,userPrincipalName,department,accountEnabled,createdDateTime,signInActivity&$orderby=displayName',
     )
-    return data.value ?? []
   } catch { return [] }
 }
 
 async function fetchMfaRegistrations(token: string): Promise<EntraMfaRegistration[]> {
   try {
-    const data = await graphGet<{ value: EntraMfaRegistration[] }>(
+    return await graphGetAll<EntraMfaRegistration>(
       token,
-      '/reports/authenticationMethods/userRegistrationDetails?$top=200',
+      '/reports/authenticationMethods/userRegistrationDetails?$top=999',
     )
-    return data.value ?? []
   } catch { return [] }
+}
+
+// ── Per-user detail types ──────────────────────────────────────────────────────
+
+interface MemberOfItem {
+  id: string
+  displayName: string
+  '@odata.type': string
+  groupTypes?: string[]
+  mailEnabled?: boolean
+  securityEnabled?: boolean
+}
+
+interface AppRoleAssignment {
+  id: string
+  appDisplayName: string
+  resourceDisplayName: string
+  createdDateTime: string
+}
+
+interface LicenseDetail {
+  id: string
+  skuPartNumber: string
+  servicePlans: Array<{ servicePlanName: string; provisioningStatus: string }>
+}
+
+export interface EntraUserDetails {
+  signIns:  EntraSignIn[]
+  roles:    Array<{ id: string; displayName: string }>
+  groups:   Array<{ id: string; displayName: string; groupTypes: string[]; mailEnabled: boolean; securityEnabled: boolean }>
+  apps:     Array<{ id: string; appDisplayName: string; resourceDisplayName: string; createdDateTime: string }>
+  licenses: Array<{ id: string; skuPartNumber: string; servicePlans: Array<{ servicePlanName: string; provisioningStatus: string }> }>
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -174,6 +219,35 @@ export async function getEntraData(cfg?: RuntimeEntraConfig): Promise<EntraData>
   ])
 
   return { signIns, directoryAudits, riskySignIns, users, mfaRegistrations, fetchedAt: Date.now() }
+}
+
+export async function getEntraUserDetails(userId: string): Promise<EntraUserDetails> {
+  const config = getEntraConfig()
+  if (!config) throw new Error('Entra ID credentials not configured')
+
+  const token = await getAccessToken(config)
+
+  const [signInsRes, memberOfRes, appsRes, licensesRes] = await Promise.allSettled([
+    graphGet<{ value: EntraSignIn[] }>(
+      token,
+      `/auditLogs/signIns?$filter=userId eq '${userId}'&$top=20&$orderby=createdDateTime desc`,
+    ),
+    graphGetAll<MemberOfItem>(token, `/users/${userId}/memberOf?$top=200&$select=id,displayName,groupTypes,mailEnabled,securityEnabled`),
+    graphGet<{ value: AppRoleAssignment[] }>(token, `/users/${userId}/appRoleAssignments?$select=id,appDisplayName,resourceDisplayName,createdDateTime`),
+    graphGetAll<LicenseDetail>(token, `/users/${userId}/licenseDetails?$select=id,skuPartNumber,servicePlans`),
+  ])
+
+  const memberOf = memberOfRes.status === 'fulfilled' ? memberOfRes.value : []
+
+  return {
+    signIns:  signInsRes.status  === 'fulfilled' ? (signInsRes.value.value  ?? []) : [],
+    roles:    memberOf.filter(m => m['@odata.type'] === '#microsoft.graph.directoryRole')
+                      .map(m => ({ id: m.id, displayName: m.displayName })),
+    groups:   memberOf.filter(m => m['@odata.type'] === '#microsoft.graph.group')
+                      .map(m => ({ id: m.id, displayName: m.displayName, groupTypes: m.groupTypes ?? [], mailEnabled: m.mailEnabled ?? false, securityEnabled: m.securityEnabled ?? false })),
+    apps:     appsRes.status     === 'fulfilled' ? (appsRes.value.value     ?? []) : [],
+    licenses: licensesRes.status === 'fulfilled' ? licensesRes.value : [],
+  }
 }
 
 export function isEntraConfigured(): boolean {

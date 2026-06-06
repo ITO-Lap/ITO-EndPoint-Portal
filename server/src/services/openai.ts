@@ -291,3 +291,318 @@ Be concise, technical, and action-oriented. Prefer bullet points for steps.`
 export function isOpenAIConfigured(): boolean {
   return !!process.env.OPENAI_API_KEY
 }
+
+// ── AI Automation Builder ────────────────────────────────────────────────────
+
+export interface AutomationRuleBlueprint {
+  name:        string
+  description: string
+  category:    'compliance' | 'security' | 'patching' | 'reporting' | 'drift'
+  triggerType: 'device_non_compliant' | 'compliance_threshold' | 'device_offline' | 'new_enrollment' | 'scheduled' | 'risky_signin' | 'drift_detected' | 'encryption_off' | 'script_failure'
+  platform:    'Windows' | 'macOS' | 'Linux' | 'all'
+  source:      'intune' | 'kandji' | 'manageengine' | 'all'
+  severity:    'Low' | 'Medium' | 'High' | 'Critical' | 'all'
+  actions:     Array<'slack_notify' | 'create_jira' | 'execute_runbook' | 'execute_script' | 'generate_report' | 'send_notification'>
+  reasoning:   string
+}
+
+export async function buildAutomationRule(prompt: string): Promise<AutomationRuleBlueprint> {
+  const ai = getClient()
+
+  const systemPrompt = `You are an expert enterprise IT automation architect for an endpoint management platform.
+Convert the user's natural language description into a structured automation rule configuration.
+
+Available trigger types: device_non_compliant, compliance_threshold, device_offline, new_enrollment, scheduled, risky_signin, drift_detected, encryption_off, script_failure
+Available action types: slack_notify, create_jira, execute_runbook, execute_script, generate_report, send_notification
+Available categories: compliance, security, patching, reporting, drift
+Available platforms: Windows, macOS, Linux, all
+Available sources: intune, kandji, manageengine, all
+Available severities: Low, Medium, High, Critical, all
+
+Return ONLY valid JSON matching this exact shape:
+{
+  "name": "concise rule name (max 60 chars)",
+  "description": "what this rule does and why (1-2 sentences)",
+  "category": "one of the categories above",
+  "triggerType": "one of the trigger types above",
+  "platform": "platform filter",
+  "source": "source filter",
+  "severity": "severity filter",
+  "actions": ["array of action types"],
+  "reasoning": "brief explanation of your choices"
+}`
+
+  const response = await ai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 500,
+    temperature: 0.2,
+  })
+
+  const content = response.choices[0]?.message.content ?? '{}'
+  return JSON.parse(content) as AutomationRuleBlueprint
+}
+
+export function buildAutomationRuleFallback(prompt: string): AutomationRuleBlueprint {
+  const lower = prompt.toLowerCase()
+
+  const isSlack      = lower.includes('slack')
+  const isJira       = lower.includes('jira') || lower.includes('ticket') || lower.includes('incident')
+  const isScript     = lower.includes('script') || lower.includes('run') || lower.includes('fix') || lower.includes('remediat')
+  const isRunbook    = lower.includes('runbook') || lower.includes('playbook')
+  const isMac        = lower.includes('mac') || lower.includes('macos') || lower.includes('filevault') || lower.includes('kandji')
+  const isWindows    = lower.includes('windows') || lower.includes('bitlocker') || lower.includes('intune')
+  const isEncrypt    = lower.includes('encrypt') || lower.includes('filevault') || lower.includes('bitlocker')
+  const isPatch      = lower.includes('patch') || lower.includes('update') || lower.includes('os version')
+  const isDrift      = lower.includes('drift') || lower.includes('config')
+  const isOffline    = lower.includes('offline') || lower.includes('check-in') || lower.includes('checkin')
+  const isCritical   = lower.includes('critical')
+  const isHigh       = lower.includes('high')
+
+  const actions: AutomationRuleBlueprint['actions'] = ['send_notification']
+  if (isSlack) actions.push('slack_notify')
+  if (isJira)  actions.push('create_jira')
+  if (isScript) actions.push('execute_script')
+  else if (isRunbook) actions.push('execute_runbook')
+
+  let triggerType: AutomationRuleBlueprint['triggerType'] = 'device_non_compliant'
+  let category: AutomationRuleBlueprint['category'] = 'compliance'
+  if (isEncrypt) { triggerType = 'encryption_off'; category = 'security' }
+  else if (isPatch) { triggerType = 'device_non_compliant'; category = 'patching' }
+  else if (isDrift) { triggerType = 'drift_detected'; category = 'drift' }
+  else if (isOffline) { triggerType = 'device_offline'; category = 'compliance' }
+
+  const platform: AutomationRuleBlueprint['platform'] = isMac ? 'macOS' : isWindows ? 'Windows' : 'all'
+  const severity: AutomationRuleBlueprint['severity'] = isCritical ? 'Critical' : isHigh ? 'High' : 'all'
+
+  return {
+    name:        `Auto-rule: ${prompt.slice(0, 50)}`,
+    description: `Automated rule based on: "${prompt}"`,
+    category,
+    triggerType,
+    platform,
+    source:      isMac ? 'kandji' : isWindows ? 'intune' : 'all',
+    severity,
+    actions,
+    reasoning:   'Parsed from natural language (AI unavailable — rule-based fallback)',
+  }
+}
+
+// ── Remediation Script Generator ─────────────────────────────────────────────
+
+export async function generateRemediationScript(device: Device): Promise<string> {
+  const ai = getClient()
+
+  const prompt = `You are an expert macOS/Windows IT engineer. Generate a production-ready shell script to remediate the following endpoint compliance issue.
+
+Device: ${device.deviceName}
+Platform: ${device.platform} — ${device.osVersion}
+Primary Issue: ${device.primaryIssue}
+Policy Failed: ${device.policyFailed}
+Encryption Status: ${device.encryptionStatus}
+Management Source: ${device.managementSource}
+Severity: ${device.severity}
+
+Requirements:
+- For macOS: write a zsh/bash script that runs as root via MDM (no interactive prompts)
+- For Windows: write a PowerShell script that runs silently as SYSTEM
+- Include safety checks (verify conditions before making changes)
+- Include status output lines so logs show progress
+- Script should be idempotent (safe to run multiple times)
+- End with a success/failure exit code
+
+Return ONLY the raw script content, no markdown fences, no explanation.`
+
+  const response = await ai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 800,
+    temperature: 0.1,
+  })
+
+  return response.choices[0]?.message.content?.trim() ?? generateFallbackScript(device)
+}
+
+function generateFallbackScript(device: Device): string {
+  const platform = device.platform
+  const issue = (device.primaryIssue ?? '').toLowerCase()
+  const encryption = (device.encryptionStatus ?? '').toLowerCase()
+
+  if (platform === 'macOS') {
+    if (encryption === 'off' || issue.includes('encrypt') || issue.includes('filevault')) {
+      return `#!/bin/zsh
+# FileVault Remediation Script — generated by Endpoint AI Copilot
+set -euo pipefail
+
+echo "[INFO] Checking FileVault status on $(hostname)..."
+STATUS=$(fdesetup status 2>/dev/null || echo "Unknown")
+echo "[INFO] Current status: $STATUS"
+
+if echo "$STATUS" | grep -q "FileVault is On"; then
+  echo "[OK] FileVault is already enabled. No action needed."
+  exit 0
+fi
+
+echo "[ACTION] FileVault is not enabled. Triggering MDM enforcement..."
+# Signal Kandji to re-apply FileVault profile
+/usr/bin/profiles -N 2>/dev/null || true
+/usr/local/bin/kandji run 2>/dev/null || true
+
+echo "[INFO] MDM enforcement triggered. FileVault activation will prompt user on next login."
+echo "[DONE] Script completed successfully."
+exit 0`
+    }
+    return `#!/bin/zsh
+# Compliance Remediation — ${device.primaryIssue || 'general compliance'}
+# Generated by Endpoint AI Copilot for ${device.deviceName}
+set -euo pipefail
+
+echo "[INFO] Starting compliance remediation on $(hostname)..."
+echo "[INFO] Issue: ${device.primaryIssue || 'compliance policy failure'}"
+
+# Re-run Kandji compliance checks
+if command -v kandji &>/dev/null; then
+  echo "[ACTION] Triggering Kandji compliance check..."
+  /usr/local/bin/kandji run
+else
+  echo "[WARN] Kandji agent not found — triggering MDM profile refresh..."
+  /usr/bin/profiles -N
+fi
+
+echo "[DONE] Remediation triggered. Check MDM console for updated status."
+exit 0`
+  }
+
+  // Windows PowerShell
+  return `# Compliance Remediation Script — generated by Endpoint AI Copilot
+# Device: ${device.deviceName} | Issue: ${device.primaryIssue}
+$ErrorActionPreference = "Stop"
+
+Write-Output "[INFO] Starting compliance remediation on $env:COMPUTERNAME"
+Write-Output "[INFO] Issue: ${device.primaryIssue || 'compliance policy failure'}"
+
+try {
+  # Force Intune sync
+  Write-Output "[ACTION] Triggering Intune management sync..."
+  $SyncPath = "C:\\Program Files (x86)\\Microsoft Intune Management Extension\\Microsoft.Management.Services.IntuneWindowsAgent.exe"
+  if (Test-Path $SyncPath) {
+    Start-Process -FilePath $SyncPath -ArgumentList "intuneManagementExtension://syncAppAndDeviceManagementClient" -Wait
+    Write-Output "[OK] Intune sync triggered successfully."
+  } else {
+    Write-Output "[WARN] IME not found — using fallback sync via Settings API"
+    Start-Process ms-settings:workplace
+  }
+  Write-Output "[DONE] Remediation completed."
+  exit 0
+} catch {
+  Write-Output "[ERROR] Remediation failed: $_"
+  exit 1
+}`
+}
+
+// ── Fleet Report Generator ────────────────────────────────────────────────────
+
+export interface FleetReportResult {
+  summary:         string
+  criticalFindings: string[]
+  recommendations: string[]
+  markdownReport:  string
+}
+
+export async function generateFleetReport(
+  devices: Device[],
+  ruleName: string,
+  matchedCount: number,
+): Promise<FleetReportResult> {
+  const nonCompliant = devices.filter(d => d.complianceState !== 'Compliant')
+  const critical     = devices.filter(d => d.severity === 'Critical')
+  const noEncrypt    = devices.filter(d => ['off', 'disabled'].includes((d.encryptionStatus ?? '').toLowerCase()))
+
+  if (!isOpenAIConfigured()) {
+    return generateFallbackFleetReport(devices, ruleName, matchedCount, nonCompliant, critical, noEncrypt)
+  }
+
+  const ai = getClient()
+
+  const prompt = `Generate a concise IT fleet compliance report in JSON.
+
+Rule triggered: "${ruleName}"
+Matched devices: ${matchedCount} of ${devices.length} total
+Non-compliant: ${nonCompliant.length}
+Critical severity: ${critical.length}
+Encryption off: ${noEncrypt.length}
+Platforms: ${[...new Set(devices.map(d => d.platform))].join(', ')}
+
+Top issues: ${nonCompliant.slice(0, 5).map(d => `${d.deviceName}: ${d.primaryIssue}`).join('; ')}
+
+Return JSON:
+{
+  "summary": "2-sentence executive summary",
+  "criticalFindings": ["finding 1", "finding 2", "finding 3"],
+  "recommendations": ["action 1", "action 2", "action 3"],
+  "markdownReport": "full markdown report with ## sections"
+}`
+
+  const response = await ai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_object' },
+    max_tokens: 700,
+    temperature: 0.2,
+  })
+
+  return JSON.parse(response.choices[0]?.message.content ?? '{}') as FleetReportResult
+}
+
+function generateFallbackFleetReport(
+  devices: Device[],
+  ruleName: string,
+  matchedCount: number,
+  nonCompliant: Device[],
+  critical: Device[],
+  noEncrypt: Device[],
+): FleetReportResult {
+  const summary = `Fleet scan triggered by "${ruleName}" matched ${matchedCount} device(s) across ${devices.length} total. ` +
+    `${nonCompliant.length} device(s) are non-compliant, ${critical.length} at critical severity.`
+
+  const criticalFindings: string[] = []
+  if (critical.length > 0) criticalFindings.push(`${critical.length} device(s) at Critical severity requiring immediate attention`)
+  if (noEncrypt.length > 0) criticalFindings.push(`${noEncrypt.length} device(s) with disk encryption disabled`)
+  if (nonCompliant.length > 0) criticalFindings.push(`${nonCompliant.length} non-compliant device(s): ${nonCompliant.slice(0, 3).map(d => d.deviceName).join(', ')}`)
+
+  const recommendations = [
+    'Review and remediate all Critical and High severity devices within 24 hours',
+    'Enable disk encryption enforcement in MDM for all affected devices',
+    'Force MDM sync on offline or non-reporting devices',
+  ]
+
+  const markdownReport = [
+    `## Fleet Compliance Report`,
+    `**Rule:** ${ruleName}`,
+    `**Scan time:** ${new Date().toISOString()}`,
+    '',
+    `### Summary`,
+    summary,
+    '',
+    `### Device Status`,
+    `| Metric | Count |`,
+    `|---|---|`,
+    `| Total devices | ${devices.length} |`,
+    `| Matched (rule fired) | ${matchedCount} |`,
+    `| Non-compliant | ${nonCompliant.length} |`,
+    `| Critical severity | ${critical.length} |`,
+    `| Encryption off | ${noEncrypt.length} |`,
+    '',
+    `### Top Issues`,
+    ...nonCompliant.slice(0, 5).map(d => `- **${d.deviceName}**: ${d.primaryIssue || 'Policy failure'} (${d.severity})`),
+    '',
+    `### Recommendations`,
+    ...recommendations.map(r => `1. ${r}`),
+  ].join('\n')
+
+  return { summary, criticalFindings, recommendations, markdownReport }
+}

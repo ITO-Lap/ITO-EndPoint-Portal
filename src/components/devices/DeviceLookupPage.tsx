@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown, Download,
   Laptop2, Monitor, Copy, RefreshCw, ExternalLink, Shield,
-  ShieldAlert, ShieldCheck, AlertTriangle, CheckCircle2, Clock,
+  ShieldAlert, AlertTriangle, CheckCircle2, Clock,
   Filter, ChevronLeft, ChevronRight, SlidersHorizontal, Lock, Unlock,
   Wifi, WifiOff, Bug, Zap, FileWarning, Activity, Eye,
   BarChart3, FileText,

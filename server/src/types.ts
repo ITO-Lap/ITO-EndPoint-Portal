@@ -3,7 +3,7 @@ export interface Device {
   deviceName: string
   user: string
   serialNumber: string
-  platform: 'Windows' | 'macOS' | 'Linux'
+  platform: 'Windows' | 'macOS' | 'Linux' | 'Android' | 'iOS'
   osVersion: string
   managementSource: 'Microsoft Intune' | 'Kandji' | 'ManageEngine'
   lastCheckIn: string
@@ -136,4 +136,84 @@ export interface ApiResponse<T> {
   success: boolean
   data?: T
   error?: string
+}
+
+// ── Automation Engine ─────────────────────────────────────────────────────────
+
+export type AutomationCategory = 'compliance' | 'security' | 'patching' | 'reporting' | 'drift'
+
+export type AutomationTriggerType =
+  | 'device_non_compliant'
+  | 'compliance_threshold'
+  | 'device_offline'
+  | 'new_enrollment'
+  | 'scheduled'
+  | 'risky_signin'
+  | 'drift_detected'
+  | 'encryption_off'
+  | 'script_failure'
+
+export type AutomationActionType =
+  | 'slack_notify'
+  | 'create_jira'
+  | 'execute_runbook'
+  | 'execute_script'
+  | 'generate_report'
+  | 'send_notification'
+
+export interface AutomationRule {
+  id: string
+  name: string
+  description: string
+  category: AutomationCategory
+  enabled: boolean
+  trigger: {
+    type: AutomationTriggerType
+    config: Record<string, string | number | boolean>
+  }
+  conditions: {
+    platform: 'Windows' | 'macOS' | 'Linux' | 'all'
+    source: 'intune' | 'kandji' | 'manageengine' | 'all'
+    severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'all'
+    complianceState: 'Non-Compliant' | 'Warning' | 'all'
+  }
+  actions: Array<{
+    type: AutomationActionType
+    label: string
+    config: Record<string, string>
+  }>
+  lastTriggered?: string
+  triggerCount: number
+  createdAt: string
+  createdBy: string
+}
+
+export interface AutomationExecution {
+  id: string
+  ruleId: string
+  ruleName: string
+  category: AutomationCategory
+  triggeredAt: string
+  deviceId?: string
+  deviceName?: string
+  triggerReason: string
+  status: 'success' | 'failed' | 'partial'
+  actionsExecuted: Array<{
+    type: AutomationActionType
+    label: string
+    status: 'success' | 'failed'
+    result: string
+    detail?: {
+      runbookSteps?:   string[]
+      script?:         string
+      jiraKey?:        string
+      jiraUrl?:        string
+      slackTs?:        string
+      slackChannel?:   string
+      reportMarkdown?: string
+      reportSummary?:  string
+    }
+  }>
+  durationMs: number
+  matchedDeviceCount?: number
 }

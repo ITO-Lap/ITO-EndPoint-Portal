@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import {
   Eye, EyeOff, Mail, Lock, ArrowRight,
   ShieldCheck, Laptop2, Zap, CheckCircle2, AlertCircle,
-  Layers, LifeBuoy, Users,
+  Layers, Users,
 } from 'lucide-react'
+import { ZinniaVertical, ZinniaHorizontal, ZinniaIcon } from '../ui/ZinniaLogo'
 
 // ─── Demo accounts ────────────────────────────────────────────────────────────
 
@@ -12,7 +13,7 @@ const DEMO_ACCOUNTS = [
     role: 'Global Admin',
     email: 'admin@zinnia.com',
     password: 'demo1234',
-    badge: 'bg-orange-100 text-orange-700 border-orange-200',
+    badge: 'bg-orange-50 text-[#F46C00] border-orange-200',
     icon: Layers,
     desc: 'Full access',
   },
@@ -20,7 +21,7 @@ const DEMO_ACCOUNTS = [
     role: 'IT Admin',
     email: 'itadmin@zinnia.com',
     password: 'demo1234',
-    badge: 'bg-lime-100 text-lime-700 border-lime-200',
+    badge: 'bg-lime-50 text-lime-700 border-lime-200',
     icon: ShieldCheck,
     desc: 'Operational access',
   },
@@ -28,49 +29,52 @@ const DEMO_ACCOUNTS = [
     role: 'Helpdesk',
     email: 'helpdesk@zinnia.com',
     password: 'demo1234',
-    badge: 'bg-slate-100 text-slate-600 border-slate-200',
+    badge: 'bg-slate-50 text-slate-600 border-slate-200',
     icon: Users,
     desc: 'Read-only + sync',
   },
 ]
 
-// ─── Left panel — brand + feature showcase ────────────────────────────────────
+// ─── Zinnia logo mark ─────────────────────────────────────────────────────────
+
+// Local alias kept for backward compat within this file — delegates to shared component
+function LocalZinniaIcon({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const cls = size === 'sm' ? 'h-8 w-auto' : size === 'lg' ? 'h-16 w-auto' : 'h-12 w-auto'
+  return <ZinniaIcon className={cls} />
+}
+
+// ─── Left panel — Zinnia brand showcase ───────────────────────────────────────
 
 function BrandPanel() {
   const features = [
-    { icon: Laptop2,     label: 'Unified device visibility',    desc: 'All endpoints across Intune, Kandji & ManageEngine in one view.' },
-    { icon: ShieldCheck, label: 'Real-time compliance',         desc: 'Policy failures detected and surfaced the moment they occur.' },
-    { icon: Zap,         label: 'AI-powered remediation',       desc: 'Intelligent runbooks that auto-resolve issues before they escalate.' },
+    { icon: Laptop2,     label: 'Unified device visibility',  desc: 'All endpoints across Intune, Kandji & ManageEngine in one view.' },
+    { icon: ShieldCheck, label: 'Real-time compliance',       desc: 'Policy failures detected and surfaced the moment they occur.' },
+    { icon: Zap,         label: 'AI-powered remediation',     desc: 'Intelligent runbooks that auto-resolve issues before they escalate.' },
   ]
 
   return (
     <div className="relative flex flex-col justify-between h-full px-10 py-10 overflow-hidden select-none">
-      {/* Background decoration */}
-      <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full bg-orange-500/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-red-600/10 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full border border-white/5" />
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[340px] w-[340px] rounded-full border border-white/5" />
+      {/* Decorative blobs */}
+      <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full blur-3xl" style={{ background: 'rgba(244,108,0,0.12)' }} />
+      <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full blur-3xl" style={{ background: 'rgba(251,71,31,0.10)' }} />
+      <div className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[480px] w-[480px] rounded-full border border-white/5" />
+      <div className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[320px] w-[320px] rounded-full border border-white/5" />
 
-      {/* Logo */}
-      <div className="relative flex items-center gap-3">
-        <div className="grid h-14 w-10 place-items-center flex-shrink-0">
-          <svg viewBox="0 0 115 160" className="h-full w-auto" fill="none">
-            <path d="M62 11C88 11 104 35 104 59C104 91 80 119 62 125C44 119 20 91 20 59C20 35 36 11 62 11Z" stroke="#E02020" strokeWidth="8" strokeLinejoin="round"/>
-            <path d="M71 35C93 35 108 55 108 75C108 101 88 125 71 131C54 125 36 101 36 75C36 55 49 35 71 35Z" stroke="#F07820" strokeWidth="7" strokeLinejoin="round"/>
-            <path d="M66 103C81 103 96 115 96 131C96 147 81 155 66 155C51 155 36 147 36 131C36 115 51 103 66 103Z" stroke="#F5C500" strokeWidth="6.5" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div>
-          <p className="text-sm font-bold text-white leading-tight tracking-tight">ITO Endpoint</p>
-          <p className="text-[0.62rem] text-orange-300/80 mt-0.5">Smart. Fast. Reliable.</p>
-        </div>
+      {/* Zinnia official logo — horizontal lockup */}
+      <div className="relative">
+        <ZinniaHorizontal iconSize="lg" wordmarkSize="xl" subtitle="ITO Endpoint" gap="gap-4" />
       </div>
 
       {/* Hero text */}
-      <div className="relative space-y-4">
-        <h1 className="text-[1.65rem] font-bold text-white leading-snug tracking-tight">
+      <div className="relative space-y-5">
+        <h1 className="text-[1.75rem] font-black leading-snug tracking-tight" style={{ color: '#0F172A' }}>
           Your AI-powered<br />
-          <span className="text-orange-300">endpoint control</span><br />
+          <span
+            className="bg-clip-text text-transparent"
+            style={{ backgroundImage: 'linear-gradient(90deg, #FFC600 0%, #F46C00 60%, #FB471F 100%)' }}
+          >
+            endpoint control
+          </span><br />
           center.
         </h1>
         <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
@@ -78,14 +82,17 @@ function BrandPanel() {
         </p>
 
         {/* Feature list */}
-        <div className="mt-6 space-y-3">
+        <div className="mt-2 space-y-3.5">
           {features.map(f => (
-            <div key={f.label} className="flex items-start gap-3">
-              <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-white/10">
-                <f.icon className="h-3.5 w-3.5 text-orange-300" />
+            <div key={f.label} className="flex items-start gap-3.5">
+              <div
+                className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl"
+                style={{ background: 'rgba(244,108,0,0.15)', border: '1px solid rgba(244,108,0,0.25)' }}
+              >
+                <f.icon className="h-3.5 w-3.5" style={{ color: '#F46C00' }} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-white leading-tight">{f.label}</p>
+                <p className="text-xs font-semibold text-slate-700 leading-tight">{f.label}</p>
                 <p className="text-[0.65rem] text-slate-400 mt-0.5 leading-snug">{f.desc}</p>
               </div>
             </div>
@@ -95,24 +102,32 @@ function BrandPanel() {
 
       {/* Stats strip */}
       <div className="relative">
-        <div className="grid grid-cols-3 gap-2 mb-6">
+        <div className="grid grid-cols-3 gap-2.5 mb-5">
           {[
-            { value: '12,842', label: 'Devices managed' },
-            { value: '99.7%',  label: 'Platform uptime' },
-            { value: '3',      label: 'Sources connected' },
+            { value: '12,842', label: 'Devices managed',   color: '#E8172D' },
+            { value: '99.7%',  label: 'Platform uptime',   color: '#F46C00' },
+            { value: '3',      label: 'Sources connected',  color: '#FFB800' },
           ].map(s => (
-            <div key={s.label} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-center">
-              <p className="text-base font-bold text-white leading-tight">{s.value}</p>
+            <div
+              key={s.label}
+              className="rounded-2xl px-3 py-3 text-center water-glow-sm"
+              style={{ background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(255,255,255,0.80)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.90)' }}
+            >
+              <p className="text-base font-black leading-tight" style={{ color: s.color }}>{s.value}</p>
               <p className="text-[0.58rem] text-slate-400 mt-0.5 leading-tight">{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* Integration logos row */}
-        <div className="flex items-center gap-2">
-          <p className="text-[0.6rem] text-slate-500 mr-1 flex-shrink-0">Integrated with</p>
-          {['Microsoft Intune', 'Kandji', 'ManageEngine', 'OpenAI'].map(name => (
-            <span key={name} className="rounded-md bg-white/8 border border-white/10 px-2 py-0.5 text-[0.58rem] font-medium text-slate-400">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[0.6rem] text-slate-400 mr-1 flex-shrink-0">Integrated with</p>
+          {['Microsoft Intune', 'Kandji', 'ManageEngine'].map(name => (
+            <span
+              key={name}
+              className="rounded-full px-2.5 py-0.5 text-[0.58rem] font-semibold water-glow-sm"
+              style={{ background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(148,163,184,0.25)', color: '#64748B' }}
+            >
               {name}
             </span>
           ))}
@@ -155,14 +170,14 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
         </div>
         <p className="text-center text-[0.68rem] text-slate-500">
           Didn't receive it? Check your spam folder or{' '}
-          <button type="button" onClick={() => setSent(false)} className="text-orange-600 font-semibold hover:underline">
+          <button type="button" onClick={() => setSent(false)} className="font-semibold hover:underline" style={{ color: '#F46C00' }}>
             try again
           </button>
         </p>
         <button
           type="button"
           onClick={onBack}
-          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-orange-300"
+          className="w-full rounded-full border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
         >
           ← Back to sign in
         </button>
@@ -178,16 +193,19 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-slate-700 mb-1.5">Work email</label>
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Work email</label>
         <div className="relative">
-          <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="you@company.com"
             autoFocus
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 transition focus:bg-white focus:outline-none"
+            style={{ '--tw-ring-color': '#F46C00' } as React.CSSProperties}
+            onFocus={e => { e.currentTarget.style.borderColor = '#F46C00'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(244,108,0,0.12)' }}
+            onBlur={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = '' }}
           />
         </div>
       </div>
@@ -195,20 +213,42 @@ function ForgotPassword({ onBack }: { onBack: () => void }) {
       <button
         type="submit"
         disabled={loading || !email}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-700 active:bg-orange-800 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full inline-flex items-center justify-center gap-2 rounded-full py-2.5 text-sm font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' }}
       >
         {loading && <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
         {loading ? 'Sending…' : 'Send reset link'}
       </button>
 
-      <button
-        type="button"
-        onClick={onBack}
-        className="w-full text-center text-xs text-slate-500 hover:text-slate-700 transition"
-      >
+      <button type="button" onClick={onBack} className="w-full text-center text-xs text-slate-500 hover:text-slate-700 transition">
         ← Back to sign in
       </button>
     </form>
+  )
+}
+
+// ─── Input helper ─────────────────────────────────────────────────────────────
+
+function FormInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = '#F46C00'
+    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(244,108,0,0.12)'
+    e.currentTarget.style.background = 'white'
+    props.onFocus?.(e)
+  }
+  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = ''
+    e.currentTarget.style.boxShadow = ''
+    e.currentTarget.style.background = ''
+    props.onBlur?.(e)
+  }
+  return (
+    <input
+      {...props}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none ${props.className ?? ''}`}
+    />
   )
 }
 
@@ -220,16 +260,15 @@ interface SignInPageProps {
 }
 
 export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps) {
-  const [email, setEmail]             = useState('')
-  const [password, setPassword]       = useState('')
+  const [email, setEmail]               = useState('')
+  const [password, setPassword]         = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe]   = useState(false)
-  const [loading, setLoading]         = useState(false)
-  const [error, setError]             = useState('')
-  const [showForgot, setShowForgot]   = useState(false)
+  const [rememberMe, setRememberMe]     = useState(false)
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState('')
+  const [showForgot, setShowForgot]     = useState(false)
   const [signedOutBanner, setSignedOutBanner] = useState(justSignedOut)
 
-  // Auto-dismiss the "signed out" banner after 4 seconds
   useEffect(() => {
     if (!signedOutBanner) return
     const t = setTimeout(() => setSignedOutBanner(false), 4000)
@@ -239,16 +278,13 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
   const doSignIn = async (overrideEmail?: string, overridePassword?: string) => {
     const e = overrideEmail   ?? email
     const p = overridePassword ?? password
-
     if (!e.trim()) { setError('Please enter your email address'); return }
     if (!p)        { setError('Please enter your password');       return }
     if (!e.includes('@')) { setError('Please enter a valid email address'); return }
-
     setError('')
     setLoading(true)
     await new Promise(r => setTimeout(r, 1100))
     setLoading(false)
-
     const demo = DEMO_ACCOUNTS.find(d => d.email === e)
     onSignIn(demo?.role ?? 'Global Admin')
   }
@@ -279,44 +315,45 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
   return (
     <div className="min-h-screen w-full flex">
 
-      {/* ── Left: brand panel ── */}
-      <div className="hidden lg:flex lg:w-[48%] xl:w-[45%] flex-shrink-0 bg-gradient-to-br from-[#141408] via-[#0f0f05] to-[#0a0a03] border-r border-white/5">
+      {/* ── Left: Zinnia brand panel ── */}
+      <div className="hidden lg:flex lg:w-[48%] xl:w-[45%] flex-shrink-0 glass-bg"
+        style={{ borderRight: '1px solid rgba(148,163,184,0.15)' }}>
         <BrandPanel />
       </div>
 
       {/* ── Right: form panel ── */}
-      <div className="flex flex-1 flex-col items-center justify-center bg-[#faf9f0] px-6 py-10 min-h-screen">
+      <div className="flex flex-1 flex-col items-center justify-center glass-bg px-6 py-10 min-h-screen">
 
-        {/* Mobile logo (visible only when left panel is hidden) */}
-        <div className="lg:hidden flex items-center gap-2.5 mb-8">
-          <div className="grid h-11 w-8 place-items-center flex-shrink-0">
-            <svg viewBox="0 0 115 160" className="h-full w-auto" fill="none">
-              <path d="M62 11C88 11 104 35 104 59C104 91 80 119 62 125C44 119 20 91 20 59C20 35 36 11 62 11Z" stroke="#E02020" strokeWidth="8" strokeLinejoin="round"/>
-              <path d="M71 35C93 35 108 55 108 75C108 101 88 125 71 131C54 125 36 101 36 75C36 55 49 35 71 35Z" stroke="#F07820" strokeWidth="7" strokeLinejoin="round"/>
-              <path d="M66 103C81 103 96 115 96 131C96 147 81 155 66 155C51 155 36 147 36 131C36 115 51 103 66 103Z" stroke="#F5C500" strokeWidth="6.5" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">ITO Endpoint</p>
-            <p className="text-[0.62rem] text-slate-500">Smart. Fast. Reliable.</p>
-          </div>
+        {/* Mobile logo — Zinnia official logo */}
+        <div className="lg:hidden mb-8">
+          <ZinniaHorizontal iconSize="sm" wordmarkSize="sm" subtitle="ITO Endpoint" />
         </div>
 
         <div className="w-full max-w-[420px]">
 
           {/* Signed-out banner */}
           {signedOutBanner && (
-            <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="mb-5 flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
               <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" />
               <p className="text-xs font-medium text-emerald-800">You've been signed out successfully.</p>
             </div>
           )}
 
-          {/* Card */}
-          <div className="rounded-[22px] border border-slate-200 bg-white shadow-xl shadow-slate-900/8 overflow-hidden">
+          {/* Sign-in card */}
+          <div className="rounded-3xl overflow-hidden glass-strong" style={{ boxShadow: '0 24px 80px rgba(14,165,233,0.12), 0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,1)' }}>
 
-            {/* Card header band */}
-            <div className="h-1 bg-gradient-to-r from-orange-500 via-orange-500 to-lime-500" />
+            {/* Zinnia gradient card header */}
+            <div
+              className="px-7 py-5"
+              style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(240,249,255,0.90) 100%)', borderBottom: '1px solid rgba(148,163,184,0.15)' }}
+            >
+              {/* Zinnia official logo in card header */}
+              <ZinniaHorizontal iconSize="sm" wordmarkSize="sm" subtitle="ITO Endpoint" />
+              <div
+                className="mt-4 h-[3px] w-20 rounded-full"
+                style={{ background: 'linear-gradient(90deg, #E8172D 0%, #F46C00 50%, #FFB800 100%)' }}
+              />
+            </div>
 
             <div className="px-7 py-7">
               {showForgot ? (
@@ -325,13 +362,13 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                 <form onSubmit={handleSubmit} noValidate className="space-y-5">
                   {/* Heading */}
                   <div className="mb-1">
-                    <h2 className="text-xl font-bold text-slate-900 leading-tight">Welcome back</h2>
+                    <h2 className="text-xl font-black text-slate-900 leading-tight">Welcome back</h2>
                     <p className="text-xs text-slate-500 mt-1">Sign in to your ITO Endpoint account</p>
                   </div>
 
                   {/* Error */}
                   {error && (
-                    <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5">
+                    <div className="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5">
                       <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500" />
                       <p className="text-xs text-red-700 font-medium">{error}</p>
                     </div>
@@ -339,18 +376,16 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
 
                   {/* Email */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                      Work email
-                    </label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Work email</label>
                     <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <input
+                      <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10" />
+                      <FormInput
                         type="email"
                         value={email}
                         onChange={e => { setEmail(e.target.value); setError('') }}
                         placeholder="you@company.com"
                         autoComplete="email"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
+                        className="pl-10 pr-4"
                       />
                     </div>
                   </div>
@@ -362,26 +397,27 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                       <button
                         type="button"
                         onClick={() => setShowForgot(true)}
-                        className="text-[0.68rem] text-orange-600 font-medium hover:text-orange-700 hover:underline focus-visible:ring-1 focus-visible:ring-orange-300 rounded transition"
+                        className="text-[0.68rem] font-semibold hover:underline transition rounded"
+                        style={{ color: '#F46C00' }}
                       >
                         Forgot password?
                       </button>
                     </div>
                     <div className="relative">
-                      <Lock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <input
+                      <Lock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10" />
+                      <FormInput
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={e => { setPassword(e.target.value); setError('') }}
                         placeholder="Enter your password"
                         autoComplete="current-password"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
+                        className="pl-10 pr-10"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(v => !v)}
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 transition focus-visible:ring-1 focus-visible:ring-orange-300"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 transition"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -392,11 +428,10 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <div
                       onClick={() => setRememberMe(v => !v)}
-                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition ${
-                        rememberMe
-                          ? 'border-orange-500 bg-orange-500'
-                          : 'border-slate-300 bg-white hover:border-orange-400'
-                      }`}
+                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition`}
+                      style={rememberMe
+                        ? { borderColor: '#F46C00', background: '#F46C00' }
+                        : { borderColor: '#cbd5e1', background: 'white' }}
                     >
                       {rememberMe && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
                     </div>
@@ -407,7 +442,10 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white shadow-md shadow-orange-700/25 transition hover:bg-orange-700 active:bg-orange-800 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-full py-3 text-sm font-bold text-white transition disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)', boxShadow: '0 4px 14px rgba(244,108,0,0.3)' }}
+                    onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.92' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
                   >
                     {loading ? (
                       <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -432,9 +470,8 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                     type="button"
                     onClick={handleSSO}
                     disabled={loading}
-                    className="w-full inline-flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50"
+                    className="w-full inline-flex items-center justify-center gap-3 rounded-full border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
                   >
-                    {/* Microsoft logo mark */}
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                       <rect x="1"  y="1"  width="7.5" height="7.5" fill="#F25022" rx="0.5" />
                       <rect x="9.5" y="1"  width="7.5" height="7.5" fill="#7FBA00" rx="0.5" />
@@ -451,7 +488,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
           {/* Demo accounts */}
           {!showForgot && (
             <div className="mt-5">
-              <p className="text-center text-[0.68rem] font-semibold uppercase tracking-wider text-slate-400 mb-3">
+              <p className="text-center text-[0.68rem] font-bold uppercase tracking-widest text-slate-400 mb-3">
                 Try a demo account
               </p>
               <div className="grid grid-cols-3 gap-2">
@@ -463,7 +500,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
                       type="button"
                       onClick={() => handleDemoLogin(acct)}
                       disabled={loading}
-                      className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-center transition focus-visible:ring-2 focus-visible:ring-orange-300 hover:shadow-sm disabled:opacity-50 ${acct.badge} hover:brightness-95`}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl border px-3 py-3 text-center transition hover:shadow-md disabled:opacity-50 ${acct.badge} hover:brightness-95`}
                     >
                       <Icon className="h-4 w-4 flex-shrink-0" />
                       <p className="text-[0.68rem] font-bold leading-tight">{acct.role}</p>
@@ -474,7 +511,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
               </div>
               <p className="text-center text-[0.62rem] text-slate-400 mt-2.5">
                 Demo accounts use password{' '}
-                <code className="font-mono bg-slate-100 rounded px-1 py-0.5 text-slate-600">demo1234</code>
+                <code className="font-mono bg-slate-100 rounded-full px-1.5 py-0.5 text-slate-600">demo1234</code>
               </p>
             </div>
           )}
@@ -488,7 +525,7 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
               <span>·</span>
               <a href="#" className="hover:text-slate-600 transition" onClick={e => e.preventDefault()}>Support</a>
             </div>
-            <p>© 2026 ITO Endpoint · Zinnia Technologies</p>
+            <p>© 2026 Zinnia Technologies · ITO Endpoint</p>
           </div>
 
         </div>

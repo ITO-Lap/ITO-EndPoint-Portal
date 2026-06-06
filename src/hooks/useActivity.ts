@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api'
 import type { ActivityItem } from '../types'
 
-const REFRESH_INTERVAL = 60_000 // ms
+const REFRESH_INTERVAL = 10_000 // ms (real-time)
 
 function formatTime(ts: string): string {
   const d = new Date(ts)

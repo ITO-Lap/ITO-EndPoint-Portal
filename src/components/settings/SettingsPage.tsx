@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
-  Building2, Globe, Bell, Lock, ShieldCheck, AlertTriangle, Zap,
+  Building2, Bell, Lock, ShieldCheck, AlertTriangle, Zap,
   Database, Server, Cloud, Cpu, Settings, RefreshCw, Plug,
   Download, Trash2, Plus, Link2, Copy, Check,
-  Eye, EyeOff, WifiOff, Mail, Hash, LifeBuoy, FileText,
+  Eye, EyeOff, WifiOff, Hash, LifeBuoy, FileText,
   ShieldAlert, RotateCcw, Info, Users, CheckCircle2, XCircle,
   MinusCircle, UserPlus, BookOpen,
   ChevronDown, ChevronRight, X, Key, Wifi, Edit2, Upload,
@@ -338,7 +338,7 @@ const INTEG_DEFS: IntegDef[] = [
     categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
     description: 'Windows & mobile device management via Microsoft Endpoint Manager',
     docsHint: 'Requires an Azure App Registration with DeviceManagementApps.Read.All permission. Found in Azure Portal → App registrations → Certificates & secrets.',
-    defaultInterval: '15',
+    defaultInterval: 'realtime',
     defaultDevices: '9,841',
     defaultLastSync: '2 min ago',
     fields: [
@@ -364,7 +364,7 @@ const INTEG_DEFS: IntegDef[] = [
     categoryColor: 'text-lime-700 bg-lime-50 border-lime-200',
     description: 'Azure Active Directory identity platform — sign-in logs, MFA registration, risky sign-ins, directory audits, and user lifecycle events',
     docsHint: 'Azure Portal → App registrations → your app → API permissions. Add: AuditLog.Read.All, Directory.Read.All, IdentityRiskyUser.Read.All, Reports.Read.All. If Intune credentials are set with these permissions, Entra ID is auto-configured.',
-    defaultInterval: '60',
+    defaultInterval: 'realtime',
     defaultDevices: 'N/A',
     defaultLastSync: 'On demand',
     fields: [
@@ -388,7 +388,7 @@ const INTEG_DEFS: IntegDef[] = [
     categoryColor: 'text-lime-700 bg-lime-50 border-lime-200',
     description: 'Apple device management — automated compliance & zero-touch Mac, iPhone, and iPad enrollment',
     docsHint: 'Kandji → Settings → Access → API Token. Select Device Read as the minimum scope required.',
-    defaultInterval: '30',
+    defaultInterval: 'realtime',
     defaultDevices: '2,361',
     defaultLastSync: '8 min ago',
     fields: [
@@ -410,7 +410,7 @@ const INTEG_DEFS: IntegDef[] = [
     categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
     description: 'On-premise endpoint & patch management for legacy Windows and Linux systems',
     docsHint: 'Admin Console → Admin → API Configuration → Generate API Key. Server must be reachable from this host.',
-    defaultInterval: '60',
+    defaultInterval: 'realtime',
     defaultDevices: '640',
     defaultLastSync: '15 min ago',
     fields: [
@@ -422,30 +422,6 @@ const INTEG_DEFS: IntegDef[] = [
       apiKey:    '',
       serverUrl: '',
       port:      '8443',
-    },
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    icon: Cpu,
-    iconBg: 'bg-emerald-100',
-    iconColor: 'text-emerald-600',
-    category: 'AI',
-    categoryColor: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-    description: 'GPT-4o powers the AI Copilot — device diagnostics, runbook generation & natural language search',
-    docsHint: 'Create a Project API key at platform.openai.com → API Keys. A paid tier is required for production use.',
-    defaultInterval: 'realtime',
-    defaultDevices: 'N/A',
-    defaultLastSync: 'Real-time',
-    fields: [
-      { key: 'apiKey', label: 'API Key',         hint: 'platform.openai.com → API Keys',        placeholder: 'sk-proj-…',                         secret: true  },
-      { key: 'orgId',  label: 'Organization ID', hint: 'Optional — scopes usage to your org',   placeholder: 'org-xxxxxxxxxxxxxxxxxxxxxxxx',       secret: false },
-      { key: 'model',  label: 'Default Model',   hint: 'Model used for all copilot responses',  placeholder: 'gpt-4o',                            secret: false },
-    ],
-    defaults: {
-      apiKey: '',
-      orgId:  '',
-      model:  'gpt-4o',
     },
   },
   {
@@ -566,7 +542,6 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
     case 'entra':        return `Tenant: ${(f['tenantId']?.value || '').slice(0, 8) || 'not set'}…`
     case 'kandji':       return `${f['subdomain']?.value || 'zinnia'}.kandji.io`
     case 'manageengine': return f['serverUrl']?.value || 'me.zinnia.internal'
-    case 'openai':       return `${f['model']?.value || 'gpt-4o'} · Real-time`
     case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : 'auditlogs:read · channels:read'
     default:             return ''
   }
@@ -727,6 +702,154 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
   )
 }
 
+// ── Slack Health Panel ────────────────────────────────────────────────────────
+
+type SlackHealth = {
+  configured: boolean
+  healthy: boolean | null
+  lastCheckedAt: number | null
+  lastSuccessAt: number | null
+  consecutiveFails: number
+  error: string | null
+  workspace: string | null
+  autoRetryCount: number
+  nextCheckInMs: number | null
+}
+
+function SlackHealthPanel() {
+  const { notify } = useToast()
+  const [health, setHealth] = useState<SlackHealth | null>(null)
+  const [reconnecting, setReconnecting] = useState(false)
+
+  const fetchHealth = useCallback(async () => {
+    try {
+      const data = await api.slackHealth()
+      setHealth(data)
+    } catch {
+      // silently ignore — panel will just stay stale
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchHealth()
+    const t = setInterval(fetchHealth, 30_000)
+    return () => clearInterval(t)
+  }, [fetchHealth])
+
+  const handleReconnect = async () => {
+    setReconnecting(true)
+    try {
+      const result = await api.reconnectSlack()
+      if (result.reconnected) {
+        notify('success', 'Slack Reconnected', `Connected to workspace ${result.workspace ?? ''}`)
+      } else {
+        notify('error', 'Reconnection Failed', result.error ?? 'Slack API unreachable — check your Bot Token')
+      }
+      await fetchHealth()
+    } catch (err) {
+      notify('error', 'Reconnection Failed', err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setReconnecting(false)
+    }
+  }
+
+  if (!health?.configured) return null
+
+  const timeAgo = (ts: number | null) => {
+    if (!ts) return 'Never'
+    const s = Math.floor((Date.now() - ts) / 1000)
+    if (s < 60) return `${s}s ago`
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`
+    return `${Math.floor(s / 3600)}h ago`
+  }
+
+  const isHealthy   = health.healthy === true
+  const isUnhealthy = health.healthy === false
+  const isDegraded  = isUnhealthy && health.consecutiveFails >= 2
+
+  return (
+    <div className={`border-t px-5 py-3 ${isUnhealthy ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Health indicator */}
+          <div className="flex items-center gap-2">
+            {isHealthy ? (
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            ) : isUnhealthy ? (
+              <span className="h-2 w-2 rounded-full bg-red-500" />
+            ) : (
+              <span className="h-2 w-2 rounded-full bg-slate-300" />
+            )}
+            <span className={`text-[0.72rem] font-bold ${isHealthy ? 'text-emerald-700' : isUnhealthy ? 'text-red-700' : 'text-slate-500'}`}>
+              {isHealthy ? 'Connected' : isUnhealthy ? (isDegraded ? 'Degraded' : 'Disconnected') : 'Checking…'}
+            </span>
+            {health.workspace && (
+              <span className="text-[0.68rem] text-slate-500">· {health.workspace}</span>
+            )}
+          </div>
+
+          {/* Last check */}
+          <div className="text-[0.65rem] text-slate-500 flex items-center gap-1">
+            <span className="uppercase tracking-wide font-semibold text-slate-400">Last check</span>
+            <span>{timeAgo(health.lastCheckedAt)}</span>
+          </div>
+
+          {/* Monitor cadence */}
+          <div className="text-[0.65rem] text-slate-500 flex items-center gap-1">
+            <span className="uppercase tracking-wide font-semibold text-slate-400">Auto-monitor</span>
+            <span className="text-emerald-600 font-semibold">Every 5 min</span>
+          </div>
+
+          {/* Consecutive failures */}
+          {isUnhealthy && health.consecutiveFails > 0 && (
+            <div className="flex items-center gap-1.5 rounded-full bg-red-100 border border-red-200 px-2 py-0.5">
+              <AlertTriangle className="h-3 w-3 text-red-500" />
+              <span className="text-[0.65rem] font-semibold text-red-700">
+                {health.consecutiveFails} consecutive failure{health.consecutiveFails > 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Error message */}
+          {health.error && (
+            <span className="text-[0.65rem] text-red-600 max-w-[280px] truncate" title={health.error}>
+              {health.error}
+            </span>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchHealth}
+            className="inline-flex items-center gap-1 h-7 rounded-full border border-slate-200 bg-white px-2.5 text-[0.68rem] font-semibold text-slate-600 hover:bg-slate-50 transition"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Refresh
+          </button>
+
+          {isUnhealthy && (
+            <button
+              type="button"
+              onClick={handleReconnect}
+              disabled={reconnecting}
+              className="inline-flex items-center gap-1.5 h-7 rounded-full bg-[#F46C00] px-3 text-[0.68rem] font-bold text-white transition hover:bg-[#e06200] disabled:opacity-60"
+            >
+              {reconnecting ? (
+                <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              ) : (
+                <Wifi className="h-3 w-3" />
+              )}
+              {reconnecting ? 'Reconnecting…' : 'Reconnect Now'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Integration Card ──────────────────────────────────────────────────────────
 
 function IntegrationCard({ def, state, onUpdate, liveStatus }: {
@@ -760,7 +883,10 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
       if (result.error) {
         notify('error', 'Sync Failed', result.error)
       } else {
-        notify('success', 'Sync Complete', `${def.name} synced ${result.deviceCount.toLocaleString()} devices in ${(result.latencyMs / 1000).toFixed(1)}s`)
+        const msg = result.deviceCount > 0
+          ? `${def.name} synced ${result.deviceCount.toLocaleString()} devices in ${(result.latencyMs / 1000).toFixed(1)}s`
+          : `${def.name} connected successfully in ${(result.latencyMs / 1000).toFixed(1)}s`
+        notify('success', 'Sync Complete', msg)
       }
     } catch (err) {
       onUpdate(s => ({ ...s, syncing: false }))
@@ -802,15 +928,18 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
   const handleTest = async () => {
     onUpdate(s => ({ ...s, testStatus: 'testing', testMessage: '', testLatency: 0 }))
     const t0 = Date.now()
-    await new Promise(r => setTimeout(r, 1000 + Math.random() * 700))
-    const latency = Date.now() - t0
-    const secretField = def.fields.find(f => f.secret)
-    const secretValue = secretField ? state.fields[secretField.key]?.value ?? '' : ''
-    const keyIsReal = secretValue.length > 10 && !secretValue.includes('placeholder') && !secretValue.includes('replace')
-    if (keyIsReal) {
-      onUpdate(s => ({ ...s, testStatus: 'ok', testMessage: '200 OK · Connection verified', testLatency: latency }))
-    } else {
-      onUpdate(s => ({ ...s, testStatus: 'error', testMessage: '401 Unauthorized — enter a real API key and test again', testLatency: latency }))
+    try {
+      const result = await api.syncIntegration(def.id)
+      const latency = Date.now() - t0
+      if (result.error) {
+        onUpdate(s => ({ ...s, testStatus: 'error', testMessage: result.error ?? 'Connection failed', testLatency: latency }))
+      } else {
+        onUpdate(s => ({ ...s, testStatus: 'ok', testMessage: `200 OK · Connected in ${result.latencyMs}ms`, testLatency: latency }))
+      }
+    } catch (err) {
+      const latency = Date.now() - t0
+      const msg = err instanceof Error ? err.message : 'Connection failed'
+      onUpdate(s => ({ ...s, testStatus: 'error', testMessage: msg, testLatency: latency }))
     }
   }
 
@@ -948,6 +1077,9 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
         </div>
       </div>
 
+      {/* ── Slack auto-reconnect health panel ───────────────────────────── */}
+      {def.id === 'slack' && <SlackHealthPanel />}
+
       {/* ── Expandable config panel ──────────────────────────────────────── */}
       {state.expanded && (
         <div className="border-t border-slate-100 px-5 py-5 space-y-6">
@@ -1057,9 +1189,8 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
           </div>
 
           {/* Push to Server */}
-          {def.id !== 'openai' && (
-            <div>
-              <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Server Activation</p>
+          <div>
+            <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Server Activation</p>
               <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="min-w-0 flex-1">
@@ -1097,8 +1228,6 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                 </div>
               </div>
             </div>
-          )}
-
           {/* Connection Test */}
           <div>
             <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest mb-2">Connection Test</p>
@@ -1669,9 +1798,14 @@ function NotificationsSection() {
 
   const handleTestSlack = async () => {
     setTestingSlack(true)
-    await new Promise(r => setTimeout(r, 1200))
-    setTestingSlack(false)
-    notify('success', 'Test Sent', 'Test message delivered to Slack')
+    try {
+      await api.testSlackConnection()
+      notify('success', 'Slack Connected', 'Bot token verified — workspace reachable')
+    } catch (err) {
+      notify('error', 'Slack Test Failed', err instanceof Error ? err.message : 'Check your Bot Token in Integrations → Slack.')
+    } finally {
+      setTestingSlack(false)
+    }
   }
 
   const handleSave = async () => {
@@ -1997,14 +2131,15 @@ function DangerSection() {
       <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3">
         <LifeBuoy className="h-4 w-4 text-orange-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-600">
-          Need help before taking action?{' '}
-          <button
-            type="button"
-            onClick={() => notify('info', 'Support', 'Opening support portal — coming soon')}
+          Need help?{' '}
+          <a
+            href="https://github.com/anthropics/claude-code/issues"
+            target="_blank"
+            rel="noreferrer"
             className="text-orange-600 font-semibold hover:underline focus-visible:ring-1 focus-visible:ring-orange-300 rounded"
           >
-            Contact support →
-          </button>
+            Open a support ticket →
+          </a>
         </p>
       </div>
     </SectionWrap>
@@ -2096,19 +2231,9 @@ function PermCell({ level }: { level: PermLevel }) {
   )
 }
 
-const MOCK_USERS = [
-  { name: 'Avinash Verma',   email: 'avinash.verma@zinnia.com',  role: 'global',   lastActive: 'Active now' },
-  { name: 'Priya Mehta',     email: 'priya.mehta@zinnia.com',    role: 'admin',    lastActive: '2 hours ago' },
-  { name: 'Daniel Torres',   email: 'd.torres@zinnia.com',       role: 'admin',    lastActive: 'Yesterday' },
-  { name: 'Sophie Williams', email: 's.williams@zinnia.com',     role: 'helpdesk', lastActive: '1 hour ago' },
-  { name: 'Marcus Johnson',  email: 'm.johnson@zinnia.com',      role: 'helpdesk', lastActive: '3 hours ago' },
-]
-
 function RolesSection() {
   const { notify } = useToast()
-  const [userRoles, setUserRoles] = useState<Record<string, string>>(
-    Object.fromEntries(MOCK_USERS.map(u => [u.email, u.role]))
-  )
+  const [userRoles, setUserRoles] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
   const handleRoleChange = (email: string, role: string) => {
@@ -2122,6 +2247,7 @@ function RolesSection() {
     setSaving(false)
     notify('success', 'Roles Saved', 'Role assignments have been updated')
   }
+
 
   const roleLabel: Record<string, { label: string; badge: string }> = {
     global:   { label: 'Global Admin', badge: 'bg-orange-100 text-orange-700' },
@@ -2209,65 +2335,34 @@ function RolesSection() {
         </div>
       </div>
 
-      {/* User list with role assignment */}
+      {/* User Assignments — populated from live directory integration */}
       <div className="rounded-[18px] border border-slate-200 bg-white shadow-sm shadow-slate-900/5 overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
           <div>
             <p className="text-xs font-semibold text-slate-900">User Assignments</p>
             <p className="text-[0.65rem] text-slate-500 mt-0.5">Change a user's role — only Global Admins can do this</p>
           </div>
-          <button
-            type="button"
-            onClick={() => notify('info', 'Invite User', 'User invitation — coming in next release')}
-            className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-orange-600 px-3 text-xs font-semibold text-white hover:bg-orange-700 transition"
+          <a
+            href="#"
+            onClick={e => { e.preventDefault(); notify('info', 'Manage Users', 'Go to the Users page to invite and manage user accounts') }}
+            className="inline-flex items-center gap-1.5 h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
           >
             <UserPlus className="h-3.5 w-3.5" />
-            Invite User
-          </button>
+            Manage in Users page
+          </a>
         </div>
-        <div className="divide-y divide-slate-100">
-          {MOCK_USERS.map(user => {
-            const currentRole = userRoles[user.email] ?? user.role
-            const rl = roleLabel[currentRole]
-            return (
-              <div key={user.email} className="flex items-center justify-between gap-4 px-5 py-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-orange-100 text-orange-700 text-[0.68rem] font-bold">
-                    {user.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-900 truncate">{user.name}</p>
-                    <p className="text-[0.65rem] text-slate-500 truncate">{user.email} · {user.lastActive}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-[0.6rem] font-semibold ${rl.badge}`}>
-                    {rl.label}
-                  </span>
-                  <select
-                    value={currentRole}
-                    onChange={e => handleRoleChange(user.email, e.target.value)}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[0.68rem] font-medium text-slate-900 focus:border-orange-400 focus:outline-none transition appearance-none"
-                  >
-                    <option value="global">Global Admin</option>
-                    <option value="admin">IT Admin</option>
-                    <option value="helpdesk">Helpdesk</option>
-                  </select>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <div className="flex justify-end px-5 py-3 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-orange-600 px-4 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-60 transition"
-          >
-            {saving && <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-            {saving ? 'Saving…' : 'Save Role Changes'}
-          </button>
+        <div className="flex flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+            <UserPlus className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-700">No users synced yet</p>
+            <p className="text-[0.72rem] text-slate-500 mt-1 max-w-xs leading-relaxed">
+              Connect a directory service (Microsoft Entra ID, Okta) in{' '}
+              <span className="font-semibold text-slate-700">Settings → Integrations</span>{' '}
+              to sync users and assign roles here.
+            </p>
+          </div>
         </div>
       </div>
 

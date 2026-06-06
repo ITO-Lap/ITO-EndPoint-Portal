@@ -23,6 +23,10 @@ import {
   History,
   BookOpen,
   Cpu,
+  Pencil,
+  Trash2,
+  Files,
+  MoreVertical,
 } from 'lucide-react'
 import { api } from '../api'
 import type { Script, ScriptExecution, ExecuteScriptInput, CreateScriptInput } from '../api'
@@ -67,43 +71,100 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Script card (left list) ───────────────────────────────────────────────────
 
-function ScriptCard({ script, selected, onClick }: {
+function ScriptCard({ script, selected, onClick, onEdit, onDelete, onDuplicate }: {
   script: Script
   selected: boolean
   onClick: () => void
+  onEdit: (script: Script) => void
+  onDelete: (script: Script) => void
+  onDuplicate: (script: Script) => void
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const osCfg = OS_CFG[script.os] ?? OS_CFG['Cross-platform']
   const OsIcon = osCfg.icon
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function handler(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition group ${
-        selected ? 'bg-orange-50 border-l-2 border-l-orange-500' : ''
-      }`}
+    <div
+      className={`relative border-b border-slate-100 group ${
+        selected ? 'bg-orange-50 border-l-2 border-l-orange-500' : 'hover:bg-slate-50'
+      } transition`}
     >
-      <div className="flex items-start gap-3">
-        <div className={`mt-0.5 rounded p-1.5 ${osCfg.color}`}>
-          <OsIcon className="h-3.5 w-3.5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-800 truncate">{script.name}</span>
-            {script.isDestructive && (
-              <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-600">DESTRUCTIVE</span>
-            )}
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-left px-4 py-3 pr-10"
+      >
+        <div className="flex items-start gap-3">
+          <div className={`mt-0.5 rounded p-1.5 flex-shrink-0 ${osCfg.color}`}>
+            <OsIcon className="h-3.5 w-3.5" />
           </div>
-          <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{script.description}</p>
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TYPE_CFG[script.type]?.color ?? ''}`}>
-              {script.type}
-            </span>
-            <span className="text-[10px] text-slate-400">{script.useCount} runs</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-800 truncate">{script.name}</span>
+              {script.isDestructive && (
+                <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-600">DESTRUCTIVE</span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{script.description}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TYPE_CFG[script.type]?.color ?? ''}`}>
+                {script.type}
+              </span>
+              <span className="text-[10px] text-slate-400">{script.useCount} runs</span>
+            </div>
           </div>
         </div>
-        <ChevronRight className={`h-4 w-4 flex-shrink-0 mt-2 text-slate-300 group-hover:text-slate-400 transition ${selected ? 'text-orange-400' : ''}`} />
+      </button>
+
+      {/* Overflow menu trigger */}
+      <div ref={menuRef} className="absolute top-3 right-2">
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setMenuOpen(v => !v) }}
+          className="p-1 rounded-md text-slate-300 hover:text-slate-600 hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition"
+          title="Actions"
+        >
+          <MoreVertical className="h-3.5 w-3.5" />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute right-0 mt-1 w-36 bg-white rounded-xl border border-slate-200 shadow-lg z-20 overflow-hidden py-1">
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); onEdit(script) }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
+            >
+              <Pencil className="h-3.5 w-3.5 text-slate-400" />Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); onDuplicate(script) }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
+            >
+              <Files className="h-3.5 w-3.5 text-slate-400" />Duplicate
+            </button>
+            <div className="my-1 border-t border-slate-100" />
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); onDelete(script) }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition"
+            >
+              <Trash2 className="h-3.5 w-3.5" />Delete
+            </button>
+          </div>
+        )}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -266,9 +327,12 @@ function DevicePicker({ value, onChange }: {
 
 // ── Script detail + execution panel ──────────────────────────────────────────
 
-function ScriptDetailPanel({ script, onExecuted }: {
+function ScriptDetailPanel({ script, onExecuted, onEdit, onDelete, onDuplicate }: {
   script: Script
   onExecuted: (exec: ScriptExecution) => void
+  onEdit: (script: Script) => void
+  onDelete: (script: Script) => void
+  onDuplicate: (script: Script) => void
 }) {
   const [device, setDevice] = useState<PickedDevice | null>(null)
   const [params, setParams] = useState<Record<string, string>>(() => {
@@ -349,6 +413,33 @@ function ScriptDetailPanel({ script, onExecuted }: {
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-slate-800">{script.name}</h2>
             <p className="text-sm text-slate-500 mt-0.5">{script.description}</p>
+          </div>
+          {/* Management actions */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => onEdit(script)}
+              title="Edit script"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition"
+            >
+              <Pencil className="h-3.5 w-3.5" />Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onDuplicate(script)}
+              title="Duplicate script"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition"
+            >
+              <Files className="h-3.5 w-3.5" />Duplicate
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(script)}
+              title="Delete script"
+              className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
@@ -602,13 +693,30 @@ function HistoryTab() {
   )
 }
 
-// ── New Script Modal ──────────────────────────────────────────────────────────
+// ── Script Form Modal (create + edit) ────────────────────────────────────────
 
-function NewScriptModal({ onClose, onCreated }: {
+function ScriptFormModal({ onClose, onSaved, editScript, forceCreate }: {
   onClose: () => void
-  onCreated: (s: Script) => void
+  onSaved: (s: Script, mode: 'create' | 'edit') => void
+  editScript?: Script
+  forceCreate?: boolean
 }) {
-  const [form, setForm] = useState<Partial<CreateScriptInput>>({
+  const isEdit = !!editScript && !forceCreate
+  const [form, setForm] = useState<Partial<CreateScriptInput>>(() => editScript ? {
+    name:             editScript.name,
+    description:      editScript.description,
+    os:               editScript.os,
+    type:             editScript.type,
+    content:          editScript.content,
+    version:          forceCreate ? 1 : editScript.version,
+    tags:             editScript.tags,
+    createdBy:        editScript.createdBy,
+    isDestructive:    editScript.isDestructive,
+    requiresApproval: editScript.requiresApproval,
+    minRole:          editScript.minRole,
+    parameters:       editScript.parameters,
+    timeoutSeconds:   editScript.timeoutSeconds,
+  } : {
     os: 'Windows',
     type: 'PowerShell',
     isDestructive: false,
@@ -643,8 +751,16 @@ function NewScriptModal({ onClose, onCreated }: {
     setSaving(true)
     setError(null)
     try {
-      const script = await api.createScript(form as CreateScriptInput)
-      onCreated(script)
+      if (isEdit && editScript) {
+        const updated = await api.updateScript(editScript.id, {
+          ...form,
+          version: editScript.version + 1,
+        })
+        onSaved(updated, 'edit')
+      } else {
+        const script = await api.createScript(form as CreateScriptInput)
+        onSaved(script, 'create')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save script')
     } finally {
@@ -652,13 +768,27 @@ function NewScriptModal({ onClose, onCreated }: {
     }
   }
 
+  const placeholders: Record<string, string> = {
+    PowerShell: '# PowerShell script\nGet-ComputerInfo | Select-Object CsName, WindowsVersion',
+    Bash:       '#!/bin/bash\n# Bash script',
+    Batch:      '@echo off\necho Script content here',
+    Python:     '#!/usr/bin/env python3\n# Python script',
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <Terminal className="h-5 w-5 text-orange-600" />
-            <h2 className="text-base font-semibold text-slate-800">New Script</h2>
+            {isEdit ? <Pencil className="h-5 w-5 text-orange-600" /> : <Terminal className="h-5 w-5 text-orange-600" />}
+            <h2 className="text-base font-semibold text-slate-800">
+              {isEdit ? `Edit — ${editScript!.name}` : 'New Script'}
+            </h2>
+            {isEdit && (
+              <span className="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-0.5 rounded">
+                v{editScript!.version} → v{editScript!.version + 1}
+              </span>
+            )}
           </div>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
             <X className="h-5 w-5" />
@@ -747,11 +877,10 @@ function NewScriptModal({ onClose, onCreated }: {
                 placeholder="Add tag and press Enter"
                 className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-slate-400"
               />
-              <button
-                type="button"
-                onClick={addTag}
-                className="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm transition"
-              >Add</button>
+              <button type="button" onClick={addTag}
+                className="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm transition">
+                Add
+              </button>
             </div>
             {(form.tags ?? []).length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -770,36 +899,29 @@ function NewScriptModal({ onClose, onCreated }: {
           {/* Flags */}
           <div className="flex gap-6">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isDestructive ?? false}
+              <input type="checkbox" checked={form.isDestructive ?? false}
                 onChange={e => set('isDestructive', e.target.checked)}
-                className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-              />
+                className="rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
               <span className="text-sm text-slate-700">Destructive</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.requiresApproval ?? false}
+              <input type="checkbox" checked={form.requiresApproval ?? false}
                 onChange={e => set('requiresApproval', e.target.checked)}
-                className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-              />
+                className="rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
               <span className="text-sm text-slate-700">Requires approval</span>
             </label>
           </div>
 
           {/* Script content */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Script Content<span className="text-red-500 ml-0.5">*</span></label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Script Content<span className="text-red-500 ml-0.5">*</span>
+            </label>
             <textarea
               value={form.content ?? ''}
               onChange={e => set('content', e.target.value)}
               rows={10}
-              placeholder={form.type === 'PowerShell'
-                ? '# PowerShell script\nGet-ComputerInfo | Select-Object CsName, WindowsVersion'
-                : '#!/bin/bash\n# Script content here'
-              }
+              placeholder={placeholders[form.type ?? 'PowerShell'] ?? '# Script content'}
               spellCheck={false}
               className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-slate-400 resize-y"
             />
@@ -814,19 +936,17 @@ function NewScriptModal({ onClose, onCreated }: {
         </div>
 
         <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition"
-          >Cancel</button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-orange-600 text-white hover:bg-orange-700 transition disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Save Script
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition">
+            Cancel
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-orange-600 text-white hover:bg-orange-700 transition disabled:opacity-50">
+            {saving
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : isEdit ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />
+            }
+            {isEdit ? 'Save Changes' : 'Save Script'}
           </button>
         </div>
       </div>
@@ -849,7 +969,11 @@ export function RemoteScriptsPage() {
   const [osFilter, setOsFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [showNewModal, setShowNewModal] = useState(false)
+  const [editScript, setEditScript] = useState<Script | null>(null)
+  const [duplicateScript, setDuplicateScript] = useState<Script | null>(null)
   const [recentExec, setRecentExec] = useState<ScriptExecution | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<Script | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const loadScripts = useCallback(async () => {
     setLoading(true)
@@ -872,15 +996,41 @@ export function RemoteScriptsPage() {
     return () => clearTimeout(t)
   }, [loadScripts, search])
 
-  const handleCreated = (s: Script) => {
-    setScripts(prev => [s, ...prev])
-    setSelectedId(s.id)
+  const handleSaved = (s: Script, mode: 'create' | 'edit') => {
+    if (mode === 'create') {
+      setScripts(prev => [s, ...prev])
+      setSelectedId(s.id)
+    } else {
+      setScripts(prev => prev.map(x => x.id === s.id ? s : x))
+    }
     setShowNewModal(false)
+    setEditScript(null)
+    setDuplicateScript(null)
+  }
+
+  const handleEdit = (script: Script) => {
+    setEditScript(script)
+  }
+
+  const handleDuplicate = (script: Script) => {
+    setDuplicateScript({ ...script, name: `${script.name} (Copy)`, id: '' })
+  }
+
+  const handleDeleteConfirmed = async () => {
+    if (!deleteConfirm) return
+    setDeleting(true)
+    try {
+      await api.deleteScript(deleteConfirm.id)
+      setScripts(prev => prev.filter(s => s.id !== deleteConfirm.id))
+      if (selectedId === deleteConfirm.id) setSelectedId(null)
+    } finally {
+      setDeleting(false)
+      setDeleteConfirm(null)
+    }
   }
 
   const handleExecuted = (exec: ScriptExecution) => {
     setRecentExec(exec)
-    // Bump use count locally
     setScripts(prev => prev.map(s => s.id === exec.scriptId ? { ...s, useCount: s.useCount + 1 } : s))
   }
 
@@ -1003,6 +1153,9 @@ export function RemoteScriptsPage() {
                     script={s}
                     selected={selectedId === s.id}
                     onClick={() => setSelectedId(s.id)}
+                    onEdit={handleEdit}
+                    onDelete={s => setDeleteConfirm(s)}
+                    onDuplicate={handleDuplicate}
                   />
                 ))
               )}
@@ -1021,6 +1174,9 @@ export function RemoteScriptsPage() {
                 key={selected.id}
                 script={selected}
                 onExecuted={handleExecuted}
+                onEdit={handleEdit}
+                onDelete={s => setDeleteConfirm(s)}
+                onDuplicate={handleDuplicate}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
@@ -1041,11 +1197,62 @@ export function RemoteScriptsPage() {
         </div>
       )}
 
+      {/* Create modal */}
       {showNewModal && (
-        <NewScriptModal
+        <ScriptFormModal
           onClose={() => setShowNewModal(false)}
-          onCreated={handleCreated}
+          onSaved={handleSaved}
         />
+      )}
+
+      {/* Edit modal */}
+      {editScript && (
+        <ScriptFormModal
+          editScript={editScript}
+          onClose={() => setEditScript(null)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {/* Duplicate modal (pre-filled create) */}
+      {duplicateScript && (
+        <ScriptFormModal
+          editScript={duplicateScript}
+          forceCreate
+          onClose={() => setDuplicateScript(null)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {/* Delete confirm dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="rounded-full bg-red-100 p-2 flex-shrink-0">
+                <Trash2 className="h-4 w-4 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-1">Delete script?</h3>
+                <p className="text-sm text-slate-500">
+                  <span className="font-medium text-slate-700">{deleteConfirm.name}</span> will be permanently
+                  removed from the library. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setDeleteConfirm(null)} disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition disabled:opacity-50">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDeleteConfirmed} disabled={deleting}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50">
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

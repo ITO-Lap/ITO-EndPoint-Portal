@@ -732,10 +732,6 @@ export function RunbooksPage() {
   const [devices, setDevices]         = useState<ApiDevice[]>([])
   const [loading, setLoading]         = useState(true)
 
-  // AI results keyed by device.id
-  const [aiMap, setAiMap]             = useState<Record<string, DeviceAnalysis>>({})
-  const [aiLoadingIds, setAiLoadingIds] = useState<Set<string>>(new Set())
-
   // Per-device Jira tickets and Confluence links (local state, not persisted)
   const [jiraMap, setJiraMap]         = useState<Record<string, JiraIssue[]>>({})
   const [confMap, setConfMap]         = useState<Record<string, ConfluencePage[]>>({})
@@ -768,39 +764,6 @@ export function RunbooksPage() {
 
   useEffect(() => { fetchDevices() }, [fetchDevices])
 
-  const analyzeDevice = useCallback(async (device: ApiDevice) => {
-    if (aiMap[device.id] || aiLoadingIds.has(device.id)) return
-    setAiLoadingIds(prev => new Set([...prev, device.id]))
-    try {
-      const result = await api.analyzeDeviceFields({
-        deviceName:       device.deviceName,
-        user:             device.user,
-        platform:         device.platform,
-        osVersion:        device.osVersion,
-        managementSource: device.managementSource,
-        complianceState:  device.complianceState,
-        encryptionStatus: device.encryptionStatus,
-        primaryIssue:     device.primaryIssue,
-        policyFailed:     device.policyFailed,
-        severity:         device.severity,
-      })
-      setAiMap(prev => ({ ...prev, [device.id]: result }))
-    } catch {
-      notify('error', 'AI Error', `Could not analyze ${device.deviceName}`)
-    } finally {
-      setAiLoadingIds(prev => { const s = new Set(prev); s.delete(device.id); return s })
-    }
-  }, [aiMap, aiLoadingIds, notify])
-
-  const analyzeAll = async () => {
-    const unanalyzed = devices.filter(d => !aiMap[d.id] && !aiLoadingIds.has(d.id))
-    // Queue in batches of 3 to avoid flooding
-    for (let i = 0; i < unanalyzed.length; i += 3) {
-      const batch = unanalyzed.slice(i, i + 3)
-      await Promise.allSettled(batch.map(d => analyzeDevice(d)))
-    }
-  }
-
   // Derived breakdowns
   const categoryBreakdown = useMemo(() => {
     const map: Record<string, number> = {}
@@ -823,8 +786,6 @@ export function RunbooksPage() {
       .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4))
   }, [devices, severityFilter, complianceFilter, categoryFilter])
 
-  const analysedCount = Object.keys(aiMap).length
-
   return (
     <div className="flex flex-col gap-5">
       {/* ── Header + Tab bar ───────────────────────────────────────── */}
@@ -835,7 +796,7 @@ export function RunbooksPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">Runbooks</h1>
-            <p className="text-xs text-slate-500">{activeTab === 'ai' ? `AI-generated remediation for all open issues · ${devices.length} devices` : `${STATIC_RUNBOOKS.length} standard runbooks across 9 categories`}</p>
+            <p className="text-xs text-slate-500">{activeTab === 'ai' ? `Rule-based remediation for all open issues · ${devices.length} devices` : `${STATIC_RUNBOOKS.length} standard runbooks across 9 categories`}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -843,7 +804,7 @@ export function RunbooksPage() {
           <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-0.5 gap-0.5">
             <button type="button" onClick={() => setActiveTab('ai')}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeTab === 'ai' ? 'bg-white text-lime-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <Sparkles className="h-3.5 w-3.5" /> AI Runbooks
+              <ClipboardList className="h-3.5 w-3.5" /> Open Issues
             </button>
             <button type="button" onClick={() => setActiveTab('library')}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeTab === 'library' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -852,15 +813,6 @@ export function RunbooksPage() {
           </div>
           {activeTab === 'ai' && (
             <>
-              <button
-                type="button"
-                onClick={analyzeAll}
-                disabled={loading || devices.length === 0}
-                className="flex items-center gap-1.5 rounded-xl bg-lime-600 hover:bg-lime-700 text-white px-4 py-2 text-sm font-medium transition disabled:opacity-50"
-              >
-                <Sparkles className="h-4 w-4" />
-                Analyze All ({analysedCount}/{devices.length})
-              </button>
               <button
                 type="button"
                 onClick={fetchDevices}
@@ -1007,11 +959,11 @@ export function RunbooksPage() {
             <RunbookDeviceCard
               key={device.id}
               device={device}
-              ai={aiMap[device.id] ?? null}
-              aiLoading={aiLoadingIds.has(device.id)}
+              ai={null}
+              aiLoading={false}
               jiraTickets={jiraMap[device.id] ?? []}
               confluenceLinks={confMap[device.id] ?? []}
-              onAnalyze={() => analyzeDevice(device)}
+              onAnalyze={() => {}}
               onOpenJira={() => setJiraTarget(device)}
               onOpenConfluence={() => setConfTarget(device)}
               onDetachConfluence={pageId => setConfMap(prev => ({ ...prev, [device.id]: (prev[device.id] ?? []).filter(p => p.id !== pageId) }))}
@@ -1024,7 +976,7 @@ export function RunbooksPage() {
       {jiraTarget && (
         <JiraModal
           device={jiraTarget}
-          ai={aiMap[jiraTarget.id] ?? null}
+          ai={null}
           onClose={() => setJiraTarget(null)}
           onCreated={ticket => {
             setJiraMap(prev => ({ ...prev, [jiraTarget.id]: [...(prev[jiraTarget.id] ?? []), ticket] }))

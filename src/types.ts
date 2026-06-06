@@ -6,6 +6,8 @@ export interface NavItem {
   title: string
   icon: LucideIcon
   active?: boolean
+  group: string      // navigation section group label
+  badge?: string     // optional chip (e.g. "New", count string)
 }
 
 export interface StatCardData {
@@ -40,7 +42,7 @@ export interface DeviceData {
   encryptionStatus: string
   primaryIssue: string
   policyFailed: string
-  severity: 'Low' | 'Medium' | 'High'
+  severity: 'Low' | 'Medium' | 'High' | 'Critical'
   confidence: string
   firstDetected: string
   lastDetected: string

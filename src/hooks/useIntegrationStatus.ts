@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api'
 import type { IntegrationStatusItem } from '../api'
 
-const POLL_INTERVAL = 30_000 // ms
+const POLL_INTERVAL = 10_000 // ms (real-time)
 
 export function useIntegrationStatus() {
   const [status, setStatus] = useState<IntegrationStatusItem[]>([])
