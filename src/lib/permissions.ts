@@ -12,6 +12,7 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
   'Windows Devices':         ['Global Admin', 'IT Admin', 'Helpdesk'],
   'ManageEngine Devices':    ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Open Issues':             ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'Smart Diagnostics':       ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Mac Fleet Reports':       ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Entra Intelligence':      ['Global Admin', 'IT Admin', 'Helpdesk'],
 

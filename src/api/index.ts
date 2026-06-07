@@ -1,5 +1,27 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
+export interface AuthUser { role: string; displayName: string; email: string }
+
+/** Ask backend for the Microsoft OAuth login URL, then redirect the browser to it. */
+export async function startEntraLogin(): Promise<void> {
+  const res  = await fetch(`${BASE_URL}/api/auth/login`)
+  const body = await res.json() as { success: boolean; data?: { url: string }; error?: string }
+  if (!res.ok || !body.success || !body.data?.url) throw new Error(body.error ?? 'Failed to start login')
+  window.location.href = body.data.url
+}
+
+/** Verify a JWT session token issued by the backend after OAuth callback. */
+export async function verifySessionToken(token: string): Promise<AuthUser> {
+  const res  = await fetch(`${BASE_URL}/api/auth/verify`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ token }),
+  })
+  const body = await res.json() as { success: boolean; data?: AuthUser; error?: string }
+  if (!res.ok || !body.success || !body.data) throw new Error(body.error ?? `Auth failed (${res.status})`)
+  return body.data
+}
+
 // Mirror of server/src/types.ts — kept in sync manually
 export interface ApiStats {
   total: number
@@ -680,7 +702,82 @@ export const api = {
     post<{ summary: string; issues: string[] }>(`/api/entra/devices/${encodeURIComponent(deviceId)}/diagnose`, {}),
 }
 
+// ── Smart Diagnostics ──────────────────────────────────────────────────────────
+import type {
+  DiagnosticDevice,
+  DeviceHealthReport,
+  ApplicationFailureReport,
+  EventLogEntry,
+  AIRecommendation,
+} from '../types'
+
+export const smartDiagnosticsApi = {
+  getDevices: (q?: string, limit = 50) => {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (q) params.set('q', q)
+    return get<DiagnosticDevice[]>(`/api/smart-diagnostics/devices?${params}`)
+  },
+
+  getHealth: (id: string) =>
+    get<{ device: DiagnosticDevice; report: DeviceHealthReport }>(
+      `/api/smart-diagnostics/devices/${encodeURIComponent(id)}/health`
+    ),
+
+  getLogs: (id: string) =>
+    get<EventLogEntry[]>(`/api/smart-diagnostics/devices/${encodeURIComponent(id)}/logs`),
+
+  getAppFailures: (id: string) =>
+    get<ApplicationFailureReport[]>(
+      `/api/smart-diagnostics/devices/${encodeURIComponent(id)}/app-failures`
+    ),
+
+  analyze: (id: string) =>
+    post<AIRecommendation>(
+      `/api/smart-diagnostics/devices/${encodeURIComponent(id)}/analyze`, {}
+    ),
+
+  exportBundle: (id: string) =>
+    get<{
+      device: DiagnosticDevice
+      report: DeviceHealthReport
+      failures: ApplicationFailureReport[]
+      logs: EventLogEntry[]
+      aiAnalysis: AIRecommendation
+    }>(`/api/smart-diagnostics/devices/${encodeURIComponent(id)}/export`),
+}
+
 /** Map a server Device to the frontend DeviceData shape. */
+// ─── Enterprise Runbooks API ──────────────────────────────────────────────────
+
+import type {
+  EnterpriseRunbook, RunbookExecution, ExecMode,
+} from '../types'
+
+export const runbooksApi = {
+  list:           ()            => get<EnterpriseRunbook[]>('/api/runbooks'),
+  get:            (id: string)  => get<EnterpriseRunbook>(`/api/runbooks/${encodeURIComponent(id)}`),
+  exportJson:     (id: string)  => get<EnterpriseRunbook>(`/api/runbooks/${encodeURIComponent(id)}/export`),
+  clone:          (id: string)  => post<EnterpriseRunbook>(`/api/runbooks/${encodeURIComponent(id)}/clone`, {}),
+  importJson:     (body: object) => post<EnterpriseRunbook>('/api/runbooks/import', body),
+  listExecutions: ()            => get<RunbookExecution[]>('/api/runbooks/executions'),
+  getExecution:   (execId: string) => get<RunbookExecution>(`/api/runbooks/executions/${encodeURIComponent(execId)}`),
+  getEvidence:    (execId: string) => get<object>(`/api/runbooks/executions/${encodeURIComponent(execId)}/evidence`),
+  cancel:         (execId: string, cancelledBy: string) =>
+    post<RunbookExecution>(`/api/runbooks/executions/${encodeURIComponent(execId)}/cancel`, { cancelledBy }),
+  retryStep:      (execId: string, stepId: string) =>
+    post<RunbookExecution>(`/api/runbooks/executions/${encodeURIComponent(execId)}/retry-step`, { stepId }),
+  retryExecution: (execId: string) =>
+    post<RunbookExecution>(`/api/runbooks/executions/${encodeURIComponent(execId)}/retry`, {}),
+  approve:        (runbookId: string, executionId: string, approvedBy: string, rejected = false) =>
+    post<RunbookExecution>(`/api/runbooks/${encodeURIComponent(runbookId)}/approve`, { executionId, approvedBy, rejected }),
+  execute: (id: string, params: {
+    deviceId: string; deviceName: string; devicePlatform?: string
+    mode?: ExecMode; initiatedBy?: string
+  }) => post<RunbookExecution>(`/api/runbooks/${encodeURIComponent(id)}/execute`, params),
+  /** Returns the EventSource URL for SSE streaming (use with new EventSource(url)) */
+  streamUrl: (execId: string) => `${BASE_URL}/api/runbooks/executions/${encodeURIComponent(execId)}/stream`,
+}
+
 export function apiDeviceToDeviceData(d: ApiDevice) {
   return {
     id:               d.id,

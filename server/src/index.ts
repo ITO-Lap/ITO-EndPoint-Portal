@@ -16,6 +16,8 @@ import usersRouter from './routes/users.js'
 import automationsRouter from './routes/automations.js'
 import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
+import smartDiagnosticsRouter from './routes/smartDiagnostics.js'
+import authRouter from './routes/auth.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 
 dotenv.config()
@@ -62,7 +64,9 @@ app.use('/api/scripts',      apiLimiter, scriptsRouter)
 app.use('/api/users',        apiLimiter, usersRouter)
 app.use('/api/automations',  apiLimiter, automationsRouter)
 app.use('/api/slack',        apiLimiter, slackRouter)
-app.use('/api/entra',        apiLimiter, entraRouter)
+app.use('/api/entra',             apiLimiter, entraRouter)
+app.use('/api/smart-diagnostics', apiLimiter, smartDiagnosticsRouter)
+app.use('/api/auth',              authRouter)
 
 app.use(errorHandler)
 

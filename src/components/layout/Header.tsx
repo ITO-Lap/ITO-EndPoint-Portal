@@ -18,6 +18,8 @@ interface HeaderProps {
   onProfileNav?: (page: string) => void
   onSignOut?: () => void
   viewerRole?: string
+  displayName?: string
+  userEmail?: string
 }
 
 export function Header({
@@ -25,6 +27,7 @@ export function Header({
   notificationOpen = false, notifications = [], onNotificationToggle,
   onMarkAllNotificationsRead, searchLoading = false,
   onProfileNav, onSignOut, viewerRole = 'Global Admin',
+  displayName, userEmail,
 }: HeaderProps) {
   const { notify }                        = useToast()
   const [searchInput, setSearchInput]     = useState(searchValue)
@@ -195,10 +198,10 @@ export function Header({
                 className="grid h-6 w-6 place-items-center rounded-lg font-black flex-shrink-0 text-[0.62rem] text-white"
                 style={{ background: 'linear-gradient(135deg, #F46C00, #FB471F)', boxShadow: '0 2px 8px rgba(244,108,0,0.35)' }}
               >
-                AV
+                {displayName ? displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'AV'}
               </div>
               <div className="hidden sm:block leading-tight text-left">
-                <p className="text-xs font-bold text-slate-700">Admin</p>
+                <p className="text-xs font-bold text-slate-700 truncate max-w-[120px]">{displayName || 'Admin'}</p>
                 <p className="text-[0.58rem] text-slate-400">{viewerRole}</p>
               </div>
               <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />

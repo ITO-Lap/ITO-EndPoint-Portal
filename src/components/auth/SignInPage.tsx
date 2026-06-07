@@ -1,78 +1,34 @@
-import { useState, useEffect } from 'react'
-import {
-  Eye, EyeOff, Mail, Lock, ArrowRight,
-  ShieldCheck, Laptop2, Zap, CheckCircle2, AlertCircle,
-  Layers, Users,
-} from 'lucide-react'
-import { ZinniaVertical, ZinniaHorizontal, ZinniaIcon } from '../ui/ZinniaLogo'
+import { useState, useEffect, useRef } from 'react'
+import { CheckCircle2, AlertCircle, ShieldCheck, Laptop2, Zap, Layers, Eye, EyeOff, LogIn } from 'lucide-react'
+import { ZinniaHorizontal } from '../ui/ZinniaLogo'
+import { startEntraLogin } from '../../api/index'
 
-// ─── Demo accounts ────────────────────────────────────────────────────────────
-
-const DEMO_ACCOUNTS = [
-  {
-    role: 'Global Admin',
-    email: 'admin@zinnia.com',
-    password: 'demo1234',
-    badge: 'bg-orange-50 text-[#F46C00] border-orange-200',
-    icon: Layers,
-    desc: 'Full access',
-  },
-  {
-    role: 'IT Admin',
-    email: 'itadmin@zinnia.com',
-    password: 'demo1234',
-    badge: 'bg-lime-50 text-lime-700 border-lime-200',
-    icon: ShieldCheck,
-    desc: 'Operational access',
-  },
-  {
-    role: 'Helpdesk',
-    email: 'helpdesk@zinnia.com',
-    password: 'demo1234',
-    badge: 'bg-slate-50 text-slate-600 border-slate-200',
-    icon: Users,
-    desc: 'Read-only + sync',
-  },
-]
-
-// ─── Zinnia logo mark ─────────────────────────────────────────────────────────
-
-// Local alias kept for backward compat within this file — delegates to shared component
-function LocalZinniaIcon({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const cls = size === 'sm' ? 'h-8 w-auto' : size === 'lg' ? 'h-16 w-auto' : 'h-12 w-auto'
-  return <ZinniaIcon className={cls} />
+// ─── Local test credentials ───────────────────────────────────────────────────
+// These are dev/testing credentials only — not production auth.
+const LOCAL_USERS: Record<string, { password: string; role: string; displayName: string }> = {
+  'avinash.verma@zinnia.com': { password: 'Admin@ITO2026', role: 'Global Admin', displayName: 'Avinash Verma'  },
+  'itadmin@zinnia.com':       { password: 'Admin@ITO2026', role: 'IT Admin',     displayName: 'IT Admin'       },
+  'helpdesk@zinnia.com':      { password: 'Admin@ITO2026', role: 'Helpdesk',     displayName: 'Helpdesk User'  },
 }
 
-// ─── Left panel — Zinnia brand showcase ───────────────────────────────────────
-
+// ─── Left brand panel ─────────────────────────────────────────────────────────
 function BrandPanel() {
   const features = [
     { icon: Laptop2,     label: 'Unified device visibility',  desc: 'All endpoints across Intune, Kandji & ManageEngine in one view.' },
     { icon: ShieldCheck, label: 'Real-time compliance',       desc: 'Policy failures detected and surfaced the moment they occur.' },
     { icon: Zap,         label: 'AI-powered remediation',     desc: 'Intelligent runbooks that auto-resolve issues before they escalate.' },
   ]
-
   return (
     <div className="relative flex flex-col justify-between h-full px-10 py-10 overflow-hidden select-none">
-      {/* Decorative blobs */}
       <div className="pointer-events-none absolute -top-32 -right-32 h-96 w-96 rounded-full blur-3xl" style={{ background: 'rgba(244,108,0,0.12)' }} />
       <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full blur-3xl" style={{ background: 'rgba(251,71,31,0.10)' }} />
-      <div className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[480px] w-[480px] rounded-full border border-white/5" />
-      <div className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[320px] w-[320px] rounded-full border border-white/5" />
-
-      {/* Zinnia official logo — horizontal lockup */}
       <div className="relative">
         <ZinniaHorizontal iconSize="lg" wordmarkSize="xl" subtitle="ITO Endpoint" gap="gap-4" />
       </div>
-
-      {/* Hero text */}
       <div className="relative space-y-5">
         <h1 className="text-[1.75rem] font-black leading-snug tracking-tight" style={{ color: '#0F172A' }}>
           Your AI-powered<br />
-          <span
-            className="bg-clip-text text-transparent"
-            style={{ backgroundImage: 'linear-gradient(90deg, #FFC600 0%, #F46C00 60%, #FB471F 100%)' }}
-          >
+          <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(90deg, #FFC600 0%, #F46C00 60%, #FB471F 100%)' }}>
             endpoint control
           </span><br />
           center.
@@ -80,15 +36,11 @@ function BrandPanel() {
         <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
           Manage compliance, trigger remediation, and stay ahead of every device issue — all from a single dashboard.
         </p>
-
-        {/* Feature list */}
         <div className="mt-2 space-y-3.5">
           {features.map(f => (
             <div key={f.label} className="flex items-start gap-3.5">
-              <div
-                className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl"
-                style={{ background: 'rgba(244,108,0,0.15)', border: '1px solid rgba(244,108,0,0.25)' }}
-              >
+              <div className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl"
+                style={{ background: 'rgba(244,108,0,0.15)', border: '1px solid rgba(244,108,0,0.25)' }}>
                 <f.icon className="h-3.5 w-3.5" style={{ color: '#F46C00' }} />
               </div>
               <div>
@@ -99,175 +51,63 @@ function BrandPanel() {
           ))}
         </div>
       </div>
-
-      {/* Stats strip */}
       <div className="relative">
         <div className="grid grid-cols-3 gap-2.5 mb-5">
           {[
             { value: '12,842', label: 'Devices managed',   color: '#E8172D' },
             { value: '99.7%',  label: 'Platform uptime',   color: '#F46C00' },
-            { value: '3',      label: 'Sources connected',  color: '#FFB800' },
+            { value: '3',      label: 'Sources connected', color: '#FFB800' },
           ].map(s => (
-            <div
-              key={s.label}
-              className="rounded-2xl px-3 py-3 text-center water-glow-sm"
-              style={{ background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(255,255,255,0.80)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.90)' }}
-            >
+            <div key={s.label} className="rounded-2xl px-3 py-3 text-center water-glow-sm"
+              style={{ background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(255,255,255,0.80)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.90)' }}>
               <p className="text-base font-black leading-tight" style={{ color: s.color }}>{s.value}</p>
               <p className="text-[0.58rem] text-slate-400 mt-0.5 leading-tight">{s.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Integration logos row */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[0.6rem] text-slate-400 mr-1 flex-shrink-0">Integrated with</p>
-          {['Microsoft Intune', 'Kandji', 'ManageEngine'].map(name => (
-            <span
-              key={name}
-              className="rounded-full px-2.5 py-0.5 text-[0.58rem] font-semibold water-glow-sm"
-              style={{ background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(148,163,184,0.25)', color: '#64748B' }}
-            >
-              {name}
-            </span>
+        {/* Test credentials panel */}
+        <div className="rounded-2xl p-3.5 space-y-2"
+          style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(148,163,184,0.20)' }}>
+          <p className="text-[0.58rem] font-bold uppercase tracking-widest text-slate-400">Test credentials (all use same password)</p>
+          {[
+            { email: 'avinash.verma@zinnia.com', role: 'Global Admin', color: 'text-orange-600' },
+            { email: 'itadmin@zinnia.com',        role: 'IT Admin',     color: 'text-lime-600'   },
+            { email: 'helpdesk@zinnia.com',        role: 'Helpdesk',     color: 'text-slate-500'  },
+          ].map(u => (
+            <div key={u.email} className="flex items-center justify-between">
+              <span className="text-[0.62rem] font-mono text-slate-600">{u.email}</span>
+              <span className={`text-[0.6rem] font-bold ${u.color}`}>{u.role}</span>
+            </div>
           ))}
+          <div className="pt-1 border-t border-slate-200/60">
+            <p className="text-[0.6rem] text-slate-400">Password: <span className="font-mono font-semibold text-slate-600">Admin@ITO2026</span></p>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Forgot password mini-form ────────────────────────────────────────────────
-
-function ForgotPassword({ onBack }: { onBack: () => void }) {
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email) return
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setLoading(false)
-    setSent(true)
-  }
-
-  if (sent) {
-    return (
-      <div className="space-y-5">
-        <div className="flex flex-col items-center text-center gap-3 py-4">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-100">
-            <CheckCircle2 className="h-7 w-7 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">Check your inbox</p>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              We sent a password reset link to<br />
-              <span className="font-semibold text-slate-700">{email}</span>
-            </p>
-          </div>
-        </div>
-        <p className="text-center text-[0.68rem] text-slate-500">
-          Didn't receive it? Check your spam folder or{' '}
-          <button type="button" onClick={() => setSent(false)} className="font-semibold hover:underline" style={{ color: '#F46C00' }}>
-            try again
-          </button>
-        </p>
-        <button
-          type="button"
-          onClick={onBack}
-          className="w-full rounded-full border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-        >
-          ← Back to sign in
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <p className="text-sm font-bold text-slate-900">Reset your password</p>
-        <p className="text-xs text-slate-500 mt-1">Enter your work email and we'll send a reset link.</p>
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Work email</label>
-        <div className="relative">
-          <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            autoFocus
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 transition focus:bg-white focus:outline-none"
-            style={{ '--tw-ring-color': '#F46C00' } as React.CSSProperties}
-            onFocus={e => { e.currentTarget.style.borderColor = '#F46C00'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(244,108,0,0.12)' }}
-            onBlur={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = '' }}
-          />
-        </div>
-      </div>
-
-      <button
-        type="submit"
-        disabled={loading || !email}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-full py-2.5 text-sm font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' }}
-      >
-        {loading && <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-        {loading ? 'Sending…' : 'Send reset link'}
-      </button>
-
-      <button type="button" onClick={onBack} className="w-full text-center text-xs text-slate-500 hover:text-slate-700 transition">
-        ← Back to sign in
-      </button>
-    </form>
-  )
-}
-
-// ─── Input helper ─────────────────────────────────────────────────────────────
-
-function FormInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = '#F46C00'
-    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(244,108,0,0.12)'
-    e.currentTarget.style.background = 'white'
-    props.onFocus?.(e)
-  }
-  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = ''
-    e.currentTarget.style.boxShadow = ''
-    e.currentTarget.style.background = ''
-    props.onBlur?.(e)
-  }
-  return (
-    <input
-      {...props}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none ${props.className ?? ''}`}
-    />
-  )
-}
-
 // ─── Main SignInPage ──────────────────────────────────────────────────────────
-
 interface SignInPageProps {
-  onSignIn: (role: string) => void
+  onSignIn: (role: string, displayName: string, email: string) => void
   justSignedOut?: boolean
+  authError?: string
 }
 
-export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps) {
-  const [email, setEmail]               = useState('')
-  const [password, setPassword]         = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe]     = useState(false)
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState('')
-  const [showForgot, setShowForgot]     = useState(false)
-  const [signedOutBanner, setSignedOutBanner] = useState(justSignedOut)
+type TabId = 'local' | 'sso'
+
+export function SignInPage({ onSignIn, justSignedOut = false, authError }: SignInPageProps) {
+  const [activeTab, setActiveTab]               = useState<TabId>('local')
+  const [email, setEmail]                       = useState('')
+  const [password, setPassword]                 = useState('')
+  const [showPassword, setShowPassword]         = useState(false)
+  const [localLoading, setLocalLoading]         = useState(false)
+  const [ssoLoading, setSsoLoading]             = useState(false)
+  const [error, setError]                       = useState(authError ?? '')
+  const [signedOutBanner, setSignedOutBanner]   = useState(justSignedOut)
+  const emailRef                                = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!signedOutBanner) return
@@ -275,62 +115,59 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
     return () => clearTimeout(t)
   }, [signedOutBanner])
 
-  const doSignIn = async (overrideEmail?: string, overridePassword?: string) => {
-    const e = overrideEmail   ?? email
-    const p = overridePassword ?? password
-    if (!e.trim()) { setError('Please enter your email address'); return }
-    if (!p)        { setError('Please enter your password');       return }
-    if (!e.includes('@')) { setError('Please enter a valid email address'); return }
-    setError('')
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1100))
-    setLoading(false)
-    const demo = DEMO_ACCOUNTS.find(d => d.email === e)
-    onSignIn(demo?.role ?? 'Global Admin')
-  }
+  // Focus email field when tab switches to local
+  useEffect(() => {
+    if (activeTab === 'local') emailRef.current?.focus()
+  }, [activeTab])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleLocalSignIn = (e: React.FormEvent) => {
     e.preventDefault()
-    doSignIn()
+    setError('')
+    const trimmedEmail = email.trim().toLowerCase()
+    const user = LOCAL_USERS[trimmedEmail]
+    if (!user || user.password !== password) {
+      setError('Invalid email or password.')
+      return
+    }
+    setLocalLoading(true)
+    // Small delay for perceived security
+    setTimeout(() => {
+      onSignIn(user.role, user.displayName, trimmedEmail)
+      setLocalLoading(false)
+    }, 400)
   }
 
-  const handleDemoLogin = async (acct: typeof DEMO_ACCOUNTS[0]) => {
-    setEmail(acct.email)
-    setPassword(acct.password)
+  const handleSsoSignIn = async () => {
     setError('')
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    setLoading(false)
-    onSignIn(acct.role)
+    setSsoLoading(true)
+    try {
+      await startEntraLogin()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start login. Check your connection.')
+      setSsoLoading(false)
+    }
   }
 
-  const handleSSO = async () => {
-    setError('')
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1400))
-    setLoading(false)
-    onSignIn('Global Admin')
-  }
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'local', label: 'Credentials' },
+    { id: 'sso',   label: 'Microsoft SSO' },
+  ]
 
   return (
     <div className="min-h-screen w-full flex">
-
-      {/* ── Left: Zinnia brand panel ── */}
+      {/* Left brand panel */}
       <div className="hidden lg:flex lg:w-[48%] xl:w-[45%] flex-shrink-0 glass-bg"
         style={{ borderRight: '1px solid rgba(148,163,184,0.15)' }}>
         <BrandPanel />
       </div>
 
-      {/* ── Right: form panel ── */}
+      {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center glass-bg px-6 py-10 min-h-screen">
-
-        {/* Mobile logo — Zinnia official logo */}
         <div className="lg:hidden mb-8">
           <ZinniaHorizontal iconSize="sm" wordmarkSize="sm" subtitle="ITO Endpoint" />
         </div>
 
         <div className="w-full max-w-[420px]">
-
           {/* Signed-out banner */}
           {signedOutBanner && (
             <div className="mb-5 flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
@@ -340,194 +177,202 @@ export function SignInPage({ onSignIn, justSignedOut = false }: SignInPageProps)
           )}
 
           {/* Sign-in card */}
-          <div className="rounded-3xl overflow-hidden glass-strong" style={{ boxShadow: '0 24px 80px rgba(14,165,233,0.12), 0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,1)' }}>
+          <div className="rounded-3xl overflow-hidden glass-strong"
+            style={{ boxShadow: '0 24px 80px rgba(14,165,233,0.12), 0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,1)' }}>
 
-            {/* Zinnia gradient card header */}
-            <div
-              className="px-7 py-5"
-              style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(240,249,255,0.90) 100%)', borderBottom: '1px solid rgba(148,163,184,0.15)' }}
-            >
-              {/* Zinnia official logo in card header */}
+            {/* Card header */}
+            <div className="px-7 py-5"
+              style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(240,249,255,0.90) 100%)', borderBottom: '1px solid rgba(148,163,184,0.15)' }}>
               <ZinniaHorizontal iconSize="sm" wordmarkSize="sm" subtitle="ITO Endpoint" />
-              <div
-                className="mt-4 h-[3px] w-20 rounded-full"
-                style={{ background: 'linear-gradient(90deg, #E8172D 0%, #F46C00 50%, #FFB800 100%)' }}
-              />
+              <div className="mt-4 h-[3px] w-20 rounded-full"
+                style={{ background: 'linear-gradient(90deg, #E8172D 0%, #F46C00 50%, #FFB800 100%)' }} />
             </div>
 
-            <div className="px-7 py-7">
-              {showForgot ? (
-                <ForgotPassword onBack={() => setShowForgot(false)} />
-              ) : (
-                <form onSubmit={handleSubmit} noValidate className="space-y-5">
-                  {/* Heading */}
-                  <div className="mb-1">
-                    <h2 className="text-xl font-black text-slate-900 leading-tight">Welcome back</h2>
-                    <p className="text-xs text-slate-500 mt-1">Sign in to your ITO Endpoint account</p>
-                  </div>
+            <div className="px-7 py-6 space-y-5">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 leading-tight">Welcome back</h2>
+                <p className="text-xs text-slate-500 mt-1">Sign in to access your endpoint dashboard.</p>
+              </div>
 
-                  {/* Error */}
-                  {error && (
-                    <div className="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5">
-                      <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500" />
-                      <p className="text-xs text-red-700 font-medium">{error}</p>
-                    </div>
-                  )}
+              {/* Tab switcher */}
+              <div className="flex rounded-xl p-1 gap-1"
+                style={{ background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.18)' }}>
+                {tabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => { setActiveTab(tab.id); setError('') }}
+                    className="flex-1 rounded-lg py-2 text-xs font-semibold transition-all"
+                    style={activeTab === tab.id
+                      ? { background: '#fff', color: '#0F172A', boxShadow: '0 1px 4px rgba(0,0,0,0.10)' }
+                      : { color: '#64748B' }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
+              {/* Error */}
+              {error && (
+                <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-3.5 py-3">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500 mt-0.5" />
+                  <p className="text-xs text-red-700 font-medium leading-relaxed">{error}</p>
+                </div>
+              )}
+
+              {/* ── Local credentials tab ── */}
+              {activeTab === 'local' && (
+                <form onSubmit={handleLocalSignIn} className="space-y-4" noValidate>
                   {/* Email */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Work email</label>
-                    <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10" />
-                      <FormInput
-                        type="email"
-                        value={email}
-                        onChange={e => { setEmail(e.target.value); setError('') }}
-                        placeholder="you@company.com"
-                        autoComplete="email"
-                        className="pl-10 pr-4"
-                      />
-                    </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="email" className="block text-xs font-semibold text-slate-600">
+                      Email address
+                    </label>
+                    <input
+                      ref={emailRef}
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@zinnia.com"
+                      className="h-10 w-full rounded-xl px-3.5 text-xs font-medium text-slate-700 water-input"
+                    />
                   </div>
 
                   {/* Password */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-slate-700">Password</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowForgot(true)}
-                        className="text-[0.68rem] font-semibold hover:underline transition rounded"
-                        style={{ color: '#F46C00' }}
-                      >
-                        Forgot password?
-                      </button>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="password" className="block text-xs font-semibold text-slate-600">
+                      Password
+                    </label>
                     <div className="relative">
-                      <Lock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10" />
-                      <FormInput
+                      <input
+                        id="password"
                         type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={e => { setPassword(e.target.value); setError('') }}
-                        placeholder="Enter your password"
                         autoComplete="current-password"
-                        className="pl-10 pr-10"
+                        required
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="h-10 w-full rounded-xl px-3.5 pr-10 text-xs font-medium text-slate-700 water-input"
                       />
                       <button
                         type="button"
+                        tabIndex={-1}
                         onClick={() => setShowPassword(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 transition"
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   </div>
 
-                  {/* Remember me */}
-                  <label className="flex items-center gap-2.5 cursor-pointer">
-                    <div
-                      onClick={() => setRememberMe(v => !v)}
-                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition`}
-                      style={rememberMe
-                        ? { borderColor: '#F46C00', background: '#F46C00' }
-                        : { borderColor: '#cbd5e1', background: 'white' }}
-                    >
-                      {rememberMe && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
+                  {/* Role quick-fill chips */}
+                  <div className="space-y-1.5">
+                    <p className="text-[0.65rem] font-semibold text-slate-400 uppercase tracking-wide">Quick fill</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: 'Global Admin', email: 'avinash.verma@zinnia.com', color: 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100', icon: Layers },
+                        { label: 'IT Admin',     email: 'itadmin@zinnia.com',       color: 'bg-lime-50 border-lime-200 text-lime-700 hover:bg-lime-100',         icon: ShieldCheck },
+                        { label: 'Helpdesk',     email: 'helpdesk@zinnia.com',      color: 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200',    icon: Laptop2 },
+                      ].map(({ label, email: e, color, icon: Icon }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => { setEmail(e); setPassword('Admin@ITO2026'); setError('') }}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold transition ${color}`}
+                        >
+                          <Icon className="h-2.5 w-2.5" />
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                    <span className="text-xs text-slate-600 select-none">Keep me signed in for 30 days</span>
-                  </label>
-
-                  {/* Sign in button */}
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-full py-3 text-sm font-bold text-white transition disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)', boxShadow: '0 4px 14px rgba(244,108,0,0.3)' }}
-                    onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.92' }}
-                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
-                  >
-                    {loading ? (
-                      <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    ) : (
-                      <ArrowRight className="h-4 w-4" />
-                    )}
-                    {loading ? 'Signing in…' : 'Sign In'}
-                  </button>
-
-                  {/* Divider */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-slate-200" />
-                    <span className="text-[0.65rem] text-slate-400 font-medium">or continue with</span>
-                    <div className="flex-1 h-px bg-slate-200" />
                   </div>
 
-                  {/* SSO button */}
                   <button
-                    type="button"
-                    onClick={handleSSO}
-                    disabled={loading}
-                    className="w-full inline-flex items-center justify-center gap-3 rounded-full border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
+                    type="submit"
+                    disabled={localLoading || !email || !password}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed btn-water"
                   >
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                      <rect x="1"  y="1"  width="7.5" height="7.5" fill="#F25022" rx="0.5" />
-                      <rect x="9.5" y="1"  width="7.5" height="7.5" fill="#7FBA00" rx="0.5" />
-                      <rect x="1"  y="9.5" width="7.5" height="7.5" fill="#00A4EF" rx="0.5" />
-                      <rect x="9.5" y="9.5" width="7.5" height="7.5" fill="#FFB900" rx="0.5" />
-                    </svg>
-                    Sign in with Microsoft
+                    {localLoading ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Signing in…
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="h-4 w-4" />
+                        Sign In
+                      </>
+                    )}
                   </button>
                 </form>
+              )}
+
+              {/* ── Microsoft SSO tab ── */}
+              {activeTab === 'sso' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Sign in with your Zinnia Microsoft account via Entra ID. Requires the Azure AD web redirect URI to be registered.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSsoSignIn}
+                    disabled={ssoLoading}
+                    className="w-full inline-flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white py-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {ssoLoading ? (
+                      <>
+                        <svg className="h-5 w-5 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Redirecting to Microsoft…
+                      </>
+                    ) : (
+                      <>
+                        <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                          <rect x="1"   y="1"   width="7.5" height="7.5" fill="#F25022" rx="0.5" />
+                          <rect x="9.5" y="1"   width="7.5" height="7.5" fill="#7FBA00" rx="0.5" />
+                          <rect x="1"   y="9.5" width="7.5" height="7.5" fill="#00A4EF" rx="0.5" />
+                          <rect x="9.5" y="9.5" width="7.5" height="7.5" fill="#FFB900" rx="0.5" />
+                        </svg>
+                        Sign in with Microsoft
+                      </>
+                    )}
+                  </button>
+
+                  {/* Who can access */}
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400">Who can access via SSO</p>
+                    {[
+                      { role: 'Global Admin', desc: 'avinash.verma@zinnia.com',  color: 'bg-orange-100 text-orange-700', icon: Layers },
+                      { role: 'IT Admin',     desc: 'ITO EndPoint Portal group', color: 'bg-lime-100 text-lime-700',     icon: ShieldCheck },
+                      { role: 'Helpdesk',     desc: 'Desktop Support group',     color: 'bg-slate-200 text-slate-600',   icon: Laptop2 },
+                    ].map(({ role, desc, color, icon: Icon }) => (
+                      <div key={role} className="flex items-center gap-2.5">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.62rem] font-semibold ${color}`}>
+                          <Icon className="h-2.5 w-2.5" />
+                          {role}
+                        </span>
+                        <span className="text-[0.65rem] text-slate-500">{desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Demo accounts */}
-          {!showForgot && (
-            <div className="mt-5">
-              <p className="text-center text-[0.68rem] font-bold uppercase tracking-widest text-slate-400 mb-3">
-                Try a demo account
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {DEMO_ACCOUNTS.map(acct => {
-                  const Icon = acct.icon
-                  return (
-                    <button
-                      key={acct.role}
-                      type="button"
-                      onClick={() => handleDemoLogin(acct)}
-                      disabled={loading}
-                      className={`flex flex-col items-center gap-1.5 rounded-2xl border px-3 py-3 text-center transition hover:shadow-md disabled:opacity-50 ${acct.badge} hover:brightness-95`}
-                    >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
-                      <p className="text-[0.68rem] font-bold leading-tight">{acct.role}</p>
-                      <p className="text-[0.58rem] opacity-75 leading-tight">{acct.desc}</p>
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="text-center text-[0.62rem] text-slate-400 mt-2.5">
-                Demo accounts use password{' '}
-                <code className="font-mono bg-slate-100 rounded-full px-1.5 py-0.5 text-slate-600">demo1234</code>
-              </p>
-            </div>
-          )}
-
           {/* Footer */}
           <div className="mt-6 flex flex-col items-center gap-2 text-[0.65rem] text-slate-400">
-            <div className="flex items-center gap-3">
-              <a href="#" className="hover:text-slate-600 transition" onClick={e => e.preventDefault()}>Privacy Policy</a>
-              <span>·</span>
-              <a href="#" className="hover:text-slate-600 transition" onClick={e => e.preventDefault()}>Terms of Use</a>
-              <span>·</span>
-              <a href="#" className="hover:text-slate-600 transition" onClick={e => e.preventDefault()}>Support</a>
-            </div>
             <p>© 2026 Zinnia Technologies · ITO Endpoint</p>
           </div>
-
         </div>
       </div>
     </div>

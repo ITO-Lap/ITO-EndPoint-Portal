@@ -26,6 +26,7 @@ import {
   FileBarChart,
   Network,
   Radar,
+  Stethoscope,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -49,6 +50,7 @@ export const navItems: NavItem[] = [
   { title: 'Windows Devices',         icon: Laptop2,      group: 'Endpoint Management' },
   { title: 'ManageEngine Devices',    icon: Layers,       group: 'Endpoint Management' },
   { title: 'Open Issues',             icon: AlertTriangle,  group: 'Endpoint Management' },
+  { title: 'Smart Diagnostics',       icon: Stethoscope,    group: 'Endpoint Management' },
 
   // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
   { title: 'Security Posture',    icon: Shield,       group: 'Security & Compliance' },

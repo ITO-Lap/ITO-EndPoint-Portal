@@ -1,1003 +1,853 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  BookOpen, RefreshCw, Sparkles, ChevronDown, ChevronUp,
-  Apple, Monitor, Laptop2, Ticket, ExternalLink, Copy,
-  AlertTriangle, ShieldAlert, Check, ClipboardList,
-  Library, Search, Zap, FileText, Wrench,
-  HardDrive, RotateCcw, Package, Upload, LifeBuoy, X,
+  BookOpen, Search, Zap, Shield, SkipForward, Play, Copy, Download, Upload,
+  CheckCircle2, Clock, AlertTriangle, RotateCcw, ChevronDown, ChevronUp,
+  ExternalLink, Tag, Users, History, X, FileDown, Terminal, Package, ShieldCheck,
+  HardDrive, Wifi, Lock, RefreshCw, Eye, ClipboardList, Layers, ChevronRight,
+  Filter, TrendingUp, Star, Wrench, SlidersHorizontal,
 } from 'lucide-react'
-import { api } from '../api'
-import type { ApiDevice, DeviceAnalysis, JiraIssue, ConfluencePage } from '../api'
-import { JiraModal } from '../components/runbooks/JiraModal'
-import { ConfluenceModal } from '../components/runbooks/ConfluenceModal'
+import { runbooksApi } from '../api'
 import { useToast } from '../components/ui/ToastProvider'
+import { ExecutionDrawer } from '../components/runbooks/ExecutionDrawer'
+import type {
+  EnterpriseRunbook, RunbookExecution, ExecMode, ExecStatus,
+} from '../types'
 
-const SEVERITY_ORDER: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SEVERITY_BADGE: Record<string, string> = {
+const SEV_BADGE: Record<string, string> = {
   Critical: 'bg-red-100 text-red-700 border-red-200',
   High:     'bg-orange-100 text-orange-700 border-orange-200',
   Medium:   'bg-amber-100 text-amber-700 border-amber-200',
   Low:      'bg-slate-100 text-slate-600 border-slate-200',
 }
 
-const COMPLIANCE_BADGE: Record<string, string> = {
-  'Non-Compliant': 'bg-red-100 text-red-700 border-red-200',
-  'Warning':       'bg-amber-100 text-amber-700 border-amber-200',
+const STATUS_BADGE: Record<ExecStatus, string> = {
+  pending:          'bg-slate-100 text-slate-600 border-slate-200',
+  waiting_approval: 'bg-amber-100 text-amber-700 border-amber-200',
+  running:          'bg-blue-100 text-blue-700 border-blue-200',
+  completed:        'bg-emerald-100 text-emerald-700 border-emerald-200',
+  failed:           'bg-red-100 text-red-700 border-red-200',
+  cancelled:        'bg-slate-100 text-slate-500 border-slate-200',
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'Encryption / FileVault': '#ef4444',
-  'Security / AV':          '#f97316',
-  'OS / Patch':             '#f59e0b',
-  'Device Check-in':        '#22c55e',
-  'Compliance Policies':    '#a855f7',
-  'Application Issues':     '#6366f1',
-  'Other':                  '#64748b',
+const STATUS_LABELS: Record<ExecStatus, string> = {
+  pending: 'Pending', waiting_approval: 'Awaiting Approval',
+  running: 'Running', completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled',
 }
 
-const RISK_COLOR: Record<string, string> = {
-  Critical: 'text-red-600',
-  High:     'text-orange-600',
-  Medium:   'text-amber-600',
-  Low:      'text-emerald-600',
+const CAT_ICONS: Record<string, React.ElementType> = {
+  'Encryption':   Lock,
+  'MDM':          Wifi,
+  'Patching':     RefreshCw,
+  'Security / AV': Shield,
+  'Identity':     Users,
+  'Diagnostics':  HardDrive,
+  'Application':  Package,
 }
 
-function PlatformIcon({ platform }: { platform: string }) {
-  if (platform === 'macOS')   return <Apple   className="h-3.5 w-3.5 text-slate-400" />
-  if (platform === 'Windows') return <Monitor className="h-3.5 w-3.5 text-slate-400" />
-  return <Laptop2 className="h-3.5 w-3.5 text-slate-400" />
+const MODE_LABELS: Record<ExecMode, string> = {
+  normal: 'Live Execution', safe: 'Safe Mode', 'dry-run': 'Dry Run',
 }
 
-// Per-device runbook card
-function RunbookDeviceCard({
-  device,
-  ai,
-  aiLoading,
-  jiraTickets,
-  confluenceLinks,
-  onAnalyze,
-  onOpenJira,
-  onOpenConfluence,
-  onDetachConfluence,
-}: {
-  device:            ApiDevice
-  ai:                DeviceAnalysis | null
-  aiLoading:         boolean
-  jiraTickets:       JiraIssue[]
-  confluenceLinks:   ConfluencePage[]
-  onAnalyze:         () => void
-  onOpenJira:        () => void
-  onOpenConfluence:  () => void
-  onDetachConfluence:(id: string) => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const { notify } = useToast()
+const MODE_DESC: Record<ExecMode, string> = {
+  normal:   'Execute all steps on the device. Real changes are applied.',
+  safe:     'Skip risky steps. Read-only assessment where possible.',
+  'dry-run': 'Simulate execution without applying any changes.',
+}
 
-  const copySteps = () => {
-    const steps = ai?.steps ?? []
-    if (!steps.length) return
-    navigator.clipboard.writeText(steps.map((s, i) => `${i + 1}. ${s}`).join('\n')).then(() => {
-      notify('success', 'Copied', 'Remediation steps copied to clipboard')
-    })
+const PLATFORM_LABELS: Record<string, string> = {
+  'Windows': 'Windows', 'macOS': 'macOS', 'cross-platform': 'All Platforms',
+}
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
+}
+
+function fmtRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 60000)  return 'just now'
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+// ─── Execute modal ────────────────────────────────────────────────────────────
+
+interface ExecuteModalProps {
+  runbook: EnterpriseRunbook
+  onClose: () => void
+  onStart: (mode: ExecMode, deviceId: string, deviceName: string) => void
+}
+
+function ExecuteModal({ runbook, onClose, onStart }: ExecuteModalProps) {
+  const [mode, setMode]       = useState<ExecMode>('normal')
+  const [deviceId, setDeviceId]   = useState('device-001')
+  const [deviceName, setDeviceName] = useState('WINLAPTOP-DEMO01')
+
+  const modes: ExecMode[] = ['normal', 'safe', 'dry-run']
+  const modeIcons: Record<ExecMode, React.ElementType> = { normal: Zap, safe: Shield, 'dry-run': SkipForward }
+  const modeColors: Record<ExecMode, string> = {
+    normal:   'border-red-300 bg-red-50 text-red-800',
+    safe:     'border-emerald-300 bg-emerald-50 text-emerald-800',
+    'dry-run':'border-violet-300 bg-violet-50 text-violet-800',
   }
 
-  const catColor = CATEGORY_COLORS[device.issueSource] ?? '#64748b'
-
   return (
-    <div className={`rounded-2xl border bg-white shadow-sm transition ${expanded ? 'border-orange-300 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
-      {/* Card header row */}
-      <button
-        type="button"
-        className="w-full text-left px-5 py-4 flex items-start gap-3"
-        onClick={() => {
-          setExpanded(e => !e)
-          if (!ai && !aiLoading && !expanded) onAnalyze()
-        }}
-      >
-        {/* Platform icon */}
-        <div className="mt-0.5 flex-shrink-0">
-          <PlatformIcon platform={device.platform} />
-        </div>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-3xl glass-strong p-6 space-y-5 shadow-2xl"
+        onClick={e => e.stopPropagation()}
+        style={{ boxShadow: '0 32px 96px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)' }}>
 
-        {/* Main info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-slate-800 text-sm">{device.deviceName}</span>
-            <span className="text-xs text-slate-400">·</span>
-            <span className="text-xs text-slate-500">{device.user}</span>
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold ${COMPLIANCE_BADGE[device.complianceState] ?? ''}`}>
-              {device.complianceState}
-            </span>
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold ${SEVERITY_BADGE[device.severity] ?? SEVERITY_BADGE.Low}`}>
-              {device.severity}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />
-            <span className="text-xs text-slate-500">{device.issueSource || 'Other'}</span>
-            {device.primaryIssue && (
-              <>
-                <span className="text-xs text-slate-300">—</span>
-                <span className="text-xs text-slate-600 truncate">{device.primaryIssue}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Expand chevron */}
-        <div className="flex-shrink-0 text-slate-400">
-          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </div>
-      </button>
-
-      {/* Expanded body */}
-      {expanded && (
-        <div className="border-t border-slate-100 px-5 py-4 flex flex-col gap-4">
-
-          {/* AI Analysis */}
-          <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-orange-600" />
-                <span className="text-xs font-semibold text-orange-700 uppercase tracking-wider">AI Analysis</span>
-              </div>
-              {!ai && !aiLoading && (
-                <button type="button" onClick={onAnalyze} className="flex items-center gap-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs font-medium transition">
-                  <Sparkles className="h-3 w-3" />
-                  Analyze
-                </button>
-              )}
-              {ai && (
-                <span className={`text-xs font-semibold ${RISK_COLOR[ai.riskLevel] ?? 'text-slate-500'}`}>
-                  Risk: {ai.riskLevel}
-                </span>
-              )}
-            </div>
-
-            {aiLoading && (
-              <div className="flex items-center gap-2 text-orange-600 text-xs py-2">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                Generating AI analysis…
-              </div>
-            )}
-
-            {ai && !aiLoading && (
-              <div className="flex flex-col gap-3">
-                {ai.summary && (
-                  <div>
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-1">Summary</p>
-                    <p className="text-xs text-slate-700">{ai.summary}</p>
-                  </div>
-                )}
-                {ai.rootCause && (
-                  <div>
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-1">Root Cause</p>
-                    <p className="text-xs text-slate-700">{ai.rootCause}</p>
-                  </div>
-                )}
-                {ai.recommendation && (
-                  <div>
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-1">Recommendation</p>
-                    <p className="text-xs text-slate-700">{ai.recommendation}</p>
-                  </div>
-                )}
-                {ai.steps.length > 0 && (
-                  <div>
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-2">Remediation Steps</p>
-                    <ol className="flex flex-col gap-1.5">
-                      {ai.steps.map((step, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
-                          <span className="flex-shrink-0 mt-0.5 grid h-4 w-4 place-items-center rounded-full bg-orange-200 text-orange-700 text-[0.6rem] font-bold">{i + 1}</span>
-                          {step}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-                {ai.suggestedRunbook && (
-                  <div className="rounded-lg border border-orange-200 bg-white px-3 py-2 flex items-center gap-2">
-                    <BookOpen className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
-                    <span className="text-xs text-slate-600"><span className="font-semibold">Suggested runbook:</span> {ai.suggestedRunbook}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!ai && !aiLoading && (
-              <p className="text-xs text-slate-400 py-2">Click <span className="font-medium text-orange-600">Analyze</span> to generate AI-powered root cause analysis and remediation steps.</p>
-            )}
-          </div>
-
-          {/* Linked Confluence articles */}
-          {confluenceLinks.length > 0 && (
-            <div>
-              <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-2">Linked Articles</p>
-              <div className="flex flex-col gap-1.5">
-                {confluenceLinks.map(page => (
-                  <div key={page.id} className="flex items-center justify-between gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <BookOpen className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
-                      <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[0.6rem] font-bold text-orange-700 uppercase">{page.space}</span>
-                      <span className="text-xs text-slate-700 truncate">{page.title}</span>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <a href={page.url} target="_blank" rel="noreferrer" className="rounded p-1 hover:bg-orange-100 text-slate-400 hover:text-orange-600 transition">
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      <button type="button" onClick={() => onDetachConfluence(page.id)} className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 transition">
-                        <span className="sr-only">Remove</span>
-                        <span aria-hidden className="text-[0.65rem]">✕</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Linked Jira tickets */}
-          {jiraTickets.length > 0 && (
-            <div>
-              <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-2">Jira Tickets</p>
-              <div className="flex flex-col gap-1.5">
-                {jiraTickets.map(ticket => (
-                  <div key={ticket.id} className="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
-                    <Ticket className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
-                    <a href={ticket.url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-orange-700 hover:underline flex-shrink-0">{ticket.key}</a>
-                    <span className="text-xs text-slate-600 truncate">{ticket.summary}</span>
-                    <span className={`ml-auto flex-shrink-0 rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold ${SEVERITY_BADGE[ticket.priority] ?? SEVERITY_BADGE.Low}`}>{ticket.priority}</span>
-                    <span className="text-[0.6rem] text-slate-400 flex-shrink-0">{ticket.status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={onOpenJira}
-              className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 px-3 py-2 text-xs font-medium text-orange-700 transition"
-            >
-              <Ticket className="h-3.5 w-3.5" />
-              Create Jira Ticket
-            </button>
-            <button
-              type="button"
-              onClick={onOpenConfluence}
-              className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 px-3 py-2 text-xs font-medium text-orange-700 transition"
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              Link Confluence Article
-            </button>
-            {ai && ai.steps.length > 0 && (
-              <button
-                type="button"
-                onClick={copySteps}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy Steps
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Static Runbook Library ──────────────────────────────────────────────────
-
-interface StaticRunbook {
-  id: string
-  name: string
-  description: string
-  platform: 'Windows' | 'macOS' | 'Cross-platform'
-  category: string
-  severity: 'Critical' | 'High' | 'Medium' | 'Low'
-  automationAvailable: boolean
-  escalationRequired: boolean
-  estimatedTime: string
-  symptoms: string[]
-  rootCause: string
-  steps: string[]
-  escalationPath: string
-  icon: typeof HardDrive
-}
-
-const STATIC_RUNBOOKS: StaticRunbook[] = [
-  {
-    id: 'bitlocker',
-    name: 'BitLocker Encryption Enforcement',
-    description: 'Enable and enforce BitLocker disk encryption on Windows devices via Intune or Group Policy.',
-    platform: 'Windows',
-    category: 'Encryption / FileVault',
-    severity: 'Critical',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '15–30 min',
-    symptoms: ['Encryption status: Off', 'BitLocker not enabled', 'Compliance policy failed: Encryption'],
-    rootCause: 'BitLocker not initialized on the device, or TPM chip not configured correctly.',
-    steps: [
-      'Verify device has TPM 2.0 chip enabled in BIOS/UEFI settings.',
-      'In Intune, navigate to Endpoint Security → Disk Encryption → Create policy.',
-      'Assign BitLocker policy to the target device group.',
-      'Force device sync: Settings → Accounts → Access work or school → Sync.',
-      'Verify BitLocker status via: manage-bde -status C: in Command Prompt.',
-      'Confirm compliance in Intune Device Compliance report.',
-    ],
-    escalationPath: 'Escalate to L2 if TPM chip is missing or BIOS is locked by vendor.',
-    icon: HardDrive,
-  },
-  {
-    id: 'filevault',
-    name: 'FileVault Activation (macOS)',
-    description: 'Enable FileVault full-disk encryption on macOS via Kandji or Jamf MDM enforcement.',
-    platform: 'macOS',
-    category: 'Encryption / FileVault',
-    severity: 'Critical',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '10–20 min',
-    symptoms: ['FileVault: Off', 'macOS encryption not enabled', 'Compliance failure: FileVault'],
-    rootCause: 'FileVault not enabled by user or deferred enrollment without enforcement.',
-    steps: [
-      'In Kandji, go to Library → FileVault → Enable enforcement.',
-      'Assign the FileVault configuration to the device blueprint.',
-      'Ask the user to log out and back in to trigger FileVault prompt.',
-      'User clicks Enable FileVault and saves the recovery key.',
-      'Escrow the recovery key to Kandji / Jamf.',
-      'Verify via: fdesetup status in Terminal — should show "FileVault is On".',
-      'Confirm compliance status in MDM after next device check-in.',
-    ],
-    escalationPath: 'Escalate if device is running macOS older than 10.15 or if recovery key cannot be escrowed.',
-    icon: HardDrive,
-  },
-  {
-    id: 'intune-sync',
-    name: 'Intune Sync / MDM Re-enrollment',
-    description: 'Force MDM synchronization or re-enroll a device that has lost its management profile.',
-    platform: 'Windows',
-    category: 'Device Check-in',
-    severity: 'High',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '20–45 min',
-    symptoms: ['Device not syncing', 'Last check-in >48h', 'MDM enrollment status: Unknown'],
-    rootCause: 'MDM agent failure, enrollment certificate expired, or device left Azure AD.',
-    steps: [
-      'Ask user to open: Settings → Accounts → Access work or school.',
-      'Click the connected work account → Info → Sync.',
-      'If sync fails, remove the account and re-add it.',
-      'If enrollment is broken, run: dsregcmd /leave then dsregcmd /join.',
-      'Re-enroll via Company Portal: download and sign in.',
-      'Confirm enrollment in Intune: Devices → All Devices → find device.',
-      'Force re-push all policies from Intune console.',
-    ],
-    escalationPath: 'Escalate to L2 if re-enrollment fails due to Azure AD conditional access or licensing issues.',
-    icon: RotateCcw,
-  },
-  {
-    id: 'restart-agent',
-    name: 'Restart MDM Agent',
-    description: 'Restart the MDM management agent when the device stops checking in correctly.',
-    platform: 'Cross-platform',
-    category: 'Device Check-in',
-    severity: 'Medium',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '5–10 min',
-    symptoms: ['Agent unresponsive', 'Check-in timeout', 'MDM commands queued but not executed'],
-    rootCause: 'MDM agent process crashed, hung, or was blocked by third-party security software.',
-    steps: [
-      'Windows: Open Services → find "IntuneManagementExtension" → Restart.',
-      'Windows CMD (admin): net stop IntuneManagementExtension && net start IntuneManagementExtension',
-      'macOS (Kandji): sudo launchctl kickstart -k system/com.kandji.agent',
-      'macOS (Jamf): sudo jamf recon',
-      'Force a device sync from the MDM console after restarting.',
-      'Wait 5 minutes and verify check-in timestamp updated in MDM.',
-    ],
-    escalationPath: 'Escalate if agent repeatedly crashes — may indicate AV interference or corrupted installation.',
-    icon: Zap,
-  },
-  {
-    id: 'collect-logs',
-    name: 'Collect Diagnostic Logs',
-    description: 'Gather MDM, system, and application logs from the device for L2 troubleshooting.',
-    platform: 'Cross-platform',
-    category: 'Other',
-    severity: 'Low',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '10–15 min',
-    symptoms: ['Intermittent compliance failures', 'Unexplained policy failures', 'Repeated agent crashes'],
-    rootCause: 'Root cause unknown — logs needed for diagnosis.',
-    steps: [
-      'Windows: Run "mdmdiagnosticstool.exe -area DeviceEnrollment;DeviceProvisioning;TPM" in admin CMD.',
-      'Collect event logs: Event Viewer → Applications and Services → Microsoft → Windows → DeviceManagement.',
-      'macOS: Use Console.app to filter by "com.kandji" or "com.microsoft".',
-      'macOS: Run: sudo mdmclient QueryInstalledApps',
-      'Package logs and upload to IT ticketing system for review.',
-      'If Intune, use Intune Diagnostics: Devices → select device → Collect Diagnostics.',
-    ],
-    escalationPath: 'Pass collected logs to L2 with ticket number and device details.',
-    icon: FileText,
-  },
-  {
-    id: 'company-portal',
-    name: 'Company Portal Reinstall',
-    description: 'Reinstall the Microsoft Company Portal app when enrollment or app access is broken.',
-    platform: 'Windows',
-    category: 'Application Issues',
-    severity: 'Medium',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '15–25 min',
-    symptoms: ['Company Portal missing', 'Cannot access corporate apps', 'SSO failures after app removal'],
-    rootCause: 'Company Portal was uninstalled, corrupted, or not automatically pushed by Intune.',
-    steps: [
-      'Check Intune: Apps → All Apps — verify Company Portal is assigned to device group.',
-      'If missing from assignment, add device group and set install type to "Required".',
-      'Force device sync to trigger app push.',
-      'If assignment exists but app missing, manually install from Microsoft Store.',
-      'After install, sign in with corporate credentials.',
-      'Test access to corporate resources (email, SharePoint).',
-      'Re-verify compliance state in Intune.',
-    ],
-    escalationPath: 'Escalate if Company Portal cannot be installed due to App Store restrictions or MDM app store policy.',
-    icon: Package,
-  },
-  {
-    id: 'enrollment-failure',
-    name: 'Enrollment Failure Recovery',
-    description: 'Recover a device that failed initial MDM enrollment or lost its enrollment state.',
-    platform: 'Cross-platform',
-    category: 'Device Check-in',
-    severity: 'High',
-    automationAvailable: false,
-    escalationRequired: true,
-    estimatedTime: '30–60 min',
-    symptoms: ['Enrollment failed', 'Device shows as unmanaged', 'No management profile installed'],
-    rootCause: 'Network failure during enrollment, expired token, user error, or quota limit reached.',
-    steps: [
-      'Confirm the user has a valid Intune/MDM license assigned in Azure AD.',
-      'Check Intune enrollment restrictions — verify the device OS and type are allowed.',
-      'Clear old enrollment: Windows — dsregcmd /leave; macOS — remove MDM profile in System Settings.',
-      'For iOS/macOS: use Apple Configurator or Automated Device Enrollment (ADE) for corporate devices.',
-      'Re-initiate enrollment from the MDM portal or email the user an enrollment link.',
-      'Monitor enrollment events in Intune: Devices → Monitor → Enrollment Failures.',
-      'After successful enrollment, verify all policies and apps are pushed.',
-    ],
-    escalationPath: 'Escalate to L2 if device block is due to Azure AD conditional access or corporate enrollment restrictions.',
-    icon: Upload,
-  },
-  {
-    id: 'app-deployment',
-    name: 'App Deployment Failure',
-    description: 'Troubleshoot and remediate failed application deployments from the MDM app catalog.',
-    platform: 'Cross-platform',
-    category: 'Application Issues',
-    severity: 'Medium',
-    automationAvailable: true,
-    escalationRequired: false,
-    estimatedTime: '15–30 min',
-    symptoms: ['App shows as Failed in MDM', 'User cannot install required app', 'Error code in app deployment logs'],
-    rootCause: 'Network issue, storage constraint, app configuration error, or policy conflict.',
-    steps: [
-      'Identify the failing app in MDM: Apps → All Apps → Monitor → App Install Status.',
-      'Note the error code and look it up in Microsoft/Kandji documentation.',
-      'Check device storage — ensure sufficient free space for installation.',
-      'Verify the app configuration/package is valid and updated.',
-      'Check for conflicting Group Policy objects that block app installations.',
-      'Retry deployment: Remove and re-add the app assignment, force sync.',
-      'If persistent, redeploy the app as a Win32 app with detection rules.',
-      'Confirm installation via MDM compliance dashboard.',
-    ],
-    escalationPath: 'Escalate to L2 if error code indicates a licensing, MSI packaging, or dependency issue.',
-    icon: Wrench,
-  },
-  {
-    id: 'escalate-l2',
-    name: 'Escalate to L2 Support',
-    description: 'Standard escalation procedure when L1 remediation steps are exhausted.',
-    platform: 'Cross-platform',
-    category: 'Other',
-    severity: 'High',
-    automationAvailable: false,
-    escalationRequired: true,
-    estimatedTime: '5 min (handoff)',
-    symptoms: ['All L1 remediation attempts failed', 'Issue requires admin-level access', 'Hardware fault suspected'],
-    rootCause: 'Issue complexity exceeds L1 scope — requires elevated access, vendor engagement, or hardware intervention.',
-    steps: [
-      'Document all steps already attempted in the Jira ticket.',
-      'Capture device serial number, OS version, management source, and error messages.',
-      'Collect diagnostic logs (see Collect Diagnostic Logs runbook).',
-      'Assign the Jira ticket to the L2 queue with "Escalated" label.',
-      'Brief the L2 technician with a concise summary of the issue and attempted fixes.',
-      'If SLA is at risk, notify the user and their manager via email.',
-    ],
-    escalationPath: 'L2 → L3 (Engineering) if issue requires code-level investigation or vendor support case.',
-    icon: LifeBuoy,
-  },
-]
-
-const LIBRARY_CATEGORIES = ['All', ...Array.from(new Set(STATIC_RUNBOOKS.map(r => r.category)))]
-const LIBRARY_PLATFORMS  = ['All', 'Windows', 'macOS', 'Cross-platform']
-
-function RunbookLibraryCard({ runbook }: { runbook: StaticRunbook }) {
-  const [expanded, setExpanded] = useState(false)
-  const { notify } = useToast()
-  const Icon = runbook.icon
-
-  const copySteps = () => {
-    navigator.clipboard.writeText(runbook.steps.map((s, i) => `${i + 1}. ${s}`).join('\n'))
-      .then(() => notify('success', 'Copied', 'Runbook steps copied to clipboard'))
-  }
-
-  const severityColor: Record<string, string> = {
-    Critical: 'bg-red-100 text-red-700 border-red-200',
-    High:     'bg-orange-100 text-orange-700 border-orange-200',
-    Medium:   'bg-amber-100 text-amber-700 border-amber-200',
-    Low:      'bg-slate-100 text-slate-600 border-slate-200',
-  }
-
-  const platformColor = runbook.platform === 'Windows' ? 'bg-orange-100 text-orange-700 border-orange-200'
-    : runbook.platform === 'macOS' ? 'bg-lime-100 text-lime-700 border-lime-200'
-    : 'bg-slate-100 text-slate-600 border-slate-200'
-
-  return (
-    <div className={`rounded-2xl border bg-white shadow-sm transition-all ${expanded ? 'border-orange-300 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
-      {/* Header */}
-      <button type="button" className="w-full text-left px-5 py-4" onClick={() => setExpanded(e => !e)}>
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-2 flex-shrink-0 mt-0.5">
-            <Icon className="h-4 w-4 text-slate-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="text-sm font-semibold text-slate-800">{runbook.name}</span>
-              <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[0.6rem] font-bold ${severityColor[runbook.severity]}`}>
-                {runbook.severity}
-              </span>
-              <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[0.6rem] font-semibold ${platformColor}`}>
-                {runbook.platform}
-              </span>
-              {runbook.automationAvailable && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[0.6rem] font-semibold text-emerald-700">
-                  <Zap className="h-2.5 w-2.5" /> Automatable
-                </span>
-              )}
-              {runbook.escalationRequired && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[0.6rem] font-semibold text-amber-700">
-                  <LifeBuoy className="h-2.5 w-2.5" /> Needs Escalation
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 leading-snug">{runbook.description}</p>
-            <div className="flex items-center gap-3 mt-1.5 text-[0.65rem] text-slate-400">
-              <span className="flex items-center gap-1"><Search className="h-2.5 w-2.5" />{runbook.category}</span>
-              <span className="flex items-center gap-1"><RefreshCw className="h-2.5 w-2.5" />{runbook.estimatedTime}</span>
-            </div>
-          </div>
-          <div className="flex-shrink-0 text-slate-400 mt-0.5">
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </div>
-        </div>
-      </button>
-
-      {/* Expanded */}
-      {expanded && (
-        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
-          {/* Symptoms */}
+        <div className="flex items-start justify-between">
           <div>
-            <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-2">Common Symptoms</p>
-            <div className="flex flex-wrap gap-1.5">
-              {runbook.symptoms.map(s => (
-                <span key={s} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[0.68rem] text-amber-700">
-                  <AlertTriangle className="h-2.5 w-2.5" />{s}
-                </span>
-              ))}
-            </div>
+            <h3 className="text-base font-black text-slate-900">{runbook.name}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">v{runbook.version} · {runbook.steps.length} steps · ~{runbook.estimatedMinutes}m</p>
           </div>
-
-          {/* Root cause */}
-          <div>
-            <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-1">Root Cause</p>
-            <p className="text-xs text-slate-700 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2">{runbook.rootCause}</p>
-          </div>
-
-          {/* Steps */}
-          <div>
-            <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-500 mb-2">Remediation Steps</p>
-            <ol className="flex flex-col gap-2">
-              {runbook.steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700">
-                  <span className="flex-shrink-0 mt-0.5 grid h-4 w-4 place-items-center rounded-full bg-orange-100 text-orange-700 text-[0.6rem] font-bold">{i + 1}</span>
-                  <span className="font-mono text-[0.7rem] text-slate-700 leading-snug">{step}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          {/* Escalation path */}
-          <div className={`rounded-xl border px-3 py-2.5 flex items-start gap-2 ${runbook.escalationRequired ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
-            <LifeBuoy className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${runbook.escalationRequired ? 'text-amber-600' : 'text-slate-400'}`} />
-            <div>
-              <p className={`text-[0.62rem] font-semibold uppercase tracking-wide mb-0.5 ${runbook.escalationRequired ? 'text-amber-700' : 'text-slate-500'}`}>Escalation Path</p>
-              <p className="text-[0.72rem] text-slate-700">{runbook.escalationPath}</p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={copySteps}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition">
-              <Copy className="h-3.5 w-3.5" /> Copy Steps
-            </button>
-            <span className={`ml-auto text-[0.65rem] font-medium ${runbook.automationAvailable ? 'text-emerald-600' : 'text-slate-400'}`}>
-              {runbook.automationAvailable ? '⚡ Automation available' : '✋ Manual process'}
-            </span>
-          </div>
+          <button onClick={onClose} className="grid h-7 w-7 place-items-center rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 transition">
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
-      )}
-    </div>
-  )
-}
 
-function RunbookLibrary() {
-  const [catFilter, setCatFilter] = useState('All')
-  const [platFilter, setPlatFilter] = useState('All')
-  const [query, setQuery] = useState('')
+        {/* Prerequisites */}
+        {runbook.prerequisites.length > 0 && (
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3.5 space-y-1.5">
+            <p className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400">Prerequisites</p>
+            {runbook.prerequisites.map(p => (
+              <div key={p} className="flex items-center gap-2">
+                <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                <p className="text-xs text-slate-600">{p}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return STATIC_RUNBOOKS.filter(r => {
-      if (catFilter !== 'All' && r.category !== catFilter) return false
-      if (platFilter !== 'All' && r.platform !== platFilter) return false
-      if (q && !r.name.toLowerCase().includes(q) && !r.description.toLowerCase().includes(q) && !r.category.toLowerCase().includes(q)) return false
-      return true
-    })
-  }, [catFilter, platFilter, query])
-
-  return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-orange-50 border border-orange-200">
-          <Library className="h-5 w-5 text-orange-600" />
-        </div>
+        {/* Execution mode */}
         <div>
-          <h2 className="text-base font-bold text-slate-800">Runbook Library</h2>
-          <p className="text-xs text-slate-500">{STATIC_RUNBOOKS.length} standard runbooks · Expand any to view steps</p>
+          <p className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400 mb-2">Execution Mode</p>
+          <div className="space-y-2">
+            {modes.map(m => {
+              const Icon = modeIcons[m]
+              return (
+                <label key={m} className={`flex items-start gap-3 rounded-2xl border-2 px-4 py-3 cursor-pointer transition ${
+                  mode === m ? modeColors[m] + ' border-current' : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}>
+                  <input type="radio" name="mode" value={m} checked={mode === m} onChange={() => setMode(m)} className="sr-only" />
+                  <Icon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold">{MODE_LABELS[m]}</p>
+                    <p className="text-[0.65rem] opacity-75 mt-0.5">{MODE_DESC[m]}</p>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Device */}
+        <div className="space-y-2">
+          <p className="text-[0.65rem] font-black uppercase tracking-wider text-slate-400">Target Device</p>
+          <input
+            value={deviceName}
+            onChange={e => { setDeviceName(e.target.value); setDeviceId(e.target.value.toLowerCase().replace(/\s+/g, '-')) }}
+            placeholder="Device name…"
+            className="h-9 w-full rounded-xl px-3.5 text-xs font-medium text-slate-700 water-input"
+          />
+        </div>
+
+        {runbook.approvalRequired && (
+          <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600 mt-0.5" />
+            <p className="text-xs text-amber-800 font-medium">
+              This runbook requires admin approval. Execution will pause until an admin approves.
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose}
+            className="flex-1 rounded-2xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+            Cancel
+          </button>
+          <button
+            onClick={() => onStart(mode, deviceId, deviceName)}
+            disabled={!deviceName.trim()}
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl py-2.5 text-xs font-bold text-white transition btn-water disabled:opacity-50">
+            <Play className="h-3.5 w-3.5" />
+            Start Execution
+          </button>
         </div>
       </div>
-
-      {/* Filters */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-3 space-y-3">
-        {/* Search */}
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          <input type="text" value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search runbooks…"
-            className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-8 text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20" />
-          {query && (
-            <button type="button" onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600">
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-        {/* Category + Platform */}
-        <div className="flex gap-2 flex-wrap">
-          {LIBRARY_CATEGORIES.map(c => (
-            <button key={c} type="button" onClick={() => setCatFilter(c)}
-              className={`rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold transition ${catFilter === c ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-              {c}
-            </button>
-          ))}
-          <div className="w-px h-6 bg-slate-200 self-center" />
-          {LIBRARY_PLATFORMS.map(p => (
-            <button key={p} type="button" onClick={() => setPlatFilter(p)}
-              className={`rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold transition ${platFilter === p ? 'bg-lime-600 border-lime-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Cards */}
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
-          <Library className="h-8 w-8 opacity-30" />
-          <p className="text-sm">No runbooks match your filters</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {filtered.map(r => <RunbookLibraryCard key={r.id} runbook={r} />)}
-        </div>
-      )}
     </div>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Version History panel ────────────────────────────────────────────────────
 
-type SeverityFilter = 'All' | 'Critical' | 'High' | 'Medium' | 'Low'
-type ComplianceFilter = 'All' | 'Non-Compliant' | 'Warning'
+function VersionHistory({ runbook, onClose }: { runbook: EnterpriseRunbook; onClose: () => void }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-xl p-5 space-y-4 w-80">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-black text-slate-800">Version History</p>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      <div className="space-y-3">
+        {runbook.versions.map((v, i) => (
+          <div key={v.version} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className={`h-5 w-5 flex-shrink-0 rounded-full flex items-center justify-center text-[0.55rem] font-black ${
+                i === 0 ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-600'
+              }`}>{i === 0 ? '●' : (runbook.versions.length - i)}</div>
+              {i < runbook.versions.length - 1 && <div className="flex-1 w-px bg-slate-200 my-1 min-h-[16px]" />}
+            </div>
+            <div className="min-w-0 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800">v{v.version}</span>
+                {i === 0 && <span className="text-[0.58rem] font-bold bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5">Latest</span>}
+              </div>
+              <p className="text-[0.65rem] text-slate-500 mt-0.5">{v.date} · {v.author}</p>
+              <p className="text-[0.65rem] text-slate-600 mt-0.5 leading-snug">{v.notes}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
-export function RunbooksPage() {
-  const [activeTab, setActiveTab]     = useState<'ai' | 'library'>('ai')
-  const [devices, setDevices]         = useState<ApiDevice[]>([])
-  const [loading, setLoading]         = useState(true)
+// ─── Runbook library card ─────────────────────────────────────────────────────
 
-  // Per-device Jira tickets and Confluence links (local state, not persisted)
-  const [jiraMap, setJiraMap]         = useState<Record<string, JiraIssue[]>>({})
-  const [confMap, setConfMap]         = useState<Record<string, ConfluencePage[]>>({})
+interface RunbookCardProps {
+  runbook: EnterpriseRunbook
+  onExecute: (rb: EnterpriseRunbook) => void
+  onClone: (id: string) => void
+  onExport: (id: string) => void
+  viewerRole: string
+}
 
-  // Modal state
-  const [jiraTarget, setJiraTarget]   = useState<ApiDevice | null>(null)
-  const [confTarget, setConfTarget]   = useState<ApiDevice | null>(null)
+function RunbookCard({ runbook, onExecute, onClone, onExport, viewerRole }: RunbookCardProps) {
+  const [showVersions, setShowVersions] = useState(false)
+  const CatIcon = CAT_ICONS[runbook.category] ?? BookOpen
+  const canExecute = viewerRole === 'Global Admin' || viewerRole === 'IT Admin'
 
-  // Filters
-  const [severityFilter, setSeverityFilter]     = useState<SeverityFilter>('All')
-  const [complianceFilter, setComplianceFilter] = useState<ComplianceFilter>('All')
-  const [categoryFilter, setCategoryFilter]     = useState<string | null>(null)
+  return (
+    <div className="relative rounded-3xl border border-slate-200 bg-white p-5 space-y-4 hover:shadow-lg transition-all group overflow-visible"
+      style={{ boxShadow: '0 2px 16px rgba(14,165,233,0.06)' }}>
 
-  const { notify } = useToast()
+      {/* Top row */}
+      <div className="flex items-start gap-3">
+        <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-2xl"
+          style={{ background: 'linear-gradient(135deg, rgba(244,108,0,0.10), rgba(14,165,233,0.08))' }}>
+          <CatIcon className="h-5 w-5 text-orange-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-sm font-bold text-slate-900 leading-tight">{runbook.name}</h3>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${SEV_BADGE[runbook.severity] ?? SEV_BADGE.Low}`}>
+              {runbook.severity}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[0.6rem] font-semibold text-slate-600">
+              {PLATFORM_LABELS[runbook.platform] ?? runbook.platform}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-100 bg-slate-50 px-2 py-0.5 text-[0.6rem] text-slate-500">
+              {runbook.category}
+            </span>
+            {runbook.approvalRequired && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[0.6rem] font-semibold text-amber-700">
+                <Lock className="h-2.5 w-2.5" /> Approval Required
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
 
-  const fetchDevices = useCallback(async () => {
-    setLoading(true)
+      <p className="text-xs text-slate-500 leading-relaxed">{runbook.description}</p>
+
+      {/* Meta row */}
+      <div className="flex items-center gap-3 text-[0.65rem] text-slate-400">
+        <span className="flex items-center gap-1"><ClipboardList className="h-3 w-3" />{runbook.steps.length} steps</span>
+        <span className="flex items-center gap-1"><Clock className="h-3 w-3" />~{runbook.estimatedMinutes}m</span>
+        <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" />{runbook.usageCount} runs</span>
+        <span className="ml-auto flex items-center gap-1 font-mono">v{runbook.version}</span>
+      </div>
+
+      {/* Tags */}
+      {runbook.tags.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {runbook.tags.slice(0, 4).map(tag => (
+            <span key={tag} className="rounded-full bg-slate-100 px-2 py-0.5 text-[0.58rem] font-mono text-slate-500">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-1">
+        {canExecute ? (
+          <button
+            type="button"
+            onClick={() => onExecute(runbook)}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-2xl py-2 text-xs font-bold text-white transition btn-water">
+            <Play className="h-3.5 w-3.5" /> Execute
+          </button>
+        ) : (
+          <span className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-2xl py-2 text-xs font-semibold text-slate-400 border border-slate-200 bg-slate-50">
+            <Eye className="h-3.5 w-3.5" /> View Only
+          </span>
+        )}
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowVersions(v => !v)}
+            className="grid h-9 w-9 place-items-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
+            title="Version history">
+            <History className="h-3.5 w-3.5" />
+          </button>
+          {showVersions && (
+            <div className="absolute right-0 bottom-full mb-2 z-30">
+              <VersionHistory runbook={runbook} onClose={() => setShowVersions(false)} />
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onClone(runbook.id)}
+          className="grid h-9 w-9 place-items-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
+          title="Clone runbook">
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onExport(runbook.id)}
+          className="grid h-9 w-9 place-items-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
+          title="Export JSON">
+          <FileDown className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Execution row ────────────────────────────────────────────────────────────
+
+function ExecutionRow({
+  exec, onOpen, onApprove, viewerRole,
+}: {
+  exec: RunbookExecution; onOpen: (id: string) => void
+  onApprove?: (execId: string, runbookId: string) => void; viewerRole: string
+}) {
+  const isRunning = exec.status === 'running'
+  const canApprove = exec.status === 'waiting_approval' && (viewerRole === 'Global Admin' || viewerRole === 'IT Admin')
+  const modeColors: Record<ExecMode, string> = {
+    normal: 'bg-red-100 text-red-700 border-red-200',
+    safe: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    'dry-run': 'bg-violet-100 text-violet-700 border-violet-200',
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-slate-100 bg-white hover:shadow-md transition-all"
+      style={{ boxShadow: '0 1px 8px rgba(14,165,233,0.04)' }}>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-xs font-bold text-slate-800 truncate">{exec.runbookName}</p>
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${STATUS_BADGE[exec.status]}`}>
+            {exec.status === 'running' && <span className="mr-1 h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />}
+            {STATUS_LABELS[exec.status]}
+          </span>
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${modeColors[exec.mode]}`}>
+            {exec.mode === 'dry-run' ? 'DRY RUN' : exec.mode === 'safe' ? 'SAFE' : 'LIVE'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 text-[0.65rem] text-slate-400">
+          <span>Device: <span className="font-semibold text-slate-600">{exec.deviceName}</span></span>
+          <span>·</span>
+          <span>{fmtRelative(exec.startedAt)}</span>
+          {exec.durationMs && <><span>·</span><span>{fmtDuration(exec.durationMs)}</span></>}
+        </div>
+        {isRunning && (
+          <div className="mt-1">
+            <div className="h-1 w-full max-w-xs rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-orange-400 to-blue-500 transition-all duration-500"
+                style={{ width: `${exec.progress}%` }}
+              />
+            </div>
+            <p className="text-[0.6rem] text-slate-400 mt-0.5">{exec.progress}% — {exec.steps.filter(s => s.status === 'running')[0]?.name ?? 'Processing…'}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {canApprove && onApprove && (
+          <button
+            type="button"
+            onClick={() => onApprove(exec.id, exec.runbookId)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-emerald-700 transition">
+            <CheckCircle2 className="h-3 w-3" /> Approve
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onOpen(exec.id)}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[0.7rem] font-semibold text-slate-600 hover:bg-slate-50 transition">
+          <Eye className="h-3 w-3" /> View
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Stats bar ────────────────────────────────────────────────────────────────
+
+function StatsBar({ runbooks, executions }: { runbooks: EnterpriseRunbook[]; executions: RunbookExecution[] }) {
+  const totalRuns   = executions.length
+  const successful  = executions.filter(e => e.status === 'completed').length
+  const pending     = executions.filter(e => e.status === 'waiting_approval').length
+  const running     = executions.filter(e => e.status === 'running').length
+  const successRate = totalRuns > 0 ? Math.round((successful / totalRuns) * 100) : 100
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {[
+        { label: 'Total Runbooks', value: runbooks.length.toString(), icon: BookOpen,      color: '#F46C00' },
+        { label: 'Total Executions', value: totalRuns.toString(),   icon: Terminal,        color: '#0EA5E9' },
+        { label: 'Success Rate',   value: `${successRate}%`,        icon: TrendingUp,      color: '#22C55E' },
+        { label: 'Pending Approval', value: pending + running > 0 ? `${pending + running}` : '0', icon: Clock, color: pending > 0 ? '#F59E0B' : '#94A3B8' },
+      ].map(s => (
+        <div key={s.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-3"
+          style={{ boxShadow: '0 2px 12px rgba(14,165,233,0.05)' }}>
+          <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl"
+            style={{ background: `${s.color}18` }}>
+            <s.icon className="h-4 w-4" style={{ color: s.color }} />
+          </div>
+          <div>
+            <p className="text-lg font-black text-slate-900 leading-tight">{s.value}</p>
+            <p className="text-[0.65rem] text-slate-400">{s.label}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Import modal ─────────────────────────────────────────────────────────────
+
+function ImportModal({ onClose, onImport }: { onClose: () => void; onImport: (data: object) => void }) {
+  const [json, setJson] = useState('')
+  const [error, setError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => setJson(String(ev.target?.result ?? ''))
+    reader.readAsText(file)
+  }
+
+  const handleImport = () => {
     try {
-      const [nc, warn] = await Promise.all([
-        api.fetchAllDevicesRaw({ compliance: 'Non-Compliant', limit: 500 }),
-        api.fetchAllDevicesRaw({ compliance: 'Warning', limit: 500 }),
-      ])
-      setDevices([...nc.devices, ...warn.devices])
+      const parsed = JSON.parse(json) as object
+      onImport(parsed)
     } catch {
-      setDevices([])
+      setError('Invalid JSON format. Please check the file.')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-3xl glass-strong p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-black text-slate-900">Import Runbook from JSON</h3>
+          <button onClick={onClose}><X className="h-4 w-4 text-slate-400" /></button>
+        </div>
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center cursor-pointer hover:border-orange-300 transition"
+          onClick={() => fileRef.current?.click()}>
+          <Upload className="h-6 w-6 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs font-semibold text-slate-500">Click to upload .json file</p>
+          <input ref={fileRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
+        </div>
+        <textarea
+          value={json}
+          onChange={e => { setJson(e.target.value); setError('') }}
+          placeholder="Or paste JSON here…"
+          rows={6}
+          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 font-mono text-[0.68rem] text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+        />
+        {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-2xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+          <button onClick={handleImport} disabled={!json.trim()} className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl py-2.5 text-xs font-bold text-white btn-water disabled:opacity-50">
+            <Upload className="h-3.5 w-3.5" /> Import
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main RunbooksPage ────────────────────────────────────────────────────────
+
+interface RunbooksPageProps { viewerRole?: string; userName?: string }
+
+type Tab = 'library' | 'executions' | 'approvals'
+
+export function RunbooksPage({ viewerRole = 'IT Admin', userName = 'admin' }: RunbooksPageProps) {
+  const { notify } = useToast()
+  const [tab, setTab] = useState<Tab>('library')
+  const [runbooks, setRunbooks]     = useState<EnterpriseRunbook[]>([])
+  const [executions, setExecutions] = useState<RunbookExecution[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [execLoading, setExecLoading] = useState(false)
+  const [search, setSearch]         = useState('')
+  const [filterSev, setFilterSev]   = useState<string>('all')
+  const [filterPlat, setFilterPlat] = useState<string>('all')
+  const [filterCat, setFilterCat]   = useState<string>('all')
+  const [executeTarget, setExecuteTarget] = useState<EnterpriseRunbook | null>(null)
+  const [activeExecId, setActiveExecId]   = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
+
+  // Load runbooks
+  const loadRunbooks = useCallback(async () => {
+    try {
+      setLoading(true)
+      const data = await runbooksApi.list()
+      setRunbooks(data)
+    } catch {
+      notify('error', 'Error', 'Failed to load runbooks')
     } finally {
       setLoading(false)
     }
+  }, [notify])
+
+  // Load executions
+  const loadExecutions = useCallback(async () => {
+    try {
+      setExecLoading(true)
+      const data = await runbooksApi.listExecutions()
+      setExecutions(data)
+    } catch { /* silent */ }
+    finally { setExecLoading(false) }
   }, [])
 
-  useEffect(() => { fetchDevices() }, [fetchDevices])
+  useEffect(() => { void loadRunbooks() }, [loadRunbooks])
 
-  // Derived breakdowns
-  const categoryBreakdown = useMemo(() => {
-    const map: Record<string, number> = {}
-    devices.forEach(d => { const c = d.issueSource || 'Other'; map[c] = (map[c] ?? 0) + 1 })
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
-  }, [devices])
+  // Poll executions when on executions/approvals tabs
+  useEffect(() => {
+    if (tab === 'executions' || tab === 'approvals') {
+      void loadExecutions()
+      const t = setInterval(loadExecutions, 4000)
+      return () => clearInterval(t)
+    }
+  }, [tab, loadExecutions])
 
-  const severityCounts = useMemo(() => ({
-    Critical: devices.filter(d => d.severity === 'Critical').length,
-    High:     devices.filter(d => d.severity === 'High').length,
-    Medium:   devices.filter(d => d.severity === 'Medium').length,
-    Low:      devices.filter(d => d.severity === 'Low').length,
-  }), [devices])
+  const handleExecute = async (mode: ExecMode, deviceId: string, deviceName: string) => {
+    if (!executeTarget) return
+    try {
+      const exec = await runbooksApi.execute(executeTarget.id, {
+        deviceId, deviceName,
+        devicePlatform: executeTarget.platform === 'macOS' ? 'macOS' : 'Windows',
+        mode, initiatedBy: userName,
+      })
+      setExecutions(prev => [exec, ...prev])
+      setExecuteTarget(null)
+      setActiveExecId(exec.id)
+      notify('success', 'Execution Started', `Running: ${executeTarget.name}`)
+    } catch {
+      notify('error', 'Error', 'Failed to start execution')
+    }
+  }
 
-  const filteredDevices = useMemo(() => {
-    return devices
-      .filter(d => severityFilter === 'All' || d.severity === severityFilter)
-      .filter(d => complianceFilter === 'All' || d.complianceState === complianceFilter)
-      .filter(d => !categoryFilter || (d.issueSource || 'Other') === categoryFilter)
-      .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4))
-  }, [devices, severityFilter, complianceFilter, categoryFilter])
+  const handleClone = async (id: string) => {
+    try {
+      const cloned = await runbooksApi.clone(id)
+      setRunbooks(prev => [...prev, cloned])
+      notify('success', 'Cloned', `Runbook cloned: ${cloned.name}`)
+    } catch {
+      notify('error', 'Error', 'Failed to clone runbook')
+    }
+  }
+
+  const handleExport = async (id: string) => {
+    try {
+      const rb = await runbooksApi.exportJson(id)
+      const blob = new Blob([JSON.stringify(rb, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+      a.download = `runbook_${id}.json`; a.click()
+      notify('success', 'Exported', 'Runbook JSON downloaded')
+    } catch {
+      notify('error', 'Error', 'Failed to export runbook')
+    }
+  }
+
+  const handleImport = async (data: object) => {
+    try {
+      const rb = await runbooksApi.importJson(data)
+      setRunbooks(prev => [...prev, rb])
+      setShowImport(false)
+      notify('success', 'Imported', `Runbook imported: ${rb.name}`)
+    } catch {
+      notify('error', 'Error', 'Failed to import runbook')
+    }
+  }
+
+  const handleApprove = async (execId: string, runbookId: string) => {
+    try {
+      await runbooksApi.approve(runbookId, execId, userName)
+      setExecutions(prev => prev.map(e => e.id === execId ? { ...e, status: 'running' as ExecStatus, approvedBy: userName } : e))
+      setActiveExecId(execId)
+      notify('success', 'Approved', 'Execution approved and started')
+    } catch {
+      notify('error', 'Error', 'Failed to approve execution')
+    }
+  }
+
+  // Filtered runbooks
+  const filteredRunbooks = useMemo(() => runbooks.filter(rb => {
+    if (search && !rb.name.toLowerCase().includes(search.toLowerCase()) &&
+        !rb.description.toLowerCase().includes(search.toLowerCase()) &&
+        !rb.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))) return false
+    if (filterSev  !== 'all' && rb.severity  !== filterSev)  return false
+    if (filterPlat !== 'all' && rb.platform  !== filterPlat) return false
+    if (filterCat  !== 'all' && rb.category  !== filterCat)  return false
+    return true
+  }), [runbooks, search, filterSev, filterPlat, filterCat])
+
+  const pendingApprovals = useMemo(() =>
+    executions.filter(e => e.status === 'waiting_approval'), [executions])
+
+  const tabs: Array<{ id: Tab; label: string; badge?: number }> = [
+    { id: 'library',    label: 'Library',    badge: runbooks.length },
+    { id: 'executions', label: 'Executions', badge: executions.filter(e => e.status === 'running').length || undefined },
+    { id: 'approvals',  label: 'Approvals',  badge: pendingApprovals.length || undefined },
+  ]
+
+  const categories = useMemo(() => [...new Set(runbooks.map(r => r.category))].sort(), [runbooks])
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* ── Header + Tab bar ───────────────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-lime-50 border border-lime-200">
-            <ClipboardList className="h-5 w-5 text-lime-600" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Runbooks</h1>
-            <p className="text-xs text-slate-500">{activeTab === 'ai' ? `Rule-based remediation for all open issues · ${devices.length} devices` : `${STATIC_RUNBOOKS.length} standard runbooks across 9 categories`}</p>
-          </div>
+    <div className="space-y-6">
+      {/* Page header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-black text-slate-900">Automated Runbooks</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Enterprise endpoint automation — execute, monitor, audit.</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Tab switcher */}
-          <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-0.5 gap-0.5">
-            <button type="button" onClick={() => setActiveTab('ai')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeTab === 'ai' ? 'bg-white text-lime-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <ClipboardList className="h-3.5 w-3.5" /> Open Issues
-            </button>
-            <button type="button" onClick={() => setActiveTab('library')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeTab === 'library' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <Library className="h-3.5 w-3.5" /> Library
-            </button>
-          </div>
-          {activeTab === 'ai' && (
+          {(viewerRole === 'Global Admin' || viewerRole === 'IT Admin') && (
             <>
               <button
                 type="button"
-                onClick={fetchDevices}
-                disabled={loading}
-                className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium text-slate-500 transition disabled:opacity-50 ${loading ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-orange-500' : ''}`} />
+                onClick={() => setShowImport(true)}
+                className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+                <Upload className="h-3.5 w-3.5" /> Import JSON
+              </button>
+              <button
+                type="button"
+                onClick={loadRunbooks}
+                className="grid h-9 w-9 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition">
+                <RefreshCw className="h-3.5 w-3.5" />
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* ── Library tab ─────────────────────────────────────────────── */}
-      {activeTab === 'library' && <RunbookLibrary />}
+      {/* Stats */}
+      {!loading && <StatsBar runbooks={runbooks} executions={executions} />}
 
-      {/* ── AI tab content ─────────────────────────────────────────── */}
-      {activeTab === 'ai' && <>
-
-      {/* ── Summary strip ──────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-lime-200 bg-lime-50 px-5 py-4 flex items-center gap-6 flex-wrap">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Open Issues</p>
-          <p className="text-2xl font-bold text-lime-700">{loading ? '—' : devices.length}</p>
-          <p className="text-xs text-slate-500 mt-0.5">{analysedCount} AI-analysed</p>
-        </div>
-        <div className="h-10 w-px bg-lime-200" />
-        {(['Critical', 'High', 'Medium', 'Low'] as const).map(sev => severityCounts[sev] > 0 && (
-          <div key={sev}>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">{sev}</p>
-            <p className={`text-xl font-bold ${RISK_COLOR[sev]}`}>{severityCounts[sev]}</p>
-          </div>
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 w-fit">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              tab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {t.label}
+            {t.badge !== undefined && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[0.55rem] font-black leading-none ${
+                tab === t.id ? 'bg-white/20 text-white' : 'bg-orange-500 text-white'
+              }`}>{t.badge}</span>
+            )}
+          </button>
         ))}
       </div>
 
-      {/* ── Filters ────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm px-5 py-4 flex flex-col gap-4">
-        {/* Severity tabs */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">By Severity</p>
-          <div className="flex flex-wrap gap-2">
-            {(['All', 'Critical', 'High', 'Medium', 'Low'] as SeverityFilter[]).map(sev => {
-              const count = sev === 'All' ? devices.length : severityCounts[sev]
-              const isActive = severityFilter === sev
-              return (
-                <button
-                  key={sev}
-                  type="button"
-                  onClick={() => setSeverityFilter(sev)}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                    isActive ? 'border-orange-400 bg-orange-50 text-orange-700 ring-2 ring-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  {sev}
-                  <span className={`rounded-full px-1.5 py-0.5 font-semibold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Compliance + Category row */}
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">By Status</p>
-            <div className="flex flex-wrap gap-2">
-              {(['All', 'Non-Compliant', 'Warning'] as ComplianceFilter[]).map(cf => {
-                const count = cf === 'All' ? devices.length : devices.filter(d => d.complianceState === cf).length
-                const isActive = complianceFilter === cf
-                return (
-                  <button
-                    key={cf}
-                    type="button"
-                    onClick={() => setComplianceFilter(cf)}
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                      isActive ? 'border-orange-400 bg-orange-50 text-orange-700 ring-2 ring-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    {cf === 'Non-Compliant' && <ShieldAlert className="h-3 w-3 text-red-500" />}
-                    {cf === 'Warning' && <AlertTriangle className="h-3 w-3 text-amber-500" />}
-                    {cf}
-                    <span className={`rounded-full px-1.5 py-0.5 font-semibold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                  </button>
-                )
-              })}
+      {/* ── Library tab ── */}
+      {tab === 'library' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-48 max-w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search runbooks, tags…"
+                className="h-9 w-full rounded-xl pl-9 pr-3 text-xs font-medium text-slate-700 water-input"
+              />
             </div>
+            {[
+              { label: 'Severity', value: filterSev, setter: setFilterSev, opts: ['all', 'Critical', 'High', 'Medium', 'Low'] },
+              { label: 'Platform', value: filterPlat, setter: setFilterPlat, opts: ['all', 'Windows', 'macOS', 'cross-platform'] },
+              { label: 'Category', value: filterCat, setter: setFilterCat, opts: ['all', ...categories] },
+            ].map(f => (
+              <select
+                key={f.label}
+                value={f.value}
+                onChange={e => f.setter(e.target.value)}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {f.opts.map(o => (
+                  <option key={o} value={o}>{o === 'all' ? `All ${f.label}` : o}</option>
+                ))}
+              </select>
+            ))}
+            {(search || filterSev !== 'all' || filterPlat !== 'all' || filterCat !== 'all') && (
+              <button
+                type="button"
+                onClick={() => { setSearch(''); setFilterSev('all'); setFilterPlat('all'); setFilterCat('all') }}
+                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition">
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
+            <span className="ml-auto text-xs text-slate-400">{filteredRunbooks.length} of {runbooks.length}</span>
           </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">By Issue Category</p>
-            <div className="flex flex-wrap gap-2">
-              {categoryBreakdown.map(({ key, count }) => {
-                const isActive = categoryFilter === key
-                const color = CATEGORY_COLORS[key] ?? '#64748b'
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setCategoryFilter(isActive ? null : key)}
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                      isActive ? 'border-orange-400 bg-orange-50 text-orange-700 ring-2 ring-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                    {key}
-                    <span className={`rounded-full px-1.5 py-0.5 font-semibold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                  </button>
-                )
-              })}
-              {categoryFilter && (
-                <button type="button" onClick={() => setCategoryFilter(null)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 transition">Clear ×</button>
-              )}
-            </div>
-          </div>
-        </div>
 
-        {/* AI analysis progress */}
-        {analysedCount > 0 && (
-          <div className="flex items-center gap-3 pt-1 border-t border-slate-100">
-            <div className="flex-1 rounded-full bg-slate-200 h-1.5 overflow-hidden">
-              <div className="h-full rounded-full bg-lime-500 transition-all" style={{ width: `${(analysedCount / devices.length) * 100}%` }} />
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-64 rounded-3xl bg-slate-100 animate-pulse" />
+              ))}
             </div>
-            <span className="text-xs text-slate-500 flex-shrink-0">
-              <Check className="inline h-3 w-3 text-emerald-500 mr-1" />
-              {analysedCount} of {devices.length} AI-analysed
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ── Device cards ───────────────────────────────────────────── */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400 gap-2 text-sm">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          Loading devices…
-        </div>
-      ) : filteredDevices.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
-          <ClipboardList className="h-8 w-8 opacity-30" />
-          <p className="text-sm font-medium">No devices match your filters</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {filteredDevices.map(device => (
-            <RunbookDeviceCard
-              key={device.id}
-              device={device}
-              ai={null}
-              aiLoading={false}
-              jiraTickets={jiraMap[device.id] ?? []}
-              confluenceLinks={confMap[device.id] ?? []}
-              onAnalyze={() => {}}
-              onOpenJira={() => setJiraTarget(device)}
-              onOpenConfluence={() => setConfTarget(device)}
-              onDetachConfluence={pageId => setConfMap(prev => ({ ...prev, [device.id]: (prev[device.id] ?? []).filter(p => p.id !== pageId) }))}
-            />
-          ))}
+          ) : filteredRunbooks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+              <BookOpen className="h-10 w-10 text-slate-300" />
+              <p className="text-sm text-slate-400 font-medium">No runbooks match your filters</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredRunbooks.map(rb => (
+                <RunbookCard
+                  key={rb.id}
+                  runbook={rb}
+                  onExecute={setExecuteTarget}
+                  onClone={handleClone}
+                  onExport={handleExport}
+                  viewerRole={viewerRole}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Jira modal */}
-      {jiraTarget && (
-        <JiraModal
-          device={jiraTarget}
-          ai={null}
-          onClose={() => setJiraTarget(null)}
-          onCreated={ticket => {
-            setJiraMap(prev => ({ ...prev, [jiraTarget.id]: [...(prev[jiraTarget.id] ?? []), ticket] }))
-            notify('success', 'Ticket Created', `${ticket.key} created in Jira`)
-            setJiraTarget(null)
-          }}
+      {/* ── Executions tab ── */}
+      {tab === 'executions' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">{executions.length} executions recorded</p>
+            <button onClick={loadExecutions} className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition">
+              <RefreshCw className={`h-3 w-3 ${execLoading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+
+          {executions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center rounded-3xl border-2 border-dashed border-slate-200">
+              <Terminal className="h-10 w-10 text-slate-300" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-500">No executions yet</p>
+                <p className="text-xs text-slate-400">Execute a runbook from the Library tab to see it here</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {executions.map(exec => (
+                <ExecutionRow
+                  key={exec.id}
+                  exec={exec}
+                  onOpen={setActiveExecId}
+                  onApprove={handleApprove}
+                  viewerRole={viewerRole}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Approvals tab ── */}
+      {tab === 'approvals' && (
+        <div className="space-y-4">
+          {viewerRole === 'Helpdesk' ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center rounded-3xl border-2 border-dashed border-slate-200">
+              <Lock className="h-10 w-10 text-slate-300" />
+              <p className="text-sm font-semibold text-slate-500">Approval management requires IT Admin or Global Admin role</p>
+            </div>
+          ) : pendingApprovals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center rounded-3xl border-2 border-dashed border-slate-200">
+              <CheckCircle2 className="h-10 w-10 text-emerald-300" />
+              <div>
+                <p className="text-sm font-semibold text-slate-500">No pending approvals</p>
+                <p className="text-xs text-slate-400 mt-1">All runbooks requiring approval have been actioned</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                <p className="text-xs font-semibold text-amber-800">
+                  {pendingApprovals.length} execution{pendingApprovals.length !== 1 ? 's' : ''} pending your approval
+                </p>
+              </div>
+              {pendingApprovals.map(exec => (
+                <ExecutionRow
+                  key={exec.id}
+                  exec={exec}
+                  onOpen={setActiveExecId}
+                  onApprove={handleApprove}
+                  viewerRole={viewerRole}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Modals & Drawers ── */}
+      {executeTarget && (
+        <ExecuteModal
+          runbook={executeTarget}
+          onClose={() => setExecuteTarget(null)}
+          onStart={handleExecute}
         />
       )}
 
-      {/* Confluence modal */}
-      {confTarget && (
-        <ConfluenceModal
-          device={confTarget}
-          attached={confMap[confTarget.id] ?? []}
-          onClose={() => setConfTarget(null)}
-          onAttach={page => setConfMap(prev => ({ ...prev, [confTarget.id]: [...(prev[confTarget.id] ?? []).filter(p => p.id !== page.id), page] }))}
-          onDetach={pageId => setConfMap(prev => ({ ...prev, [confTarget.id]: (prev[confTarget.id] ?? []).filter(p => p.id !== pageId) }))}
-        />
+      {showImport && (
+        <ImportModal onClose={() => setShowImport(false)} onImport={handleImport} />
       )}
 
-      </>}
+      {activeExecId && (
+        <ExecutionDrawer
+          executionId={activeExecId}
+          onClose={() => { setActiveExecId(null); void loadExecutions() }}
+          viewerRole={viewerRole}
+          userName={userName}
+        />
+      )}
     </div>
   )
 }
+
+export default RunbooksPage
