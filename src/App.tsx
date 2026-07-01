@@ -29,6 +29,15 @@ import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
 import { AutomationPage } from './components/automation/AutomationPage'
 import { EDRPage } from './pages/EDRPage'
 import { SmartDiagnosticsPage } from './pages/SmartDiagnosticsPage'
+import { IntelligenceDashboardPage } from './pages/IntelligenceDashboardPage'
+import { ComplianceIntelPage } from './pages/ComplianceIntelPage'
+import { AppDeploymentPage } from './pages/AppDeploymentPage'
+import { PolicyConflictPage } from './pages/PolicyConflictPage'
+import { RiskScoringPage } from './pages/RiskScoringPage'
+import { ReportBuilderPage } from './pages/ReportBuilderPage'
+import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
+import { MultiTenantPage } from './pages/MultiTenantPage'
+import { AuditLogPage } from './pages/AuditLogPage'
 import { api, apiDeviceToDeviceData, verifySessionToken } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
@@ -374,6 +383,27 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                   <AutomationPage viewerRole={viewerRole} />
                 ) : activePage === 'EDR' ? (
                   <EDRPage />
+
+                // ── Intelligence Platform pages ────────────────────────────────
+                ) : activePage === 'Intelligence Hub' ? (
+                  <IntelligenceDashboardPage onNavigate={setActivePage} />
+                ) : activePage === 'Compliance Intelligence' ? (
+                  <ComplianceIntelPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'App Deployment' ? (
+                  <AppDeploymentPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'Policy Conflicts' ? (
+                  <PolicyConflictPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'Risk Scoring' ? (
+                  <RiskScoringPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'Report Builder' ? (
+                  <ReportBuilderPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'Scheduled Reports' ? (
+                  <ScheduledReportsPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'Multi-Tenant' ? (
+                  <MultiTenantPage onBack={() => setActivePage('Intelligence Hub')} />
+                ) : activePage === 'Audit Log' ? (
+                  <AuditLogPage onBack={() => setActivePage('Intelligence Hub')} />
+
                 ) : (
                   <PlaceholderPage
                     title={activePage}

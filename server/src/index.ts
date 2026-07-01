@@ -21,6 +21,10 @@ import authRouter from './routes/auth.js'
 import intuneHealthRouter from './routes/intuneHealth.js'
 import macLogsRouter from './routes/macLogs.js'
 import appVersionsRouter from './routes/appVersions.js'
+import intelligenceRouter from './routes/intelligence.js'
+import tenantsRouter from './routes/tenants.js'
+import auditLogRouter from './routes/auditLog.js'
+import scheduledReportsRouter from './routes/scheduledReports.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 
 dotenv.config()
@@ -72,7 +76,13 @@ app.use('/api/smart-diagnostics', apiLimiter, smartDiagnosticsRouter)
 app.use('/api/auth',              authRouter)
 app.use('/api/intune-health',     apiLimiter, intuneHealthRouter)
 app.use('/api/mac-logs',          apiLimiter, macLogsRouter)
-app.use('/api/app-versions',      apiLimiter, appVersionsRouter)
+app.use('/api/app-versions',       apiLimiter, appVersionsRouter)
+
+// ── Intelligence Platform ──────────────────────────────────────────────────────
+app.use('/api/intelligence',       apiLimiter, intelligenceRouter)
+app.use('/api/tenants',            apiLimiter, tenantsRouter)
+app.use('/api/audit',              apiLimiter, auditLogRouter)
+app.use('/api/scheduled-reports',  apiLimiter, scheduledReportsRouter)
 
 app.use(errorHandler)
 

@@ -21,6 +21,12 @@ import {
   Laptop2,
   Radar,
   Stethoscope,
+  Brain,
+  FileText,
+  Calendar,
+  Building2,
+  ClipboardList,
+  Package,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -63,6 +69,17 @@ export const navItems: NavItem[] = [
   { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Analytics & Reports' },
   { id: 'activity_log',         title: 'Activity Log',        icon: Clock3,        group: 'Analytics & Reports' },
 
+  // ── INTELLIGENCE PLATFORM ─────────────────────────────────────────────────────
+  { id: 'intelligence_dashboard', title: 'Intelligence Hub',       icon: Brain,          group: 'Intelligence Platform' },
+  { id: 'compliance_intel',       title: 'Compliance Intelligence', icon: Shield,          group: 'Intelligence Platform' },
+  { id: 'app_deployment',         title: 'App Deployment',          icon: Package,         group: 'Intelligence Platform' },
+  { id: 'policy_conflicts',       title: 'Policy Conflicts',        icon: GitBranch,       group: 'Intelligence Platform' },
+  { id: 'risk_scoring',           title: 'AI Risk Scoring',         icon: Brain,           group: 'Intelligence Platform' },
+  { id: 'report_builder',         title: 'Report Builder',          icon: FileText,        group: 'Intelligence Platform' },
+  { id: 'scheduled_reports',      title: 'Scheduled Reports',       icon: Calendar,        group: 'Intelligence Platform' },
+  { id: 'multi_tenant',           title: 'Multi-Tenant',            icon: Building2,       group: 'Intelligence Platform' },
+  { id: 'audit_log',              title: 'Audit Log',               icon: ClipboardList,   group: 'Intelligence Platform' },
+
   // ── PLATFORM ──────────────────────────────────────────────────────────────────
   { id: 'settings',             title: 'Settings',            icon: Settings,      group: 'Platform' },
 ]
@@ -75,6 +92,7 @@ export const NAV_GROUP_ORDER = [
   'Users & Identity',
   'Automation',
   'Analytics & Reports',
+  'Intelligence Platform',
   'Platform',
 ] as const
 
