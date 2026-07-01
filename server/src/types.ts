@@ -152,6 +152,11 @@ export type AutomationTriggerType =
   | 'drift_detected'
   | 'encryption_off'
   | 'script_failure'
+  | 'enrollment_failed'
+  | 'sync_failure'
+  | 'app_deploy_failed'
+  | 'cert_expiring'
+  | 'stale_device'
 
 export type AutomationActionType =
   | 'slack_notify'
@@ -160,6 +165,7 @@ export type AutomationActionType =
   | 'execute_script'
   | 'generate_report'
   | 'send_notification'
+  | 'teams_notify'
 
 export interface AutomationRule {
   id: string

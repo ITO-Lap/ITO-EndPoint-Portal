@@ -1,11 +1,8 @@
 import {
-  Activity,
   BarChart3,
-  BookMarked,
   BookOpen,
   Clock3,
   Cloud,
-  Cpu,
   Home,
   Search,
   Server,
@@ -16,15 +13,12 @@ import {
   Terminal,
   Users,
   Hash,
-  MessageSquare,
   Zap,
   AlertTriangle,
   Monitor,
   GitBranch,
   Layers,
   Laptop2,
-  FileBarChart,
-  Network,
   Radar,
   Stethoscope,
 } from 'lucide-react'
@@ -41,38 +35,36 @@ import type {
 
 export const navItems: NavItem[] = [
   // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-  { title: 'Dashboard',           icon: Home,         group: 'Overview',               active: true },
+  { id: 'dashboard',            title: 'Dashboard',           icon: Home,          group: 'Overview',               active: true },
 
   // ── ENDPOINT MANAGEMENT ───────────────────────────────────────────────────────
-  { title: 'Device Lookup',           icon: Search,       group: 'Endpoint Management' },
-  { title: 'Mac Devices',             icon: Monitor,      group: 'Endpoint Management' },
-  { title: 'Intune Devices',          icon: Server,       group: 'Endpoint Management' },
-  { title: 'Windows Devices',         icon: Laptop2,      group: 'Endpoint Management' },
-  { title: 'ManageEngine Devices',    icon: Layers,       group: 'Endpoint Management' },
-  { title: 'Open Issues',             icon: AlertTriangle,  group: 'Endpoint Management' },
-  { title: 'Smart Diagnostics',       icon: Stethoscope,    group: 'Endpoint Management' },
+  { id: 'device_lookup',        title: 'Device Lookup',           icon: Search,        group: 'Endpoint Management' },
+  { id: 'mac_devices',          title: 'Mac Devices',             icon: Monitor,       group: 'Endpoint Management' },
+  { id: 'intune_devices',       title: 'Intune Devices',          icon: Server,        group: 'Endpoint Management' },
+  { id: 'windows_devices',      title: 'Windows Devices',         icon: Laptop2,       group: 'Endpoint Management' },
+  { id: 'manageengine_devices', title: 'ManageEngine Devices',    icon: Layers,        group: 'Endpoint Management' },
+  { id: 'open_issues',          title: 'Open Issues',             icon: AlertTriangle, group: 'Endpoint Management' },
+  { id: 'smart_diagnostics',    title: 'Diagnostics',             icon: Stethoscope,   group: 'Endpoint Management' },
 
   // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
-  { title: 'Security Posture',    icon: Shield,       group: 'Security & Compliance' },
-  { title: 'Vulnerabilities',     icon: ShieldAlert,  group: 'Security & Compliance' },
-  { title: 'EDR',                 icon: Radar,        group: 'Security & Compliance' },
+  { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security & Compliance' },
+  { id: 'vulnerabilities',      title: 'Vulnerabilities',     icon: ShieldAlert,   group: 'Security & Compliance' },
+  { id: 'edr',                  title: 'EDR',                 icon: Radar,         group: 'Security & Compliance' },
 
   // ── USERS & IDENTITY ──────────────────────────────────────────────────────────
-  { title: 'Users',               icon: Users,        group: 'Users & Identity' },
+  { id: 'users',                title: 'Users',               icon: Users,         group: 'Users & Identity' },
 
   // ── AUTOMATION ────────────────────────────────────────────────────────────────
-  { title: 'Automation',          icon: Zap,          group: 'Automation' },
-  { title: 'Runbooks',            icon: BookOpen,     group: 'Automation' },
-  { title: 'Remote Scripts',      icon: Terminal,     group: 'Automation' },
+  { id: 'automation',           title: 'Automation',          icon: Zap,           group: 'Automation' },
+  { id: 'runbooks',             title: 'Runbooks',            icon: BookOpen,      group: 'Automation' },
+  { id: 'remote_scripts',       title: 'Remote Scripts',      icon: Terminal,      group: 'Automation' },
 
   // ── ANALYTICS & REPORTS ───────────────────────────────────────────────────────
-  { title: 'Reports & Analytics', icon: BarChart3,    group: 'Analytics & Reports' },
-  { title: 'Activity Log',        icon: Clock3,       group: 'Analytics & Reports' },
-  { title: 'Diagnostics',         icon: Activity,     group: 'Analytics & Reports' },
+  { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Analytics & Reports' },
+  { id: 'activity_log',         title: 'Activity Log',        icon: Clock3,        group: 'Analytics & Reports' },
 
   // ── PLATFORM ──────────────────────────────────────────────────────────────────
-  { title: 'Settings',            icon: Settings,     group: 'Platform' },
-  { title: 'Documentation',       icon: BookMarked,   group: 'Platform' },
+  { id: 'settings',             title: 'Settings',            icon: Settings,      group: 'Platform' },
 ]
 
 // ── Group order — controls render sequence in sidebar ─────────────────────────
@@ -92,13 +84,11 @@ export const AUTOMATION_GROUP = 'Automation'
 // ── Connected integration sources ─────────────────────────────────────────────
 
 export const connectedSources: ConnectedSource[] = [
-  { name: 'Microsoft Intune',   label: 'Intune',       status: 'Connected', icon: Server,        integrationId: 'intune'        },
-  { name: 'Microsoft Entra ID', label: 'Entra ID',     status: 'Connected', icon: ShieldCheck,   integrationId: 'entra'         },
-  { name: 'Kandji',             label: 'Kandji',       status: 'Connected', icon: Cloud,         integrationId: 'kandji'        },
-  { name: 'Manage Engine',      label: 'ManageEngine', status: 'Connected', icon: Settings,      integrationId: 'manageengine'  },
-  { name: 'Jira',               label: 'Jira',         status: 'Connected', icon: Hash,          integrationId: 'jira'          },
-  { name: 'Confluence',         label: 'Confluence',   status: 'Connected', icon: BookOpen,      integrationId: 'confluence'    },
-  { name: 'Slack',              label: 'Slack',        status: 'Connected', icon: MessageSquare, integrationId: 'slack'         },
+  { name: 'Microsoft Intune',   label: 'Intune',       status: 'Connected', icon: Server,      integrationId: 'intune'       },
+  { name: 'Microsoft Entra ID', label: 'Entra ID',     status: 'Connected', icon: ShieldCheck, integrationId: 'entra'        },
+  { name: 'Kandji',             label: 'Kandji',       status: 'Connected', icon: Cloud,       integrationId: 'kandji'       },
+  { name: 'Manage Engine',      label: 'ManageEngine', status: 'Connected', icon: Settings,    integrationId: 'manageengine' },
+  { name: 'Jira',               label: 'Jira',         status: 'Connected', icon: Hash,        integrationId: 'jira'         },
 ]
 
 // ── Device-state helpers ───────────────────────────────────────────────────────

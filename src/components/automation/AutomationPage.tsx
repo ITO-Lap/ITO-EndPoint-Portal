@@ -12,10 +12,14 @@ import { useAutomations, useAutomationExecutions } from '../../hooks/useAutomati
 import { api } from '../../api'
 import type { AutomationRule, AutomationCategory, AutomationActionType, AutomationTriggerType, AutomationExecution } from '../../api'
 import { useToast } from '../ui/ToastProvider'
+import { IntuneHealthTab } from './tabs/IntuneHealthTab'
+import { DeviceLifecycleTab } from './tabs/DeviceLifecycleTab'
+import { ComplianceIntelTab } from './tabs/ComplianceIntelTab'
+import { HelpdeskCopilotTab } from './tabs/HelpdeskCopilotTab'
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
-type ViewTab = 'rules' | 'history'
+type ViewTab = 'rules' | 'history' | 'intune-health' | 'device-lifecycle' | 'compliance-intel' | 'copilot'
 
 const CATEGORIES: { key: AutomationCategory | 'all'; label: string; icon: React.ElementType; color: string }[] = [
   { key: 'all',        label: 'All',          icon: Layers,      color: 'text-slate-500'   },
@@ -44,6 +48,11 @@ const TRIGGER_LABELS: Record<AutomationTriggerType, string> = {
   drift_detected:       'Drift Detected',
   encryption_off:       'Encryption Off',
   script_failure:       'Script Failure',
+  enrollment_failed:    'Enrollment Failed',
+  sync_failure:         'Sync Failure',
+  app_deploy_failed:    'App Deployment Failed',
+  cert_expiring:        'Certificate Expiring',
+  stale_device:         'Stale / Inactive Device',
 }
 
 const ACTION_ICONS: Record<AutomationActionType, React.ElementType> = {
@@ -53,6 +62,7 @@ const ACTION_ICONS: Record<AutomationActionType, React.ElementType> = {
   execute_script:    Terminal,
   generate_report:   BarChart2,
   send_notification: Bell,
+  teams_notify:      MessageSquare,
 }
 
 const ACTION_COLORS: Record<AutomationActionType, string> = {
@@ -62,6 +72,7 @@ const ACTION_COLORS: Record<AutomationActionType, string> = {
   execute_script:    'bg-slate-100 text-slate-700 border-slate-200',
   generate_report:   'bg-violet-100 text-violet-700 border-violet-200',
   send_notification: 'bg-orange-100 text-orange-700 border-orange-200',
+  teams_notify:      'bg-[#0078D4]/10 text-[#0078D4] border-[#0078D4]/20',
 }
 
 const QUICK_START_TEMPLATES = [
@@ -797,11 +808,17 @@ const TRIGGER_OPTIONS: { value: AutomationTriggerType; label: string }[] = [
   { value: 'risky_signin',          label: 'Risky sign-in detected (Entra)' },
   { value: 'scheduled',             label: 'Scheduled (recurring)' },
   { value: 'script_failure',        label: 'Script execution fails' },
+  { value: 'enrollment_failed',     label: 'Enrollment failure detected' },
+  { value: 'sync_failure',          label: 'Device sync failure (6h+ no check-in)' },
+  { value: 'app_deploy_failed',     label: 'App deployment fails' },
+  { value: 'cert_expiring',         label: 'Certificate expiring soon' },
+  { value: 'stale_device',          label: 'Stale / inactive device detected' },
 ]
 
 const ACTION_OPTIONS: { value: AutomationActionType; label: string }[] = [
   { value: 'send_notification', label: 'Send in-app notification' },
   { value: 'slack_notify',      label: 'Send Slack message'       },
+  { value: 'teams_notify',      label: 'Send Teams notification'  },
   { value: 'create_jira',       label: 'Create Jira ticket'       },
   { value: 'execute_runbook',   label: 'Trigger remediation runbook' },
   { value: 'execute_script',    label: 'Run remote script'        },
@@ -1061,7 +1078,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export function AutomationPage() {
+export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: string }) {
   const { notify }                        = useToast()
   const [activeTab, setActiveTab]         = useState<ViewTab>('rules')
   const [activeCategory, setActiveCategory] = useState<AutomationCategory | 'all'>('all')
@@ -1247,16 +1264,20 @@ export function AutomationPage() {
       {stats && <StatsBar stats={stats} />}
 
       {/* ── View Tabs ────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 bg-slate-100/80 rounded-full p-1 w-fit">
+      <div className="flex flex-wrap items-center gap-1 bg-slate-100/80 rounded-2xl p-1">
         {([
-          { id: 'rules',   label: 'Automation Rules', icon: Zap },
-          { id: 'history', label: 'Execution History', icon: Activity },
+          { id: 'rules',             label: 'Automation Rules',  icon: Zap        },
+          { id: 'history',           label: 'Execution History', icon: Activity   },
+          { id: 'intune-health',     label: 'Intune Health',     icon: ShieldCheck },
+          { id: 'device-lifecycle',  label: 'Device Lifecycle',  icon: Layers     },
+          { id: 'compliance-intel',  label: 'Compliance Intel',  icon: ListChecks },
+          { id: 'copilot',           label: 'Help Desk Copilot', icon: Sparkles   },
         ] as const).map(tab => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+            className={`flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-bold transition ${
               activeTab === tab.id
                 ? 'bg-white shadow-sm text-slate-900'
                 : 'text-slate-500 hover:text-slate-700'
@@ -1391,6 +1412,18 @@ export function AutomationPage() {
 
       {/* ── History Tab ───────────────────────────────────────────────────── */}
       {activeTab === 'history' && <ExecutionHistoryTab onRefresh={refresh} />}
+
+      {/* ── Intune Health Tab ──────────────────────────────────────────────── */}
+      {activeTab === 'intune-health' && <IntuneHealthTab />}
+
+      {/* ── Device Lifecycle Tab ───────────────────────────────────────────── */}
+      {activeTab === 'device-lifecycle' && <DeviceLifecycleTab />}
+
+      {/* ── Compliance Intel Tab ───────────────────────────────────────────── */}
+      {activeTab === 'compliance-intel' && <ComplianceIntelTab />}
+
+      {/* ── Helpdesk Copilot Tab ───────────────────────────────────────────── */}
+      {activeTab === 'copilot' && <HelpdeskCopilotTab viewerRole={viewerRole} />}
 
       {/* ── Create Modal ──────────────────────────────────────────────────── */}
       {showCreate && (

@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 export type BadgeVariant = 'blue' | 'red' | 'green' | 'orange' | 'yellow' | 'gray'
 
 export interface NavItem {
+  id: string         // stable identifier used for visibility preference storage
   title: string
   icon: LucideIcon
   active?: boolean

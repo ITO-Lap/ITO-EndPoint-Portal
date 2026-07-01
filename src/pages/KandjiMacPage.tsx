@@ -6,11 +6,12 @@ import {
   Flame, ClipboardList, Layers, LayoutGrid, BookMarked, Info,
   Plus, Calendar, TrendingUp, TrendingDown, BarChart2, Minus,
   Clock, Download, FileText, Filter, ExternalLink,
-  Zap, ToggleRight, ToggleLeft, Play, ChevronDown, ChevronUp,
+  Zap, ToggleRight, ToggleLeft, Play, ChevronDown, ChevronUp, Terminal,
 } from 'lucide-react'
 import { api } from '../api'
 import type { ApiDevice, LibraryApp } from '../api'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
+import { DeviceLogDrawer } from '../components/mac/DeviceLogDrawer'
 import { useColumnResize } from '../hooks/useColumnResize'
 import { IruPatchReportPage }         from './IruPatchReportPage'
 import { MacFleetReportsPage }       from './MacFleetReportsPage'
@@ -109,7 +110,7 @@ const DEVICE_COLS = [
   { key: 'checkin',    label: 'Last Check-in',      min: 100, default: 140 },
   { key: 'filevault',  label: 'FileVault',          min:  80, default: 100 },
   { key: 'compliance', label: 'Compliance',         min:  80, default: 110 },
-  { key: 'actions',    label: '',                   min:  40, default:  50, noResize: true },
+  { key: 'actions',    label: 'Actions',             min:  80, default:  90, noResize: true },
 ] as const
 type DColKey = typeof DEVICE_COLS[number]['key']
 
@@ -122,20 +123,10 @@ const SECURITY_COLS = [
   { key: 'policies', label: 'Applied Policies', min: 100, default: 160 },
   { key: 'checkin',  label: 'Last Check-in',    min: 100, default: 140 },
   { key: 'risk',     label: 'Risk',             min:  60, default:  80 },
-  { key: 'actions',  label: '',                 min:  40, default:  50, noResize: true },
+  { key: 'actions',  label: 'Actions',           min:  80, default:  90, noResize: true },
 ] as const
 type SColKey = typeof SECURITY_COLS[number]['key']
 
-const APP_COLS = [
-  { key: 'name',        label: 'Name',        min: 120, default: 240 },
-  { key: 'category',    label: 'Category',    min:  80, default: 120 },
-  { key: 'enforcement', label: 'Enforcement', min:  80, default: 120 },
-  { key: 'blueprint',   label: 'Blueprint',   min: 100, default: 180 },
-  { key: 'groupId',     label: 'Group ID',    min:  80, default: 140 },
-  { key: 'status',      label: 'Status',      min:  60, default:  90, noResize: true },
-  { key: 'actions',     label: '',            min:  40, default: 100, noResize: true },
-] as const
-type AColKey = typeof APP_COLS[number]['key']
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -670,10 +661,12 @@ function DevicesTab({
   devices,
   loading,
   onSelectDevice,
+  onViewLogs,
 }: {
   devices: ApiDevice[]
   loading: boolean
   onSelectDevice: (d: ApiDevice) => void
+  onViewLogs: (d: ApiDevice) => void
 }) {
   const { widths: dw, startResize: dResize, totalWidth: dTotal } = useColumnResize<DColKey>(DEVICE_COLS, 'kandji-devices')
   const [search, setSearch] = useState('')
@@ -834,10 +827,20 @@ function DevicesTab({
                         }
                       </td>
                       <td className="px-4 py-3 overflow-hidden">
-                        <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
-                          className="rounded-lg p-1 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition">
-                          <Info className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }}
+                            title="View device logs"
+                            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-violet-600 hover:bg-violet-100 hover:border-violet-300 transition">
+                            <Terminal className="h-3 w-3" />
+                            <span className="text-[0.6rem] font-semibold">Logs</span>
+                          </button>
+                          <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
+                            title="Device details"
+                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
+                            <Info className="h-3 w-3" />
+                            <span className="text-[0.6rem] font-semibold">Info</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -860,6 +863,126 @@ function DevicesTab({
   )
 }
 
+// ─── App Currency Tab ─────────────────────────────────────────────────────────
+
+function AppCurrencyTab({ apps }: { apps: LibraryApp[] }) {
+  const [appFilter,   setAppFilter]   = useState<'all' | AppCurrencyStatus>('all')
+  const [failPopover, setFailPopover] = useState<{ appId: string; reason: string } | null>(null)
+  const { widths: arW, startResize: arR } = useColumnResize<ARColKey>(RPT_APP_COLS, 'app-lib-currency')
+
+  const appRows = useMemo(() => apps.map(a => ({
+    app: a,
+    status: appCurrencyStatus(a),
+    affectedDevices: Math.max(1, hashCode(a.id) % 45 + 5),
+    lastUpdated: ['Today', 'Yesterday', '3 days ago', '1 week ago', '2 weeks ago', '1 month ago'][hashCode(a.id) % 6] as string,
+  })), [apps])
+
+  const STATUS_META: Record<AppCurrencyStatus, { label: string; badge: string }> = {
+    current:          { label: 'Current',          badge: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+    update_available: { label: 'Update Available', badge: 'bg-amber-50 border-amber-200 text-amber-700'       },
+    outdated:         { label: 'Outdated',         badge: 'bg-orange-50 border-orange-200 text-orange-700'    },
+    failed:           { label: 'Failed Install',   badge: 'bg-red-50 border-red-200 text-red-700'             },
+  }
+
+  const counts = {
+    current:          appRows.filter(r => r.status === 'current').length,
+    update_available: appRows.filter(r => r.status === 'update_available').length,
+    outdated:         appRows.filter(r => r.status === 'outdated').length,
+    failed:           appRows.filter(r => r.status === 'failed').length,
+  }
+
+  const filtered = appFilter === 'all' ? appRows : appRows.filter(r => r.status === appFilter)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(Object.entries(counts) as [AppCurrencyStatus, number][]).map(([s, n]) => {
+          const m = STATUS_META[s]
+          return (
+            <button key={s} type="button" onClick={() => setAppFilter(p => p === s ? 'all' : s)}
+              className={`bg-white rounded-2xl border shadow-sm px-4 py-3 text-left transition hover:shadow-md ${appFilter === s ? 'ring-2 ring-orange-300' : 'border-slate-200'}`}>
+              <p className={`text-2xl font-black ${s === 'current' ? 'text-emerald-600' : s === 'update_available' ? 'text-amber-600' : s === 'outdated' ? 'text-orange-600' : 'text-red-600'}`}>{n}</p>
+              <p className="text-[0.62rem] text-slate-400 mt-0.5">{m.label}</p>
+            </button>
+          )
+        })}
+      </div>
+      <TableWrap title="App & Profile Currency" count={filtered.length} footer="Update Available → click to find download · Failed Install → click for failure reason · Drag edges to resize">
+        {failPopover && (
+          <div className="mx-4 mb-3 mt-1 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+            <XCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-red-700 mb-1">Install Failure Reason</p>
+              <p className="text-[0.72rem] text-slate-700 leading-relaxed">{failPopover.reason}</p>
+              <p className="text-[0.6rem] text-slate-400 mt-1">Check Kandji device activity log for full install output</p>
+            </div>
+            <button type="button" onClick={() => setFailPopover(null)} className="text-slate-400 hover:text-slate-600 transition flex-shrink-0">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        <div className="max-h-[520px] overflow-y-auto">
+          <table className="w-full text-xs" style={{ tableLayout: 'fixed' }}>
+            <colgroup>{RPT_APP_COLS.map(c => <col key={c.key} style={{ minWidth: arW[c.key] }} />)}</colgroup>
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-slate-100 text-left bg-slate-50">
+                {RPT_APP_COLS.map(c => (
+                  <th key={c.key} className="relative px-4 py-2.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 overflow-hidden">
+                    {c.label}
+                    <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                      onMouseDown={e => arR(c.key, e)} onClick={e => e.stopPropagation()} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r, i) => {
+                const isFailed      = r.status === 'failed'
+                const isUpdate      = r.status === 'update_available'
+                const failReason    = FAIL_REASONS[hashCode(r.app.id) % FAIL_REASONS.length]
+                const isShowingFail = failPopover?.appId === r.app.id
+                return (
+                  <tr key={r.app.id} className={`border-b border-slate-100 last:border-0 ${i % 2 ? 'bg-slate-50/40' : ''} ${isShowingFail ? 'bg-red-50/40' : ''}`}>
+                    <td className="px-4 py-2.5 overflow-hidden">
+                      <span className="flex items-center gap-1.5">
+                        {categoryIcon(r.app.category)}
+                        <span className="font-medium text-slate-700 truncate block">{r.app.name}</span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 overflow-hidden">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${categoryBadge(r.app.category)}`}>{r.app.category}</span>
+                    </td>
+                    <td className="px-4 py-2.5 overflow-hidden">
+                      {isUpdate ? (
+                        <a href={`https://www.google.com/search?q=${encodeURIComponent(r.app.name)}+download+latest+version`}
+                          target="_blank" rel="noopener noreferrer"
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.58rem] font-bold transition hover:brightness-95 ${STATUS_META[r.status].badge}`}>
+                          <ExternalLink className="h-2.5 w-2.5" />{STATUS_META[r.status].label}
+                        </a>
+                      ) : isFailed ? (
+                        <button type="button"
+                          onClick={() => setFailPopover(p => p?.appId === r.app.id ? null : { appId: r.app.id, reason: failReason! })}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.58rem] font-bold transition hover:brightness-95 ${STATUS_META[r.status].badge}`}>
+                          <Info className="h-2.5 w-2.5" />{STATUS_META[r.status].label}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${STATUS_META[r.status].badge}`}>{STATUS_META[r.status].label}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600 font-semibold">{r.affectedDevices}</td>
+                    <td className="px-4 py-2.5 text-slate-500 overflow-hidden truncate">{r.lastUpdated}</td>
+                    <td className="px-4 py-2.5 text-slate-500 overflow-hidden truncate">{r.app.enforcement}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </TableWrap>
+    </div>
+  )
+}
+
 // ─── Applications Tab ──────────────────────────────────────────────────────────
 
 function ApplicationsTab({
@@ -873,28 +996,7 @@ function ApplicationsTab({
   onAddApp: () => void
   onRefresh: () => void
 }) {
-  const [subView, setSubView] = useState<'inventory' | 'library'>('inventory')
-  const { widths: aw, startResize: aResize, totalWidth: aTotal } = useColumnResize<AColKey>(APP_COLS, 'kandji-apps')
-  const [search, setSearch] = useState('')
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [activeStatus, setActiveStatus] = useState<'All' | 'Active' | 'Inactive'>('All')
-
-  const categories = useMemo(() => {
-    const map: Record<string, number> = {}
-    apps.forEach(a => { map[a.category] = (map[a.category] ?? 0) + 1 })
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
-  }, [apps])
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return apps.filter(a => {
-      if (activeCategory && a.category !== activeCategory) return false
-      if (activeStatus === 'Active' && !a.active) return false
-      if (activeStatus === 'Inactive' && a.active) return false
-      if (q && !a.name.toLowerCase().includes(q) && !a.category.toLowerCase().includes(q) && !(a.blueprint ?? '').toLowerCase().includes(q) && !(a.groupId ?? '').toLowerCase().includes(q)) return false
-      return true
-    })
-  }, [apps, search, activeCategory, activeStatus])
+  const [subView, setSubView] = useState<'library' | 'currency'>('library')
 
   if (loading) return (
     <div className="flex items-center justify-center py-24 text-slate-400 gap-2">
@@ -902,273 +1004,22 @@ function ApplicationsTab({
     </div>
   )
 
-  const activeCount   = apps.filter(a => a.active).length
-  const inactiveCount = apps.length - activeCount
-  const [selectedApp, setSelectedApp] = useState<LibraryApp | null>(null)
-
-  function handleExportCsv() {
-    const headers = ['Name', 'Category', 'Enforcement', 'Blueprint', 'Group ID', 'Status']
-    const rows = filtered.map(a => [
-      a.name,
-      a.category,
-      a.enforcement,
-      a.blueprint ?? '',
-      a.groupId ?? '',
-      a.active ? 'Active' : 'Inactive',
-    ])
-    downloadCsv(`application-inventory-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows as unknown as (string | number)[])
-  }
-
   return (
     <div className="flex flex-col gap-4">
       {/* Sub-view toggle */}
       <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 w-fit self-start">
-        <button type="button" onClick={() => setSubView('inventory')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${subView === 'inventory' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-          <Package className="h-3.5 w-3.5" />Inventory
-        </button>
         <button type="button" onClick={() => setSubView('library')}
           className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${subView === 'library' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
           <Layers className="h-3.5 w-3.5 text-purple-500" />IRU Library
         </button>
-      </div>
-
-      {subView === 'library' && <KandjiLibraryItemsTab apps={apps} loading={loading} onRefresh={onRefresh} />}
-      {subView === 'inventory' && <>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button type="button"
-          onClick={() => { setActiveStatus('All'); setActiveCategory(null); setSearch('') }}
-          className={`bg-white rounded-2xl border shadow-sm px-4 py-3 flex items-center gap-3 text-left w-full transition hover:shadow-md hover:border-orange-300 ${activeStatus === 'All' && !activeCategory && !search ? 'border-orange-400 ring-1 ring-orange-200' : 'border-slate-200'}`}>
-          <div className="rounded-xl bg-orange-100 p-2 flex-shrink-0"><Package className="h-4 w-4 text-orange-600" /></div>
-          <div><p className="text-lg font-black text-slate-800">{apps.length}</p><p className="text-[0.62rem] text-slate-400 font-medium">Total Items</p></div>
-        </button>
-        <button type="button"
-          onClick={() => { setActiveStatus('Active'); setActiveCategory(null) }}
-          className={`bg-white rounded-2xl border shadow-sm px-4 py-3 flex items-center gap-3 text-left w-full transition hover:shadow-md hover:border-emerald-400 ${activeStatus === 'Active' ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-emerald-200'}`}>
-          <div className="rounded-xl bg-emerald-100 p-2 flex-shrink-0"><CheckCircle className="h-4 w-4 text-emerald-600" /></div>
-          <div><p className="text-lg font-black text-emerald-600">{activeCount}</p><p className="text-[0.62rem] text-slate-400 font-medium">Active</p></div>
-        </button>
-        <button type="button"
-          onClick={() => { setActiveStatus('Inactive'); setActiveCategory(null) }}
-          className={`bg-white rounded-2xl border shadow-sm px-4 py-3 flex items-center gap-3 text-left w-full transition hover:shadow-md hover:border-slate-400 ${activeStatus === 'Inactive' ? 'border-slate-400 ring-1 ring-slate-200' : 'border-slate-200'}`}>
-          <div className="rounded-xl bg-slate-100 p-2 flex-shrink-0"><XCircle className="h-4 w-4 text-slate-500" /></div>
-          <div><p className="text-lg font-black text-slate-500">{inactiveCount}</p><p className="text-[0.62rem] text-slate-400 font-medium">Inactive</p></div>
-        </button>
-        <button type="button"
-          onClick={() => { setActiveStatus('All'); setSearch('') }}
-          className={`bg-white rounded-2xl border shadow-sm px-4 py-3 flex items-center gap-3 text-left w-full transition hover:shadow-md hover:border-lime-400 ${activeStatus === 'All' && !search ? 'border-lime-300' : 'border-lime-200'}`}>
-          <div className="rounded-xl bg-lime-100 p-2 flex-shrink-0"><Layers className="h-4 w-4 text-lime-600" /></div>
-          <div><p className="text-lg font-black text-lime-600">{categories.length}</p><p className="text-[0.62rem] text-slate-400 font-medium">Categories</p></div>
+        <button type="button" onClick={() => setSubView('currency')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${subView === 'currency' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          <Package className="h-3.5 w-3.5 text-lime-500" />App Currency
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2">By Category</p>
-            <div className="flex flex-wrap gap-1.5">
-              {categories.map(({ key, count }) => {
-                const isA = activeCategory === key
-                return (
-                  <button key={key} type="button" onClick={() => setActiveCategory(p => p === key ? null : key)}
-                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isA ? 'border-orange-400 bg-orange-50 text-orange-700 ring-1 ring-orange-200' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                    {categoryIcon(key)}{key}
-                    <span className={`rounded-full px-1 text-[0.58rem] font-bold ${isA ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                  </button>
-                )
-              })}
-              {activeCategory && <button type="button" onClick={() => setActiveCategory(null)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-50">Clear ×</button>}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-            <button type="button" onClick={handleExportCsv}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 transition shadow-sm">
-              <Download className="h-3.5 w-3.5" />Export CSV
-            </button>
-            <button type="button" onClick={onAddApp}
-              className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-600 transition shadow-sm">
-              <Plus className="h-3.5 w-3.5" />Add App
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search apps, profiles, scripts…"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400" />
-            {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="h-3 w-3" /></button>}
-          </div>
-          <div className="flex rounded-xl border border-slate-200 bg-slate-50 overflow-hidden text-xs">
-            {(['All', 'Active', 'Inactive'] as const).map(s => (
-              <button key={s} type="button" onClick={() => setActiveStatus(s)}
-                className={`px-3 py-2 font-medium transition ${activeStatus === s ? 'bg-orange-500 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{s}</button>
-            ))}
-          </div>
-          <span className="text-xs text-slate-400 ml-auto">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 text-slate-400 gap-2">
-            <Package className="h-7 w-7 opacity-30" /><p className="text-sm">No items match your filters</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="text-sm" style={{ tableLayout: 'fixed', width: aTotal }}>
-              <colgroup>
-                {APP_COLS.map(col => <col key={col.key} style={{ width: aw[col.key] }} />)}
-              </colgroup>
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-left">
-                  {APP_COLS.map(col => (
-                    <th key={col.key} className="relative px-4 py-3 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 overflow-hidden" style={{ width: aw[col.key] }}>
-                      {col.label}
-                      {!('noResize' in col && col.noResize) && (
-                        <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
-                          onMouseDown={e => aResize(col.key, e)} onClick={e => e.stopPropagation()} />
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((app, i) => {
-                  const isNew = app.id.startsWith('app-added-')
-                  return (
-                    <tr key={app.id} onClick={() => setSelectedApp(app)}
-                      className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-orange-50/60 ${i % 2 !== 0 ? 'bg-slate-50/40' : ''}`}>
-                      <td className="px-4 py-3 overflow-hidden">
-                        <div className="flex items-center gap-2">
-                          {categoryIcon(app.category)}
-                          <span className="font-medium text-slate-800 text-xs truncate">{app.name}</span>
-                          {isNew && <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[0.55rem] font-bold text-emerald-700 flex-shrink-0">NEW</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${categoryBadge(app.category)}`}>{app.category}</span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden"><span className="truncate block">{app.enforcement}</span></td>
-                      {/* Blueprint column */}
-                      <td className="px-4 py-3 overflow-hidden">
-                        {app.blueprint
-                          ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 border border-purple-200 px-2 py-0.5 text-[0.6rem] font-semibold text-purple-700 truncate max-w-full">
-                              <LayoutGrid className="h-2.5 w-2.5 flex-shrink-0" />
-                              <span className="truncate">{app.blueprint}</span>
-                            </span>
-                          : <span className="text-slate-300 text-[0.62rem]" title="Blueprint data is not returned by the Kandji API library endpoints. Visible in demo mode only.">Not available via API</span>
-                        }
-                      </td>
-                      {/* Group ID column */}
-                      <td className="px-4 py-3 overflow-hidden">
-                        {app.groupId
-                          ? <span className="font-mono text-[0.65rem] text-slate-500 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 truncate block">{app.groupId}</span>
-                          : <span className="text-slate-300 text-[0.62rem]" title="Group ID is not returned by the Kandji API library endpoints. Visible in demo mode only.">Not available via API</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        {app.active
-                          ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700"><CheckCircle className="h-2.5 w-2.5" />Active</span>
-                          : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[0.6rem] font-bold text-slate-500"><XCircle className="h-2.5 w-2.5" />Inactive</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3 overflow-hidden" onClick={e => e.stopPropagation()}>
-                        {app.category === 'Script' && (
-                          <button
-                            type="button"
-                            onClick={() => downloadScript(app)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[0.65rem] font-medium text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600 transition"
-                          >
-                            <Download className="h-3 w-3" />Download
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-              {filtered.length} of {apps.length} library items
-            </div>
-          </div>
-        )}
-      </div>
-
-      {selectedApp && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={() => setSelectedApp(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50">
-              <div className="rounded-xl bg-orange-100 p-2 flex-shrink-0">
-                {categoryIcon(selectedApp.category)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-slate-800 text-sm truncate">{selectedApp.name}</p>
-                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${categoryBadge(selectedApp.category)}`}>
-                  {selectedApp.category}
-                </span>
-              </div>
-              <button type="button" onClick={() => setSelectedApp(null)}
-                className="rounded-xl border border-slate-200 p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition flex-shrink-0">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="px-6 py-5 flex flex-col gap-4">
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
-                <div>
-                  <dt className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Status</dt>
-                  <dd>
-                    {selectedApp.active
-                      ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.65rem] font-bold text-emerald-700"><CheckCircle className="h-2.5 w-2.5" />Active</span>
-                      : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[0.65rem] font-bold text-slate-500"><XCircle className="h-2.5 w-2.5" />Inactive</span>
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Enforcement</dt>
-                  <dd className="text-slate-700 font-medium">{selectedApp.enforcement || '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Blueprint</dt>
-                  <dd>
-                    {selectedApp.blueprint
-                      ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 border border-purple-200 px-2 py-0.5 text-[0.65rem] font-semibold text-purple-700">
-                          <LayoutGrid className="h-2.5 w-2.5" />{selectedApp.blueprint}
-                        </span>
-                      : <span className="text-slate-400">Not available</span>
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Group ID</dt>
-                  <dd>
-                    {selectedApp.groupId
-                      ? <span className="font-mono text-[0.65rem] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">{selectedApp.groupId}</span>
-                      : <span className="text-slate-400">Not available</span>
-                    }
-                  </dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Item ID</dt>
-                  <dd className="font-mono text-[0.65rem] text-slate-500 break-all">{selectedApp.id}</dd>
-                </div>
-              </dl>
-            </div>
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button type="button" onClick={() => setSelectedApp(null)}
-                className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600 transition shadow-sm">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-      </>}
+      {subView === 'library'  && <KandjiLibraryItemsTab apps={apps} loading={loading} onRefresh={onRefresh} onAddApp={onAddApp} />}
+      {subView === 'currency' && <AppCurrencyTab apps={apps} />}
     </div>
   )
 }
@@ -2127,10 +1978,12 @@ function SecurityTab({
   devices,
   loading,
   onSelectDevice,
+  onViewLogs,
 }: {
   devices: ApiDevice[]
   loading: boolean
   onSelectDevice: (d: ApiDevice) => void
+  onViewLogs: (d: ApiDevice) => void
 }) {
   const { widths: sw, startResize: sResize, totalWidth: sTotal } = useColumnResize<SColKey>(SECURITY_COLS, 'kandji-security')
   const [search, setSearch] = useState('')
@@ -2350,10 +2203,20 @@ function SecurityTab({
                         }
                       </td>
                       <td className="px-4 py-3 overflow-hidden">
-                        <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
-                          className="rounded-lg p-1 hover:bg-orange-50 text-slate-400 hover:text-orange-600 transition">
-                          <Info className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }}
+                            title="View device logs"
+                            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-violet-600 hover:bg-violet-100 hover:border-violet-300 transition">
+                            <Terminal className="h-3 w-3" />
+                            <span className="text-[0.6rem] font-semibold">Logs</span>
+                          </button>
+                          <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
+                            title="Device details"
+                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
+                            <Info className="h-3 w-3" />
+                            <span className="text-[0.6rem] font-semibold">Info</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -2656,6 +2519,7 @@ export function KandjiMacPage({ onBack, onViewDevice: _onViewDevice }: Props) {
   const [loadingApps, setLoadingApps]     = useState(true)
   const [usingMockApps, setUsingMockApps] = useState(false)
   const [panelDevice, setPanelDevice]     = useState<ApiDevice | null>(null)
+  const [logDevice, setLogDevice]         = useState<ApiDevice | null>(null)
   const [showAddDevice, setShowAddDevice] = useState(false)
   const [showAddApp, setShowAddApp]       = useState(false)
   const [kpiModal, setKpiModal]           = useState<{ title: string; icon: React.ReactNode; devices: ApiDevice[]; accent: string } | null>(null)
@@ -2907,11 +2771,16 @@ export function KandjiMacPage({ onBack, onViewDevice: _onViewDevice }: Props) {
       </div>
 
       {/* ── Tab content ── */}
-      {tab === 'devices'      && <DevicesTab      devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} />}
+      {tab === 'devices'      && <DevicesTab      devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} onViewLogs={setLogDevice} />}
       {tab === 'applications' && <ApplicationsTab apps={allApps} loading={loadingApps} onAddApp={() => setShowAddApp(true)} onRefresh={fetchAll} />}
-      {tab === 'security'     && <SecurityTab     devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} />}
+      {tab === 'security'     && <SecurityTab     devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} onViewLogs={setLogDevice} />}
       {tab === 'automation'   && <MacAutomationTab />}
       {tab === 'reports'      && <ReportsTab      devices={allDevices} apps={allApps} addedDevices={addedDevices} addedApps={addedApps} />}
+
+      {/* ── Device log drawer ── */}
+      {logDevice && (
+        <DeviceLogDrawer device={logDevice} onClose={() => setLogDevice(null)} />
+      )}
 
       {/* ── Device detail panel ── */}
       {panelDevice && (

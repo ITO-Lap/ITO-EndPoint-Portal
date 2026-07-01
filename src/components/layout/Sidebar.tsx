@@ -7,6 +7,7 @@ import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import type { ConnectedSource, BadgeVariant, UserToolRole } from '../../types'
 import { canAccess } from '../../lib/permissions'
+import { useNavVisibility } from '../../context/NavVisibilityContext'
 
 interface SidebarProps {
   isOpen?: boolean
@@ -133,7 +134,8 @@ export function Sidebar({
     })
   }
 
-  const accessible = navItems.filter(i => canAccess(viewerRole, i.title))
+  const { hiddenNavIds } = useNavVisibility()
+  const accessible = navItems.filter(i => canAccess(viewerRole, i.title) && !hiddenNavIds.has(i.id))
   const grouped    = NAV_GROUP_ORDER.map(g => ({
     group: g,
     items: accessible.filter(i => i.group === g),

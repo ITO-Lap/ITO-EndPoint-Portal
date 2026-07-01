@@ -7,6 +7,7 @@ import {
   ShieldAlert, RotateCcw, Info, Users, CheckCircle2, XCircle,
   MinusCircle, UserPlus, BookOpen,
   ChevronDown, ChevronRight, X, Key, Wifi, Edit2, Upload,
+  LayoutDashboard,
 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -14,18 +15,23 @@ import { useToast } from '../ui/ToastProvider'
 import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import { useIntegrationStatus } from '../../hooks/useIntegrationStatus'
+import { useNavVisibility, ALWAYS_VISIBLE_IDS } from '../../context/NavVisibilityContext'
+import { navItems, NAV_GROUP_ORDER } from '../../data/dashboardData'
+import { canAccess } from '../../lib/permissions'
+import type { UserToolRole } from '../../types'
 
 // ─── Nav sections ─────────────────────────────────────────────────────────────
 
 const NAV = [
-  { key: 'general',       label: 'General',            icon: Building2    },
+  { key: 'general',       label: 'General',            icon: Building2       },
+  { key: 'navigation',    label: 'Navigation',         icon: LayoutDashboard },
   { key: 'integrations',  label: 'Integrations',       icon: Plug,        badge: '6' },
-  { key: 'roles',         label: 'Roles & Permissions',icon: Users        },
-  { key: 'compliance',    label: 'Compliance',          icon: ShieldCheck  },
-  { key: 'automation',    label: 'Automation',          icon: Zap          },
-  { key: 'security',      label: 'Security',            icon: Lock         },
-  { key: 'notifications', label: 'Notifications',       icon: Bell         },
-  { key: 'data',          label: 'Data & Privacy',      icon: Database     },
+  { key: 'roles',         label: 'Roles & Permissions',icon: Users           },
+  { key: 'compliance',    label: 'Compliance',          icon: ShieldCheck     },
+  { key: 'automation',    label: 'Automation',          icon: Zap             },
+  { key: 'security',      label: 'Security',            icon: Lock            },
+  { key: 'notifications', label: 'Notifications',       icon: Bell            },
+  { key: 'data',          label: 'Data & Privacy',      icon: Database        },
   { key: 'danger',        label: 'Danger Zone',         icon: AlertTriangle, danger: true },
 ] as const
 
@@ -2370,22 +2376,219 @@ function RolesSection() {
   )
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+// ─── Navigation Section ───────────────────────────────────────────────────────
 
-const SECTION_MAP: Record<SectionKey, React.ReactNode> = {
-  general:       <GeneralSection />,
-  integrations:  <IntegrationsSection />,
-  roles:         <RolesSection />,
-  compliance:    <ComplianceSection />,
-  automation:    <AutomationSection />,
-  security:      <SecuritySection />,
-  notifications: <NotificationsSection />,
-  data:          <DataSection />,
-  danger:        <DangerSection />,
+function ToggleSwitch({ checked, onChange, disabled }: {
+  checked: boolean; onChange: (v: boolean) => void; disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 ${
+        disabled ? 'cursor-not-allowed opacity-40' : ''
+      } ${checked ? 'bg-[#F46C00]' : 'bg-slate-200'}`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-4' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
 }
 
-export function SettingsPage() {
+function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
+  const { prefs, setVisible, resetToDefaults, isAlwaysVisible } = useNavVisibility()
+  const { showToast } = useToast()
+  const [confirmReset, setConfirmReset] = useState(false)
+
+  const hiddenCount = navItems.filter(item =>
+    !isAlwaysVisible(item.id) && prefs[item.id] === false
+  ).length
+
+  const handleReset = () => {
+    if (!confirmReset) { setConfirmReset(true); return }
+    resetToDefaults()
+    setConfirmReset(false)
+    showToast('Navigation restored to defaults — all items are now visible', 'success')
+  }
+
+  const grouped = NAV_GROUP_ORDER.map(group => ({
+    group,
+    items: navItems.filter(i => i.group === group),
+  })).filter(g => g.items.length > 0)
+
+  const canEdit = viewerRole === 'Global Admin' || viewerRole === 'IT Admin'
+
+  return (
+    <SectionWrap
+      title="Navigation Visibility"
+      description="Control which items appear in the left sidebar. Pages remain fully accessible via direct navigation — only the menu entry is hidden."
+    >
+      {/* Info banner */}
+      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex gap-3">
+        <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+        <div className="text-xs text-blue-700 space-y-1">
+          <p className="font-semibold">How visibility works</p>
+          <ul className="space-y-0.5 text-blue-600 list-disc list-inside">
+            <li>Hiding a menu item only removes it from the sidebar — the page and its data are unaffected.</li>
+            <li><strong>Settings</strong> is always visible and cannot be hidden.</li>
+            <li>Items restricted by your role (shown with a lock) are always hidden regardless of this toggle.</li>
+            <li>Changes take effect immediately and persist across sessions.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Role & status row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[0.7rem] font-semibold text-slate-600">
+            Role: {viewerRole}
+          </span>
+          {hiddenCount > 0 && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[0.7rem] font-semibold text-amber-700">
+              {hiddenCount} item{hiddenCount !== 1 ? 's' : ''} hidden
+            </span>
+          )}
+        </div>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={handleReset}
+            onBlur={() => setConfirmReset(false)}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              confirmReset
+                ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {confirmReset ? 'Click again to confirm reset' : 'Reset to Defaults'}
+          </button>
+        )}
+      </div>
+
+      {/* Groups */}
+      <div className="space-y-4">
+        {grouped.map(({ group, items }) => (
+          <div key={group} className="rounded-[18px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+            {/* Group header */}
+            <div className="border-b border-slate-100 bg-slate-50/60 px-5 py-2.5">
+              <p className="text-[0.65rem] font-black uppercase tracking-widest text-slate-400">{group}</p>
+            </div>
+
+            {/* Items */}
+            <div className="divide-y divide-slate-100">
+              {items.map(item => {
+                const Icon = item.icon
+                const alwaysOn = isAlwaysVisible(item.id)
+                const roleBlocked = !canAccess(viewerRole, item.title)
+                const isOn = !roleBlocked && (alwaysOn || prefs[item.id] !== false)
+                const canToggle = canEdit && !alwaysOn && !roleBlocked
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-center justify-between px-5 py-3 transition-colors ${
+                      roleBlocked || (!canEdit) ? 'opacity-60' : 'hover:bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Icon */}
+                      <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl ${
+                        roleBlocked ? 'bg-slate-100' : isOn ? 'bg-orange-50 border border-orange-100' : 'bg-slate-100'
+                      }`}>
+                        <Icon className={`h-4 w-4 ${roleBlocked ? 'text-slate-300' : isOn ? 'text-[#F46C00]' : 'text-slate-400'}`} />
+                      </div>
+
+                      {/* Label + tags */}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs font-semibold ${roleBlocked ? 'text-slate-400' : isOn ? 'text-slate-800' : 'text-slate-500'}`}>
+                            {item.title}
+                          </span>
+                          {alwaysOn && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[0.6rem] font-bold text-slate-500">
+                              <Lock className="h-2.5 w-2.5" />Always visible
+                            </span>
+                          )}
+                          {roleBlocked && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[0.6rem] font-bold text-slate-400">
+                              <Lock className="h-2.5 w-2.5" />Role restricted
+                            </span>
+                          )}
+                          {!isOn && !roleBlocked && !alwaysOn && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[0.6rem] font-semibold text-slate-500">Hidden</span>
+                          )}
+                        </div>
+                        <p className="text-[0.62rem] text-slate-400 mt-0.5">
+                          {roleBlocked
+                            ? 'Not available for your role'
+                            : alwaysOn
+                              ? 'This item cannot be hidden'
+                              : isOn
+                                ? 'Visible in sidebar'
+                                : 'Hidden from sidebar — page still accessible'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Toggle */}
+                    <div className="flex-shrink-0 ml-4">
+                      <ToggleSwitch
+                        checked={isOn}
+                        onChange={v => {
+                          setVisible(item.id, v)
+                          showToast(
+                            `${item.title} ${v ? 'shown in' : 'hidden from'} sidebar`,
+                            v ? 'success' : 'info',
+                          )
+                        }}
+                        disabled={!canToggle}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Helpdesk note */}
+      {viewerRole === 'Helpdesk' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex gap-3">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            <span className="font-semibold">Helpdesk role:</span> Navigation visibility is read-only for your role. Contact an IT Admin or Global Admin to adjust sidebar menu items.
+          </p>
+        </div>
+      )}
+    </SectionWrap>
+  )
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export function SettingsPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserToolRole }) {
   const [active, setActive] = useState<SectionKey>('general')
+
+  const sectionMap: Record<SectionKey, React.ReactNode> = {
+    general:       <GeneralSection />,
+    navigation:    <NavigationSection viewerRole={viewerRole} />,
+    integrations:  <IntegrationsSection />,
+    roles:         <RolesSection />,
+    compliance:    <ComplianceSection />,
+    automation:    <AutomationSection />,
+    security:      <SecuritySection />,
+    notifications: <NotificationsSection />,
+    data:          <DataSection />,
+    danger:        <DangerSection />,
+  }
 
   return (
     <div className="flex flex-col lg:flex-row gap-5 w-full items-start">
@@ -2434,7 +2637,7 @@ export function SettingsPage() {
 
       {/* ── Content ───────────────────────────────────────────────────────── */}
       <div className="flex-1 min-w-0">
-        {SECTION_MAP[active]}
+        {sectionMap[active]}
       </div>
 
     </div>

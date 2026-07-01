@@ -382,10 +382,11 @@ export type AutomationTriggerType =
   | 'device_non_compliant' | 'compliance_threshold' | 'device_offline'
   | 'new_enrollment' | 'scheduled' | 'risky_signin' | 'drift_detected'
   | 'encryption_off' | 'script_failure'
+  | 'enrollment_failed' | 'sync_failure' | 'app_deploy_failed' | 'cert_expiring' | 'stale_device'
 
 export type AutomationActionType =
   | 'slack_notify' | 'create_jira' | 'execute_runbook'
-  | 'execute_script' | 'generate_report' | 'send_notification'
+  | 'execute_script' | 'generate_report' | 'send_notification' | 'teams_notify'
 
 export interface AutomationRule {
   id: string
@@ -803,4 +804,208 @@ export function apiDeviceToDeviceData(d: ApiDevice) {
     issueCategory:        '',
     hasOpenIssue:         d.complianceState !== 'Compliant',
   }
+}
+
+// ── Intune Health API ─────────────────────────────────────────────────────────
+
+const IH = `${BASE_URL}/api/intune-health`
+
+async function ihFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`${IH}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  })
+  const json = await res.json() as { success: boolean; data: T; error?: string }
+  if (!json.success) throw new Error(json.error ?? 'Intune Health API error')
+  return json.data
+}
+
+export interface IntuneHealthSummary {
+  overview: { totalDevices: number; compliantDevices: number; nonCompliantDevices: number; warningDevices: number; complianceRate: number }
+  syncHealth: { successfulSyncs: number; failedSyncs: number; pendingSyncs: number; lastScanAt: string; avgSyncDurationMs: number }
+  enrollmentHealth: { successfulEnrollments: number; failedEnrollments: number; pendingEnrollments: number; reenrollRequired: number }
+  policyHealth: { totalPolicies: number; policiesApplied: number; policiesWithGaps: number; devicesWithNoPolicy: number }
+  appDeployHealth: { totalApps: number; deployedApps: number; failedApps: number; pendingApps: number }
+  certHealth: { totalCerts: number; validCerts: number; expiringSoon: number; expired: number }
+  lastUpdated: string
+}
+
+export interface EnrollmentFailure {
+  id: string; deviceName: string; userEmail: string; platform: string
+  errorCode: string; errorMessage: string; failedAt: string; attempts: number
+  recommendedFix: string; status: 'open' | 'remediated' | 'in_progress'
+}
+
+export interface StaleDevice {
+  id: string; deviceName: string; userEmail: string; platform: string
+  lastCheckIn: string; daysSinceCheckIn: number; complianceState: string
+  managementSource: string; recommendation: string; riskLevel: 'Low' | 'Medium' | 'High' | 'Critical'
+}
+
+export interface BitLockerDevice {
+  id: string; deviceName: string; userEmail: string; platform: string
+  bitlockerStatus: string; keyEscrowed: boolean; keyId: string | null
+  escrowed: string | null; rotationDue: string | null; volumeType: string
+}
+
+export interface PolicyValidation {
+  id: string; policyName: string; policyType: string; platform: string
+  assignedDevices: number; compliantDevices: number; nonCompliantDevices: number
+  devicesWithGap: number; gaps: Array<{ deviceName: string; issue: string }>
+  status: 'healthy' | 'warning' | 'critical'; lastEvaluated: string
+}
+
+export interface CertExpiry {
+  id: string; certName: string; deviceName: string; userEmail: string
+  certType: string; issuer: string; issuedAt: string; expiresAt: string
+  daysUntilExpiry: number; status: 'valid' | 'expiring_soon' | 'critical' | 'expired'
+  autoRenew: boolean
+}
+
+export interface AppFailure {
+  id: string; appName: string; appVersion: string; deviceName: string
+  userEmail: string; platform: string; errorCode: string; errorMessage: string
+  failedAt: string; deploymentType: string; retryCount: number
+  status: 'failed' | 'pending_retry' | 'resolved'; recommendedFix: string
+}
+
+export interface CopilotResponse {
+  question: string; answer: string; suggestions: string[]
+  sources: string[]; respondedAt: string
+}
+
+export const intuneHealthApi = {
+  getSummary:            ()            => ihFetch<IntuneHealthSummary>('/summary'),
+  getEnrollmentFailures: ()            => ihFetch<EnrollmentFailure[]>('/enrollment-failures'),
+  retryEnrollment:       (id: string)  => ihFetch<unknown>(`/enrollment-failures/${id}/retry`, { method: 'POST' }),
+  getStaleDevices:       (days = 30)   => ihFetch<StaleDevice[]>(`/stale-devices?days=${days}`),
+  cleanupDevices:        (deviceIds: string[], action: string) =>
+    ihFetch<unknown>('/stale-devices/cleanup', { method: 'POST', body: JSON.stringify({ deviceIds, action }) }),
+  getBitLockerDevices:   ()            => ihFetch<BitLockerDevice[]>('/bitlocker'),
+  getBitLockerKey:       (deviceId: string) => ihFetch<{ deviceId: string; recoveryKey: string; keyId: string; retrievedAt: string; auditNote: string }>(`/bitlocker/${deviceId}/key`),
+  rotateBitLockerKey:    (deviceId: string) => ihFetch<unknown>(`/bitlocker/${deviceId}/rotate`, { method: 'POST' }),
+  getPolicyValidation:   ()            => ihFetch<PolicyValidation[]>('/policy-validation'),
+  getCertExpiry:         ()            => ihFetch<CertExpiry[]>('/cert-expiry'),
+  renewCert:             (id: string)  => ihFetch<unknown>(`/cert-expiry/${id}/renew`, { method: 'POST' }),
+  getAppFailures:        ()            => ihFetch<AppFailure[]>('/app-failures'),
+  retryAppDeployment:    (id: string)  => ihFetch<unknown>(`/app-failures/${id}/retry`, { method: 'POST' }),
+  forceSync:             (deviceId: string) => ihFetch<unknown>(`/force-sync/${deviceId}`, { method: 'POST' }),
+  askCopilot:            (question: string) =>
+    ihFetch<CopilotResponse>('/copilot/query', { method: 'POST', body: JSON.stringify({ question }) }),
+}
+
+// ── Mac Device Logs API ───────────────────────────────────────────────────────
+
+const ML = `${BASE_URL}/api/mac-logs`
+
+async function mlFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`${ML}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  })
+  const json = await res.json() as { success: boolean; data: T; error?: string }
+  if (!json.success) throw new Error(json.error ?? 'Mac Logs API error')
+  return json.data
+}
+
+export interface MacLogEntry {
+  id: string
+  timestamp: string
+  level: 'default' | 'info' | 'debug' | 'error' | 'fault'
+  subsystem: string
+  category: string
+  process: string
+  pid: number
+  message: string
+  eventType: 'mdm' | 'security' | 'system' | 'app' | 'network' | 'kandji' | 'user'
+}
+
+export interface MacLogDevice {
+  id: string; deviceName: string; serialNumber: string
+  user: string; osVersion: string; model: string
+  managementSource: string; complianceState: string
+}
+
+export interface MacLogResult {
+  device: MacLogDevice
+  logs: MacLogEntry[]
+  total: number
+  generatedAt: string
+}
+
+export interface MacLogAnalysis {
+  deviceId: string
+  executiveSummary: string
+  healthStatus: 'healthy' | 'warning' | 'critical'
+  issues: Array<{ severity: 'critical' | 'high' | 'medium' | 'low'; title: string; description: string; recommendation: string }>
+  keyEvents: string[]
+  eventBreakdown: Record<string, number>
+  recommendations: string[]
+  analyzedLogCount: number
+  analyzedAt: string
+  aiPowered: boolean
+}
+
+export const macLogsApi = {
+  getLogs: (deviceId: string, limit = 100) =>
+    mlFetch<MacLogResult>(`/${deviceId}?limit=${limit}`),
+  analyze: (deviceId: string, logs: MacLogEntry[], deviceContext: Record<string, string>) =>
+    mlFetch<MacLogAnalysis>(`/${deviceId}/analyze`, {
+      method: 'POST',
+      body: JSON.stringify({ logs, deviceContext }),
+    }),
+}
+
+// ── App Version Inventory ─────────────────────────────────────────────────────
+
+export interface AppVersionResult {
+  id: string
+  latestVersion: string | null
+  directDownloadUrl: string | null
+  source: string
+  error: string | null
+  fetchedAt: string
+}
+
+export interface AppVersionsResponse {
+  success: boolean
+  versions: AppVersionResult[]
+  checkedAt: string
+}
+
+const AV = `${BASE_URL}/api/app-versions`
+
+async function avFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`${AV}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  })
+  const json = await res.json() as { success: boolean; data?: T; versions?: unknown; checkedAt?: string; error?: string }
+  if (!res.ok) throw new Error((json.error as string | undefined) ?? `App Versions API error ${res.status}`)
+  return json as unknown as T
+}
+
+export interface BatchVersionResult {
+  name: string
+  caskName: string
+  latestVersion: string | null
+  directDownloadUrl: string | null
+  source: string
+  error: string | null
+  fetchedAt: string
+}
+
+export interface AppVersionsBatchResponse {
+  success: boolean
+  results: BatchVersionResult[]
+  checkedAt: string
+}
+
+export const appVersionsApi = {
+  getLatestVersions: () => avFetch<AppVersionsResponse>(''),
+  batchLookup: (appNames: string[]) =>
+    avFetch<AppVersionsBatchResponse>('/batch', {
+      method: 'POST',
+      body: JSON.stringify({ apps: appNames }),
+    }),
 }

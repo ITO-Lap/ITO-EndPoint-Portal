@@ -19,7 +19,7 @@ import {
   Search, X, RefreshCw, ChevronDown, ChevronUp, ChevronRight,
   Package, Shield, Terminal, FileText, Globe, Printer, Smartphone,
   CheckCircle2, XCircle, Clock, AlertCircle, Loader2, Activity,
-  LayoutGrid, ExternalLink, Tag, Info,
+  LayoutGrid, ExternalLink, Tag, Info, Download, Plus,
 } from 'lucide-react'
 import { api } from '../../api'
 import type { LibraryApp } from '../../api'
@@ -374,15 +374,36 @@ interface Props {
   apps: LibraryApp[]
   loading: boolean
   onRefresh: () => void
+  onAddApp: () => void
 }
 
-export function KandjiLibraryItemsTab({ apps, loading, onRefresh }: Props) {
-  const [search,   setSearch]   = useState('')
-  const [category, setCategory] = useState<LibraryCategory>('All')
-  const [sortKey,  setSortKey]  = useState<'name' | 'category' | 'enforcement' | 'blueprint'>('name')
-  const [sortDir,  setSortDir]  = useState<'asc' | 'desc'>('asc')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [selected, setSelected] = useState<LibraryApp | null>(null)
+function exportCsv(apps: LibraryApp[]) {
+  const headers = ['Name', 'Category', 'Enforcement', 'Blueprint', 'Group ID', 'Status']
+  const rows = apps.map(a => [
+    a.name, a.category, a.enforcement,
+    a.blueprint ?? '', a.groupId ?? '',
+    a.active ? 'Active' : 'Inactive',
+  ])
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url
+  a.download = `iru-library-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function KandjiLibraryItemsTab({ apps, loading, onRefresh, onAddApp }: Props) {
+  const [search,       setSearch]       = useState('')
+  const [category,     setCategory]     = useState<LibraryCategory>('All')
+  const [activeStatus, setActiveStatus] = useState<'All' | 'Active' | 'Inactive'>('All')
+  const [sortKey,      setSortKey]      = useState<'name' | 'category' | 'enforcement' | 'blueprint'>('name')
+  const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('asc')
+  const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
+  const [selected,     setSelected]     = useState<LibraryApp | null>(null)
 
   const categories = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -395,6 +416,8 @@ export function KandjiLibraryItemsTab({ apps, loading, onRefresh }: Props) {
     return [...apps]
       .filter(a => {
         if (category !== 'All' && a.category !== category) return false
+        if (activeStatus === 'Active' && !a.active) return false
+        if (activeStatus === 'Inactive' && a.active) return false
         if (q) {
           return a.name.toLowerCase().includes(q) ||
             a.category.toLowerCase().includes(q) ||
@@ -408,7 +431,7 @@ export function KandjiLibraryItemsTab({ apps, loading, onRefresh }: Props) {
         const bv = (b[sortKey] ?? '').toString()
         return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
       })
-  }, [apps, search, category, sortKey, sortDir])
+  }, [apps, search, category, activeStatus, sortKey, sortDir])
 
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -530,9 +553,9 @@ export function KandjiLibraryItemsTab({ apps, loading, onRefresh }: Props) {
         ))}
       </div>
 
-      {/* Search + count */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+      {/* Toolbar: Search + Active/Inactive filter + Export + Add App */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search items, blueprints, categories…"
@@ -543,7 +566,30 @@ export function KandjiLibraryItemsTab({ apps, loading, onRefresh }: Props) {
             </button>
           )}
         </div>
-        <span className="text-xs text-slate-400">{filtered.length} of {apps.length} items</span>
+
+        {/* Active / Inactive toggle */}
+        <div className="flex rounded-xl border border-slate-200 bg-slate-50 overflow-hidden text-xs">
+          {(['All', 'Active', 'Inactive'] as const).map(s => (
+            <button key={s} type="button" onClick={() => setActiveStatus(s)}
+              className={`px-3 py-1.5 font-semibold transition ${activeStatus === s ? 'bg-orange-500 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+
+        <span className="text-xs text-slate-400 mr-auto">{filtered.length} of {apps.length} items</span>
+
+        {/* Export CSV */}
+        <button type="button" onClick={() => exportCsv(filtered)}
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 transition shadow-sm">
+          <Download className="h-3.5 w-3.5" />Export CSV
+        </button>
+
+        {/* Add App */}
+        <button type="button" onClick={onAddApp}
+          className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 transition shadow-sm">
+          <Plus className="h-3.5 w-3.5" />Add App
+        </button>
       </div>
 
       {/* Table */}

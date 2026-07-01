@@ -18,6 +18,9 @@ import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
 import smartDiagnosticsRouter from './routes/smartDiagnostics.js'
 import authRouter from './routes/auth.js'
+import intuneHealthRouter from './routes/intuneHealth.js'
+import macLogsRouter from './routes/macLogs.js'
+import appVersionsRouter from './routes/appVersions.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 
 dotenv.config()
@@ -67,6 +70,9 @@ app.use('/api/slack',        apiLimiter, slackRouter)
 app.use('/api/entra',             apiLimiter, entraRouter)
 app.use('/api/smart-diagnostics', apiLimiter, smartDiagnosticsRouter)
 app.use('/api/auth',              authRouter)
+app.use('/api/intune-health',     apiLimiter, intuneHealthRouter)
+app.use('/api/mac-logs',          apiLimiter, macLogsRouter)
+app.use('/api/app-versions',      apiLimiter, appVersionsRouter)
 
 app.use(errorHandler)
 

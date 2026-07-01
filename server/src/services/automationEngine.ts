@@ -16,6 +16,7 @@ import {
   isOpenAIConfigured,
 } from './openai.js'
 import { createJiraIssue, isJiraConfigured } from './jira.js'
+import { sendTeamsAlert, isTeamsConfigured } from './teams.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,23 @@ function deviceMatchesTrigger(device: Device, trigger: AutomationRule['trigger']
       return device.complianceState !== 'Compliant'
     case 'script_failure':
       return device.complianceState === 'Non-Compliant' && (device.primaryIssue ?? '').toLowerCase().includes('script')
+    case 'enrollment_failed':
+      return (device.primaryIssue ?? '').toLowerCase().includes('enroll')
+    case 'sync_failure': {
+      const lastSeen = new Date(device.lastCheckIn).getTime()
+      const hoursSince = (Date.now() - lastSeen) / 3_600_000
+      return hoursSince >= 6
+    }
+    case 'app_deploy_failed':
+      return (device.primaryIssue ?? '').toLowerCase().includes('app') || (device.primaryIssue ?? '').toLowerCase().includes('install')
+    case 'cert_expiring':
+      return device.complianceState !== 'Compliant' && (device.primaryIssue ?? '').toLowerCase().includes('cert')
+    case 'stale_device': {
+      const daysThreshold = Number(trigger.config.days ?? 30)
+      const lastSeen = new Date(device.lastCheckIn).getTime()
+      const daysSince = (Date.now() - lastSeen) / 86_400_000
+      return daysSince >= daysThreshold
+    }
     case 'risky_signin':
     case 'new_enrollment':
     case 'scheduled':
@@ -269,6 +287,39 @@ async function handleExecuteScript(
   }
 }
 
+async function handleTeamsNotify(
+  action: AutomationRule['actions'][0],
+  rule: AutomationRule,
+  device?: Device,
+): Promise<ActionResult> {
+  if (!isTeamsConfigured()) {
+    return {
+      type: action.type, label: action.label, status: 'failed',
+      result: 'Teams not configured — add TEAMS_WEBHOOK_URL in Settings → Integrations',
+    }
+  }
+
+  const result = await sendTeamsAlert({
+    ruleName: rule.name,
+    ruleCategory: rule.category,
+    ...(device?.deviceName ? { deviceName: device.deviceName } : {}),
+    ...(device?.user ? { deviceUser: device.user } : {}),
+    ...(device?.primaryIssue || device?.complianceState ? { issue: device.primaryIssue || device.complianceState } : {}),
+    ...(device?.severity ? { severity: device.severity } : {}),
+  })
+
+  if (result.success) {
+    return {
+      type: action.type, label: action.label, status: 'success',
+      result: `Teams notification sent for rule "${rule.name}"`,
+    }
+  }
+  return {
+    type: action.type, label: action.label, status: 'failed',
+    result: `Teams notification failed: ${result.error}`,
+  }
+}
+
 async function handleGenerateReport(
   action: AutomationRule['actions'][0],
   rule: AutomationRule,
@@ -340,6 +391,7 @@ export async function runAutomationRule(
           case 'execute_runbook':   result = await handleExecuteRunbook(action, rule, device); break
           case 'execute_script':    result = await handleExecuteScript(action, rule, device); break
           case 'generate_report':   result = await handleGenerateReport(action, rule, devicesToProcess, allDevices); break
+          case 'teams_notify':      result = await handleTeamsNotify(action, rule, device); break
           default:
             result = { type: action.type, label: action.label, status: 'success', result: `[${action.type}] executed` }
         }

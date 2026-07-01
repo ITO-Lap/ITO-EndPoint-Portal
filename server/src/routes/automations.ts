@@ -24,6 +24,7 @@ const triggerSchema = z.object({
     'device_non_compliant', 'compliance_threshold', 'device_offline',
     'new_enrollment', 'scheduled', 'risky_signin', 'drift_detected',
     'encryption_off', 'script_failure',
+    'enrollment_failed', 'sync_failure', 'app_deploy_failed', 'cert_expiring', 'stale_device',
   ]),
   config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 })
@@ -36,7 +37,7 @@ const conditionsSchema = z.object({
 })
 
 const actionSchema = z.object({
-  type:   z.enum(['slack_notify', 'create_jira', 'execute_runbook', 'execute_script', 'generate_report', 'send_notification']),
+  type:   z.enum(['slack_notify', 'create_jira', 'execute_runbook', 'execute_script', 'generate_report', 'send_notification', 'teams_notify']),
   label:  z.string().min(1),
   config: z.record(z.string(), z.string()).default({}),
 })

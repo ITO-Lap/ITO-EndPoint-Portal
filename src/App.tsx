@@ -16,7 +16,6 @@ import { ReportsPage } from './components/reports/ReportsPage'
 import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
 import { OpenIssuesPage } from './components/issues/OpenIssuesPage'
 import { RunbooksPage } from './pages/RunbooksPage'
-import { DiagnosticsPage } from './pages/DiagnosticsPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 import { RemoteScriptsPage } from './pages/RemoteScriptsPage'
 import { SecurityPosturePage } from './pages/SecurityPosturePage'
@@ -44,6 +43,7 @@ import {
 import { ZinniaBadge } from './components/ui/ZinniaLogo'
 import type { StatCardData, UserToolRole } from './types'
 import { canAccess } from './lib/permissions'
+import { NavVisibilityProvider } from './context/NavVisibilityContext'
 
 function OfflineBanner({ onRetry }: { onRetry: () => void }) {
   return (
@@ -331,7 +331,7 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                   <MacFleetReportsPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Entra Intelligence' ? (
                   <EntraIntelligenceDashboard />
-                ) : activePage === 'Smart Diagnostics' ? (
+                ) : activePage === 'Diagnostics' ? (
                   <SmartDiagnosticsPage />
                 ) : activePage === 'Open Issues' ? (
                   <OpenIssuesPage
@@ -355,15 +355,13 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                 ) : activePage === 'Profile' ? (
                   <ProfilePage />
                 ) : activePage === 'Settings' ? (
-                  <SettingsPage />
+                  <SettingsPage viewerRole={viewerRole as import('./types').UserToolRole} />
                 ) : activePage === 'Documentation' ? (
                   <DocsPage />
                 ) : activePage === 'Reports & Analytics' ? (
                   <ReportsPage />
                 ) : activePage === 'Runbooks' ? (
                   <RunbooksPage viewerRole={viewerRole} userName={displayName || userEmail || 'admin'} />
-                ) : activePage === 'Diagnostics' ? (
-                  <DiagnosticsPage />
                 ) : activePage === 'Activity Log' ? (
                   <ActivityLogPage />
                 ) : activePage === 'Remote Scripts' ? (
@@ -373,7 +371,7 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                 ) : activePage === 'Vulnerabilities' ? (
                   <VulnerabilitiesPage />
                 ) : activePage === 'Automation' ? (
-                  <AutomationPage />
+                  <AutomationPage viewerRole={viewerRole} />
                 ) : activePage === 'EDR' ? (
                   <EDRPage />
                 ) : (
@@ -480,7 +478,9 @@ function AuthGate() {
 function App() {
   return (
     <ToastProvider>
-      <AuthGate />
+      <NavVisibilityProvider>
+        <AuthGate />
+      </NavVisibilityProvider>
     </ToastProvider>
   )
 }
