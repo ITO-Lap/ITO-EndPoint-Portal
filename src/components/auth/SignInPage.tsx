@@ -52,37 +52,11 @@ function BrandPanel() {
         </div>
       </div>
       <div className="relative">
-        <div className="grid grid-cols-3 gap-2.5 mb-5">
-          {[
-            { value: '12,842', label: 'Devices managed',   color: '#E8172D' },
-            { value: '99.7%',  label: 'Platform uptime',   color: '#F46C00' },
-            { value: '3',      label: 'Sources connected', color: '#FFB800' },
-          ].map(s => (
-            <div key={s.label} className="rounded-2xl px-3 py-3 text-center water-glow-sm"
-              style={{ background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(255,255,255,0.80)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.90)' }}>
-              <p className="text-base font-black leading-tight" style={{ color: s.color }}>{s.value}</p>
-              <p className="text-[0.58rem] text-slate-400 mt-0.5 leading-tight">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Test credentials panel */}
-        <div className="rounded-2xl p-3.5 space-y-2"
-          style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(148,163,184,0.20)' }}>
-          <p className="text-[0.58rem] font-bold uppercase tracking-widest text-slate-400">Test credentials (all use same password)</p>
-          {[
-            { email: 'avinash.verma@zinnia.com', role: 'Global Admin', color: 'text-orange-600' },
-            { email: 'itadmin@zinnia.com',        role: 'IT Admin',     color: 'text-lime-600'   },
-            { email: 'helpdesk@zinnia.com',        role: 'Helpdesk',     color: 'text-slate-500'  },
-          ].map(u => (
-            <div key={u.email} className="flex items-center justify-between">
-              <span className="text-[0.62rem] font-mono text-slate-600">{u.email}</span>
-              <span className={`text-[0.6rem] font-bold ${u.color}`}>{u.role}</span>
-            </div>
-          ))}
-          <div className="pt-1 border-t border-slate-200/60">
-            <p className="text-[0.6rem] text-slate-400">Password: <span className="font-mono font-semibold text-slate-600">Admin@ITO2026</span></p>
-          </div>
+        <div className="rounded-2xl px-4 py-3"
+          style={{ background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.70)' }}>
+          <p className="text-[0.65rem] text-slate-500 leading-relaxed">
+            Enterprise endpoint management for Zinnia IT Operations — connecting Intune, Kandji, and ManageEngine into a unified AI-powered control plane.
+          </p>
         </div>
       </div>
     </div>
@@ -269,28 +243,6 @@ export function SignInPage({ onSignIn, justSignedOut = false, authError }: SignI
                     </div>
                   </div>
 
-                  {/* Role quick-fill chips */}
-                  <div className="space-y-1.5">
-                    <p className="text-[0.65rem] font-semibold text-slate-400 uppercase tracking-wide">Quick fill</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { label: 'Global Admin', email: 'avinash.verma@zinnia.com', color: 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100', icon: Layers },
-                        { label: 'IT Admin',     email: 'itadmin@zinnia.com',       color: 'bg-lime-50 border-lime-200 text-lime-700 hover:bg-lime-100',         icon: ShieldCheck },
-                        { label: 'Helpdesk',     email: 'helpdesk@zinnia.com',      color: 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200',    icon: Laptop2 },
-                      ].map(({ label, email: e, color, icon: Icon }) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => { setEmail(e); setPassword('Admin@ITO2026'); setError('') }}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold transition ${color}`}
-                        >
-                          <Icon className="h-2.5 w-2.5" />
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <button
                     type="submit"
                     disabled={localLoading || !email || !password}
@@ -351,7 +303,7 @@ export function SignInPage({ onSignIn, justSignedOut = false, authError }: SignI
                   <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
                     <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400">Who can access via SSO</p>
                     {[
-                      { role: 'Global Admin', desc: 'avinash.verma@zinnia.com',  color: 'bg-orange-100 text-orange-700', icon: Layers },
+                      { role: 'Global Admin', desc: 'IT Operations Admins group',  color: 'bg-orange-100 text-orange-700', icon: Layers },
                       { role: 'IT Admin',     desc: 'ITO EndPoint Portal group', color: 'bg-lime-100 text-lime-700',     icon: ShieldCheck },
                       { role: 'Helpdesk',     desc: 'Desktop Support group',     color: 'bg-slate-200 text-slate-600',   icon: Laptop2 },
                     ].map(({ role, desc, color, icon: Icon }) => (
@@ -371,7 +323,7 @@ export function SignInPage({ onSignIn, justSignedOut = false, authError }: SignI
 
           {/* Footer */}
           <div className="mt-6 flex flex-col items-center gap-2 text-[0.65rem] text-slate-400">
-            <p>© 2026 Zinnia Technologies · ITO Endpoint</p>
+            <p>© {new Date().getFullYear()} Zinnia Technologies · ITO Endpoint</p>
           </div>
         </div>
       </div>

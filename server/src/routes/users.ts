@@ -227,6 +227,13 @@ router.get('/:id', asyncHandler(async (req, res) => {
     lastCheckIn:      d.lastCheckIn,
     encryptionStatus: d.encryptionStatus,
     riskScore:        d.severity === 'Critical' ? 90 : d.severity === 'High' ? 70 : d.severity === 'Medium' ? 40 : 10,
+    manufacturer:     d.manufacturer,
+    model:            d.model,
+    serialNumber:     d.serialNumber,
+    osVersion:        d.osVersion,
+    ownership:        d.ownership,
+    joinType:         d.enrollmentType,
+    deviceId:         d.id,
   }))
 
   res.json({ success: true, data: { ...details, devices } })

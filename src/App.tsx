@@ -7,6 +7,7 @@ import { DashboardContent } from './components/dashboard/DashboardContent'
 import { PlaceholderPage } from './components/layout/PlaceholderPage'
 import { DeviceLookupPage } from './components/devices/DeviceLookupPage'
 import { UsersPage } from './pages/UsersPage'
+import { UserIntelligencePage } from './pages/UserIntelligencePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { DocsPage } from './pages/DocsPage'
@@ -24,6 +25,7 @@ import { KandjiMacPage } from './pages/KandjiMacPage'
 import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
 import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
 import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
+import { IntuneDeviceReportPage } from './pages/IntuneDeviceReportPage'
 import { WindowsDevicesPage } from './pages/WindowsDevicesPage'
 import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
 import { AutomationPage } from './components/automation/AutomationPage'
@@ -42,7 +44,7 @@ import { api, apiDeviceToDeviceData, verifySessionToken } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
 import { useNotifications } from './hooks/useNotifications'
-import type { ConnectedSource, DeviceData } from './types'
+import type { ConnectedSource, DeviceData, AppUser } from './types'
 import {
   getRunbookForDevice,
 } from './data/dashboardData'
@@ -136,6 +138,7 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
   const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
   const [selectedSource, setSelectedSource] = useState<ConnectedSource | null>(null)
   const [deviceLookupTarget, setDeviceLookupTarget] = useState<string | undefined>(undefined)
+  const [selectedIntelUser, setSelectedIntelUser] = useState<AppUser | null>(null)
   const { notify } = useToast()
 
   const { stats, offline, countdown, lastUpdated, refresh: refreshStats } = useStats()
@@ -332,6 +335,8 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                   />
                 ) : activePage === 'Intune Devices' ? (
                   <IntuneDevicesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Intune Device Report' ? (
+                  <IntuneDeviceReportPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Windows Devices' ? (
                   <WindowsDevicesPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'ManageEngine Devices' ? (
@@ -360,7 +365,19 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                     }}
                   />
                 ) : activePage === 'Users' ? (
-                  <UsersPage viewerRole={viewerRole as import('./types').UserToolRole} />
+                  <UsersPage
+                    viewerRole={viewerRole as import('./types').UserToolRole}
+                    onOpenUser={u => { setSelectedIntelUser(u); setActivePage('User Intelligence') }}
+                  />
+                ) : activePage === 'User Intelligence' && selectedIntelUser ? (
+                  <UserIntelligencePage
+                    user={selectedIntelUser}
+                    onBack={() => { setSelectedIntelUser(null); setActivePage('Users') }}
+                    onViewDevice={async (deviceName) => {
+                      await handleDeviceSelect(deviceName)
+                      setActivePage('Dashboard')
+                    }}
+                  />
                 ) : activePage === 'Profile' ? (
                   <ProfilePage />
                 ) : activePage === 'Settings' ? (

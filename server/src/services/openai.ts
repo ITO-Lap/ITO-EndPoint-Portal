@@ -1,15 +1,14 @@
 import OpenAI from 'openai'
 import type { Device } from '../types.js'
-
-let client: OpenAI | null = null
+import { getOpenAIConfig } from '../store/integrationStore.js'
 
 function getClient(): OpenAI {
-  if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) throw new Error('OPENAI_API_KEY is not configured')
-    client = new OpenAI({ apiKey })
-  }
-  return client
+  const cfg = getOpenAIConfig()
+  if (!cfg?.apiKey) throw new Error('OPENAI_API_KEY is not configured — add it to server/.env or set it in Settings → Integrations')
+  return new OpenAI({
+    apiKey: cfg.apiKey,
+    ...(cfg.orgId ? { organization: cfg.orgId } : {}),
+  })
 }
 
 export interface DeviceAnalysis {
@@ -289,7 +288,7 @@ Be concise, technical, and action-oriented. Prefer bullet points for steps.`
 }
 
 export function isOpenAIConfigured(): boolean {
-  return !!process.env.OPENAI_API_KEY
+  return !!getOpenAIConfig()?.apiKey
 }
 
 // ── AI Automation Builder ────────────────────────────────────────────────────

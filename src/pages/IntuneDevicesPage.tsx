@@ -2,14 +2,17 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Server, RefreshCw, Shield, Lock, ShieldCheck, ShieldAlert,
   Search, X, ArrowLeft, Zap, ToggleLeft, ToggleRight, Play,
-  BarChart2, FileText, CheckCircle2, XCircle, AlertCircle,
-  Clock, Monitor, Laptop2, Download, TrendingUp, TrendingDown,
-  Bell, Ticket, Terminal, ChevronDown, ChevronUp, Plus,
+  BarChart2, CheckCircle2, XCircle, AlertCircle,
+  Clock, Monitor, Laptop2, Download, TrendingUp,
+  ChevronDown, ChevronUp, Plus,
   Users, UserX, Building2, KeyRound, Activity, Info,
   Wifi, ShieldBan, CheckCheck, LogIn, Smartphone,
+  Calendar, Package, User, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { api } from '../api'
 import type { ApiDevice } from '../api'
+import { intelApi } from '../api/intelligence'
+import type { DeviceReportData, DeviceReportDevice } from '../api/intelligence'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useToast } from '../components/ui/ToastProvider'
 
@@ -493,31 +496,96 @@ function AutomationTab() {
 
 // ── Reports Tab ───────────────────────────────────────────────────────────────
 
+const REPORT_PAGE_SIZE = 50
+
 function ReportsTab({ devices }: { devices: ApiDevice[] }) {
-  const total = devices.length
+  const total     = devices.length
   const encrypted = devices.filter(d => d.encryptionStatus?.toLowerCase().includes('on')).length
   const compliant = devices.filter(d => d.complianceState === 'Compliant').length
   const withEdr   = devices.filter(d => d.antivirusStatus && d.antivirusStatus !== '—').length
 
-  const reports = [
-    { title: 'BitLocker Coverage',      value: total > 0 ? `${Math.round(encrypted/total*100)}%` : '—', sub: `${encrypted}/${total} devices encrypted`, color: '#0EA5E9', trend: 'up' },
-    { title: 'Compliance Rate',         value: total > 0 ? `${Math.round(compliant/total*100)}%` : '—', sub: `${compliant} fully compliant`,             color: '#10B981', trend: 'up' },
-    { title: 'Defender Coverage',       value: total > 0 ? `${Math.round(withEdr/total*100)}%`   : '—', sub: `${withEdr} with active EDR`,               color: '#F46C00', trend: 'up' },
-    { title: 'Devices Managed',         value: total.toLocaleString(),                                    sub: 'via Microsoft Intune',                     color: '#6366F1', trend: 'up' },
+  const kpiCards = [
+    { title: 'BitLocker Coverage', value: total > 0 ? `${Math.round(encrypted/total*100)}%` : '—', sub: `${encrypted}/${total} devices encrypted`, color: '#0EA5E9' },
+    { title: 'Compliance Rate',    value: total > 0 ? `${Math.round(compliant/total*100)}%` : '—', sub: `${compliant} fully compliant`,            color: '#10B981' },
+    { title: 'Defender Coverage',  value: total > 0 ? `${Math.round(withEdr/total*100)}%`   : '—', sub: `${withEdr} with active EDR`,              color: '#F46C00' },
+    { title: 'Devices Managed',    value: total.toLocaleString(),                                   sub: 'via Microsoft Intune',                    color: '#6366F1' },
   ]
+
+  // ── Detailed Graph API report ─────────────────────────────────────────────
+  const [reportData,    setReportData]    = useState<DeviceReportData | null>(null)
+  const [reportLoading, setReportLoading] = useState(true)
+  const [reportError,   setReportError]   = useState<string | null>(null)
+  const [exporting,     setExporting]     = useState(false)
+  const [search,        setSearch]        = useState('')
+  const [page,          setPage]          = useState(1)
+  const [ownerFilter,   setOwnerFilter]   = useState<'all' | 'company' | 'personal'>('all')
+
+  useEffect(() => {
+    let cancelled = false
+    intelApi.deviceReport()
+      .then(res => {
+        if (cancelled) return
+        if (res.success) setReportData(res)
+        else setReportError('Could not load device report')
+        setReportLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setReportError('Server unreachable — check Intune credentials')
+        setReportLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const filtered: DeviceReportDevice[] = useMemo(() => {
+    if (!reportData) return []
+    let items = reportData.devices
+    if (ownerFilter !== 'all') items = items.filter(d => d.ownerType === ownerFilter)
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      items = items.filter(d =>
+        d.deviceName?.toLowerCase().includes(q) ||
+        d.userPrincipalName?.toLowerCase().includes(q) ||
+        d.serialNumber?.toLowerCase().includes(q) ||
+        d.model?.toLowerCase().includes(q)
+      )
+    }
+    return items
+  }, [reportData, search, ownerFilter])
+
+  const totalPages = Math.ceil(filtered.length / REPORT_PAGE_SIZE)
+  const pageItems  = filtered.slice((page - 1) * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE)
+
+  const m1 = reportData?.newDevicesByMonth[0]
+  const m2 = reportData?.newDevicesByMonth[1]
+  const a1 = reportData?.appsByMonth[0]
+  const a2 = reportData?.appsByMonth[1]
+
+  const [invExporting, setInvExporting] = useState(false)
+
+  async function handleExcelExport() {
+    setExporting(true)
+    try { await intelApi.deviceReportExport() } catch { /* silently fail */ }
+    finally { setExporting(false) }
+  }
+
+  async function handleInventoryExport() {
+    setInvExporting(true)
+    try { await intelApi.deviceInventoryExport({ ownerType: ownerFilter, search }) } catch { /* silently fail */ }
+    finally { setInvExporting(false) }
+  }
 
   return (
     <div className="space-y-4">
+
+      {/* KPI summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {reports.map(r => (
+        {kpiCards.map(r => (
           <div key={r.title} className="glass rounded-2xl overflow-hidden relative p-4">
             <div className="h-[2px] absolute top-0 left-0 right-0" style={{ background: r.color }} />
             <div className="flex items-center justify-between mb-1">
               <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">{r.title}</p>
-              {r.trend === 'up'
-                ? <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
-                : <TrendingDown className="h-3.5 w-3.5 text-red-400" />
-              }
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
             </div>
             <p className="text-2xl font-black" style={{ color: r.color }}>{r.value}</p>
             <p className="text-[0.62rem] text-slate-400 mt-0.5">{r.sub}</p>
@@ -525,27 +593,246 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
         ))}
       </div>
 
-      {/* Export */}
-      <div className="glass rounded-2xl p-4 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-bold text-slate-700">Export Intune Report</p>
-          <p className="text-[0.68rem] text-slate-400">Download compliance, encryption, and device inventory data</p>
+      {/* Loading state */}
+      {reportLoading && (
+        <div className="glass rounded-2xl p-8 flex items-center justify-center gap-3">
+          <RefreshCw className="h-4 w-4 animate-spin text-blue-400" />
+          <p className="text-sm text-slate-400">Loading device report from Intune…</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const rows = [['Device','User','OS','Compliance','BitLocker','EDR','Serial']]
-            devices.forEach(d => rows.push([d.deviceName||'',d.user||'',d.osVersion||'',d.complianceState,d.encryptionStatus||'',d.antivirusStatus||'',d.serialNumber||'']))
-            const csv = rows.map(r => r.join(',')).join('\n')
-            const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
-            a.download = `intune-devices-${new Date().toISOString().slice(0,10)}.csv`; a.click()
-          }}
-          className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white water-glow flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#0EA5E9,#6366F1)' }}
-        >
-          <Download className="h-3.5 w-3.5" />Export CSV
-        </button>
-      </div>
+      )}
+
+      {/* Error state */}
+      {reportError && !reportLoading && (
+        <div className="glass rounded-2xl p-6 text-center">
+          <p className="text-sm text-red-500">{reportError}</p>
+        </div>
+      )}
+
+      {/* Report content */}
+      {reportData && !reportLoading && (
+        <>
+          {/* Export header */}
+          <div className="glass rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-bold text-slate-700">Device Report</p>
+              <p className="text-[0.68rem] text-slate-400">
+                {reportData.totalDevices.toLocaleString()} devices · 4-sheet Excel: Summary, Inventory, Enrollments, App Activity
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleExcelExport}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white water-glow flex-shrink-0 disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg,#10B981,#0EA5E9)' }}
+            >
+              {exporting
+                ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Exporting…</>
+                : <><Download className="h-3.5 w-3.5" />Export to Excel</>
+              }
+            </button>
+          </div>
+
+          {/* New Enrollments by Month */}
+          <div className="glass rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-blue-400" />
+              <p className="text-xs font-bold text-slate-700">New Enrollments by Month</p>
+              <span className="ml-auto text-[0.65rem] text-slate-400">Last 2 complete months</span>
+            </div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 border-b border-white/10">
+                  <th className="px-4 py-2.5 text-left">Month</th>
+                  <th className="px-4 py-2.5 text-right">Devices Enrolled</th>
+                  <th className="px-4 py-2.5 text-left">Trend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[m1, m2].map((m, i) => m ? (
+                  <tr key={m.key} className="border-b border-white/5 hover:bg-white/5 transition">
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{m.label}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className="text-base font-black text-blue-500">{m.count.toLocaleString()}</span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {i === 0 && m1 && m2 ? (
+                        <span className={`font-semibold ${m1.count >= m2.count ? 'text-emerald-500' : 'text-red-400'}`}>
+                          {m1.count >= m2.count ? '↑' : '↓'} {Math.abs(m1.count - m2.count)} vs {m2.label}
+                        </span>
+                      ) : <span className="text-slate-400">—</span>}
+                    </td>
+                  </tr>
+                ) : null)}
+              </tbody>
+            </table>
+          </div>
+
+          {/* App Activity by Month */}
+          <div className="glass rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+              <Package className="h-3.5 w-3.5 text-violet-400" />
+              <p className="text-xs font-bold text-slate-700">App Activity by Month</p>
+              <span className="ml-auto text-[0.65rem] text-slate-400">Last 2 complete months</span>
+            </div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 border-b border-white/10">
+                  <th className="px-4 py-2.5 text-left">Month</th>
+                  <th className="px-4 py-2.5 text-right">Apps Added</th>
+                  <th className="px-4 py-2.5 text-right">Apps Updated</th>
+                  <th className="px-4 py-2.5 text-right">Total Activity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[a1, a2].map(a => a ? (
+                  <tr key={a.key} className="border-b border-white/5 hover:bg-white/5 transition">
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{a.label}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className={a.added > 0 ? 'text-emerald-500 font-semibold' : 'text-slate-400'}>{a.added.toLocaleString()}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className={a.updated > 0 ? 'text-amber-500 font-semibold' : 'text-slate-400'}>{a.updated.toLocaleString()}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className={a.total > 0 ? 'font-black text-slate-700' : 'text-slate-400'}>{a.total.toLocaleString()}</span>
+                    </td>
+                  </tr>
+                ) : null)}
+              </tbody>
+            </table>
+            {(a1?.total === 0 && a2?.total === 0) && (
+              <div className="px-4 py-3 border-t border-white/10 flex items-center gap-2 bg-amber-50/50">
+                <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                <p className="text-[0.65rem] text-amber-700">
+                  Showing 0 — <code className="bg-amber-100 px-1 rounded font-mono">DeviceManagementApps.Read.All</code> permission not granted in Azure App Registration
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Device Inventory */}
+          <div className="glass rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3 flex-wrap">
+              <Users className="h-3.5 w-3.5 text-orange-400" />
+              <p className="text-xs font-bold text-slate-700">Device Inventory</p>
+              <span className="text-[0.65rem] text-slate-400">{filtered.length.toLocaleString()} devices</span>
+              <div className="ml-auto flex items-center gap-2 flex-wrap">
+                <select
+                  value={ownerFilter}
+                  onChange={e => { setOwnerFilter(e.target.value as typeof ownerFilter); setPage(1) }}
+                  className="rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  <option value="all">All Owners</option>
+                  <option value="company">Company</option>
+                  <option value="personal">Personal</option>
+                </select>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Device, user, or serial…"
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setPage(1) }}
+                    className="rounded-lg border border-white/20 bg-white/10 pl-7 pr-7 py-1 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-400 w-44"
+                  />
+                  {search && (
+                    <button onClick={() => { setSearch(''); setPage(1) }} className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <X className="h-3 w-3 text-slate-400 hover:text-slate-600" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleInventoryExport}
+                  disabled={invExporting}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-white water-glow disabled:opacity-60 transition flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg,#0EA5E9,#6366F1)' }}
+                >
+                  {invExporting
+                    ? <><RefreshCw className="h-3 w-3 animate-spin" />Exporting…</>
+                    : <><Download className="h-3 w-3" />Export</>
+                  }
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 border-b border-white/10">
+                    <th className="px-4 py-2.5 text-left">Device Name</th>
+                    <th className="px-4 py-2.5 text-left">Owner (Email)</th>
+                    <th className="px-4 py-2.5 text-left">Type</th>
+                    <th className="px-4 py-2.5 text-left">OS</th>
+                    <th className="px-4 py-2.5 text-left">Compliance</th>
+                    <th className="px-4 py-2.5 text-left">Encrypted</th>
+                    <th className="px-4 py-2.5 text-left">Enrolled</th>
+                    <th className="px-4 py-2.5 text-left">Last Sync</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400">No devices match your search</td>
+                    </tr>
+                  ) : pageItems.map((d: DeviceReportDevice) => (
+                    <tr key={d.id} className="border-b border-white/5 hover:bg-white/5 transition">
+                      <td className="px-4 py-2 font-semibold text-slate-800 whitespace-nowrap">{d.deviceName || '—'}</td>
+                      <td className="px-4 py-2 text-slate-500 max-w-[180px] truncate" title={d.userPrincipalName}>{d.userPrincipalName || '—'}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold border ${
+                          d.ownerType === 'company' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                        }`}>
+                          {d.ownerType === 'company'
+                            ? <><Building2 className="h-2.5 w-2.5" />Corp</>
+                            : <><User className="h-2.5 w-2.5" />Personal</>
+                          }
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{d.operatingSystem || '—'}</td>
+                      <td className="px-4 py-2">
+                        {d.complianceState === 'compliant'
+                          ? <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[0.6rem] text-emerald-700 border border-emerald-200 font-semibold"><CheckCircle2 className="h-2.5 w-2.5" />Compliant</span>
+                          : d.complianceState === 'noncompliant'
+                            ? <span className="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[0.6rem] text-red-700 border border-red-200 font-semibold"><XCircle className="h-2.5 w-2.5" />Non-Compliant</span>
+                            : <span className="inline-flex items-center gap-0.5 rounded-full bg-slate-50 px-1.5 py-0.5 text-[0.6rem] text-slate-500 border border-slate-200 font-semibold">{d.complianceState || '—'}</span>
+                        }
+                      </td>
+                      <td className="px-4 py-2 font-semibold">
+                        <span className={d.isEncrypted ? 'text-emerald-500' : 'text-red-400'}>{d.isEncrypted ? '✓ Yes' : '✗ No'}</span>
+                      </td>
+                      <td className="px-4 py-2 text-slate-400 whitespace-nowrap">
+                        {d.enrolledDateTime ? new Date(d.enrolledDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-slate-400 whitespace-nowrap">
+                        {d.lastSyncDateTime ? new Date(d.lastSyncDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-white/10 flex items-center justify-between text-[0.65rem] text-slate-400">
+                <span>
+                  {((page - 1) * REPORT_PAGE_SIZE + 1).toLocaleString()}–{Math.min(page * REPORT_PAGE_SIZE, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1 rounded hover:bg-white/10 disabled:opacity-30 transition">
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="px-2">Page {page} / {totalPages}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1 rounded hover:bg-white/10 disabled:opacity-30 transition">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

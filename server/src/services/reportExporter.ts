@@ -51,7 +51,7 @@ export async function exportToExcel(
   meta: ReportMeta
 ): Promise<Buffer> {
   try {
-    const ExcelJS = await import('exceljs')
+    const { default: ExcelJS } = await import('exceljs')
     const wb     = new ExcelJS.Workbook()
     wb.creator   = meta.generatedBy ?? 'Endpoint Intelligence Platform'
     wb.created   = new Date(meta.generatedAt)

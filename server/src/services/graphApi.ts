@@ -106,7 +106,6 @@ export interface GraphManagedDevice {
   userPrincipalName: string
   operatingSystem: string
   osVersion: string
-  osBuildNumber: string | null
   complianceState: 'compliant' | 'noncompliant' | 'conflict' | 'error' | 'inGracePeriod' | 'configManager' | 'unknown'
   lastSyncDateTime: string
   enrolledDateTime: string
@@ -122,15 +121,15 @@ export interface GraphManagedDevice {
   totalStorageSpaceInBytes: number
   freeStorageSpaceInBytes: number
   physicalMemoryInBytes: number
-  processorArchitecture: string
 }
 
+// Only fields confirmed valid in Graph v1.0 managedDevice $select
 const DEVICE_SELECT = [
-  'id', 'deviceName', 'userPrincipalName', 'operatingSystem', 'osVersion', 'osBuildNumber',
+  'id', 'deviceName', 'userPrincipalName', 'operatingSystem', 'osVersion',
   'complianceState', 'lastSyncDateTime', 'enrolledDateTime', 'isEncrypted',
   'manufacturer', 'model', 'serialNumber', 'managedDeviceOwnerType', 'managementAgent',
   'deviceEnrollmentType', 'azureADRegistered', 'azureADDeviceId',
-  'totalStorageSpaceInBytes', 'freeStorageSpaceInBytes', 'physicalMemoryInBytes', 'processorArchitecture',
+  'totalStorageSpaceInBytes', 'freeStorageSpaceInBytes', 'physicalMemoryInBytes',
 ].join(',')
 
 export async function getManagedDevices(creds: TenantCredentials): Promise<GraphManagedDevice[]> {
@@ -197,10 +196,19 @@ export interface GraphMobileApp {
 }
 
 export async function getMobileApps(creds: TenantCredentials): Promise<GraphMobileApp[]> {
-  return graphGetAll<GraphMobileApp>(creds, '/deviceManagement/mobileApps', {
-    '$filter': 'isAssigned eq true',
-    '$select': 'id,displayName,publisher,createdDateTime,lastModifiedDateTime,isFeatured,@odata.type',
-  })
+  try {
+    // mobileApps is a navigation property of deviceAppManagement, not deviceManagement
+    return await graphGetAll<GraphMobileApp>(creds, '/deviceAppManagement/mobileApps', {
+      '$select': 'id,displayName,publisher,createdDateTime,lastModifiedDateTime,isFeatured',
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (msg.includes('403') || msg.includes('Forbidden')) {
+      console.warn('[graphApi] getMobileApps: permission denied — DeviceManagementApps.Read.All may be missing')
+      return []
+    }
+    throw err
+  }
 }
 
 export interface GraphAppInstallStatus {
@@ -217,7 +225,7 @@ export async function getAppInstallStatuses(
   appId: string
 ): Promise<GraphAppInstallStatus[]> {
   // Permission: DeviceManagementApps.Read.All
-  return graphGetAll(creds, `/deviceManagement/mobileApps/${appId}/deviceStatuses`)
+  return graphGetAll(creds, `/deviceAppManagement/mobileApps/${appId}/deviceStatuses`)
 }
 
 // ─── Security Baselines ───────────────────────────────────────────────────────

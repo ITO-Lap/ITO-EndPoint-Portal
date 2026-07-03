@@ -9,6 +9,7 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
   'Device Lookup':           ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Mac Devices':             ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Intune Devices':          ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'Intune Device Report':    ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Windows Devices':         ['Global Admin', 'IT Admin', 'Helpdesk'],
   'ManageEngine Devices':    ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Open Issues':             ['Global Admin', 'IT Admin', 'Helpdesk'],
@@ -22,6 +23,7 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
 
   // Users & Identity
   'Users':               ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'User Intelligence':   ['Global Admin', 'IT Admin', 'Helpdesk'],
 
   // Automation — IT Admin+ only
   'Automation':          ['Global Admin', 'IT Admin'],

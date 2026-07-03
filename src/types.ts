@@ -188,7 +188,60 @@ export interface AppUser {
   recentActivity: UserActivityEvent[]
   sources: UserSource[]
   jiraTickets: JiraTicket[]
+  employeeId?: string
+  company?: string
 }
+
+// ─── User Intelligence (per-user 360 page) ────────────────────────────────────
+
+export interface UserSignIn {
+  id: string
+  createdDateTime: string
+  appDisplayName: string
+  ipAddress: string | null
+  location: { city: string; countryOrRegion: string } | null
+  status: { errorCode: number; failureReason: string | null }
+  conditionalAccessStatus: string
+  riskLevelDuringSignIn: string
+  mfaDetail: { authMethod: string } | null
+  clientAppUsed: string
+}
+
+export interface UserDeviceDetail {
+  deviceName: string
+  platform: string
+  complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
+  managementSource: string
+  lastCheckIn: string
+  encryptionStatus: string
+  riskScore: number
+  manufacturer?: string
+  model?: string
+  serialNumber?: string
+  osVersion?: string
+  ownership?: string
+  joinType?: string
+  deviceId?: string
+}
+
+export interface UserDetails {
+  signIns:  UserSignIn[]
+  roles:    Array<{ id: string; displayName: string }>
+  groups:   Array<{ id: string; displayName: string; groupTypes: string[]; mailEnabled: boolean; securityEnabled: boolean }>
+  apps:     Array<{ id: string; appDisplayName: string; resourceDisplayName: string; createdDateTime: string }>
+  licenses: Array<{ id: string; skuPartNumber: string; servicePlans: Array<{ servicePlanName: string; provisioningStatus: string }> }>
+  devices:  UserDeviceDetail[]
+}
+
+export interface UserHealthScore {
+  score: number
+  reasons: string[]
+  warnings: string[]
+}
+
+export type UserIntelligenceTab =
+  | 'overview' | 'devices' | 'signins' | 'groups-roles'
+  | 'security' | 'intune' | 'ai-insights' | 'reports'
 
 export type ToastType = 'success' | 'error' | 'info'
 

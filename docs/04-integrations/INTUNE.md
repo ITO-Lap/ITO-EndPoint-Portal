@@ -22,6 +22,7 @@ Connects to Microsoft Intune via the **Microsoft Graph API** to fetch managed de
 7. Add these permissions:
    - `DeviceManagementManagedDevices.Read.All`
    - `DeviceManagementConfiguration.Read.All`
+   - `DeviceManagementApps.Read.All` — required for the Device Report's app activity data
 8. Click **Grant admin consent for [your org]**
 
 ---
@@ -109,3 +110,4 @@ while (nextLink) {
 | `Microsoft Graph error: 403` | App permissions not propagated | Wait 5 minutes and retry after granting consent |
 | `Intune credentials not configured` | No env vars or UI config | Add credentials to `server/.env` or Settings UI |
 | Empty device list | No devices enrolled in Intune | Check Intune → Devices in Azure portal |
+| Device Report shows "No app data available" even with `DeviceManagementApps.Read.All` granted | Not a permissions issue — Graph returns `400 Resource not found for the segment 'mobileApps'` if the app-fetch call targets `/deviceManagement/mobileApps` instead of `/deviceAppManagement/mobileApps` | Confirm `server/src/services/graphApi.ts` calls `/deviceAppManagement/mobileApps` |

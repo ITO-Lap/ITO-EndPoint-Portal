@@ -487,27 +487,8 @@ export interface CreateAutomationRuleInput {
   createdBy: string
 }
 
-export interface UserSignIn {
-  id: string
-  createdDateTime: string
-  appDisplayName: string
-  ipAddress: string | null
-  location: { city: string; countryOrRegion: string } | null
-  status: { errorCode: number; failureReason: string | null }
-  conditionalAccessStatus: string
-  riskLevelDuringSignIn: string
-  mfaDetail: { authMethod: string } | null
-  clientAppUsed: string
-}
-
-export interface UserDetails {
-  signIns:  UserSignIn[]
-  roles:    Array<{ id: string; displayName: string }>
-  groups:   Array<{ id: string; displayName: string; groupTypes: string[]; mailEnabled: boolean; securityEnabled: boolean }>
-  apps:     Array<{ id: string; appDisplayName: string; resourceDisplayName: string; createdDateTime: string }>
-  licenses: Array<{ id: string; skuPartNumber: string; servicePlans: Array<{ servicePlanName: string; provisioningStatus: string }> }>
-  devices:  Array<{ deviceName: string; platform: string; complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'; managementSource: string; lastCheckIn: string; encryptionStatus: string; riskScore: number }>
-}
+export type { UserSignIn, UserDetails, UserDeviceDetail, UserHealthScore, UserIntelligenceTab } from '../types'
+import type { UserDetails } from '../types'
 
 export const api = {
   fetchStats:    () => get<ApiStats>('/api/devices/stats'),

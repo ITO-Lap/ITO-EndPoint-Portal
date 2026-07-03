@@ -1,10 +1,12 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
+import OpenAI from 'openai'
 import {
   setIntuneConfig,
   setKandjiConfig,
   setManageEngineConfig,
+  setOpenAIConfig,
   setEntraConfig,
   setSlackConfig,
   getFetchResult,
@@ -13,6 +15,7 @@ import {
   getIntuneConfig,
   getKandjiConfig,
   getManageEngineConfig,
+  getOpenAIConfig,
   getSlackConfig,
 } from '../store/integrationStore.js'
 import { getIntuneDevices, diagnoseIntune } from '../services/intune.js'
@@ -49,6 +52,11 @@ const credentialSchemas: Record<string, z.ZodObject<any>> = {
     botToken:      z.string().min(1, 'botToken required'),
     signingSecret: z.string().optional(),
     workspaceId:   z.string().optional(),
+  }),
+  openai: z.object({
+    apiKey: z.string().min(1, 'apiKey required').startsWith('sk-', 'apiKey must start with sk-'),
+    orgId:  z.string().optional(),
+    model:  z.string().optional(),
   }),
 }
 
@@ -106,6 +114,13 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
         botToken:      f['botToken']      as string,
         ...(f['signingSecret'] ? { signingSecret: f['signingSecret'] as string } : {}),
         ...(f['workspaceId']   ? { workspaceId:   f['workspaceId']   as string } : {}),
+      })
+      break
+    case 'openai':
+      setOpenAIConfig({
+        apiKey: f['apiKey'] as string,
+        ...(f['orgId'] ? { orgId: f['orgId'] as string } : {}),
+        ...(f['model'] ? { model: f['model'] as string } : {}),
       })
       break
   }
@@ -314,6 +329,17 @@ router.get('/status', asyncHandler(async (_req, res) => {
       error:       getFetchResult('slack')?.error ?? null,
       healthy:     isConfigured('slack') ? (getFetchResult('slack')?.error === null ? true : null) : null,
     },
+    {
+      id: 'openai',
+      name: 'OpenAI',
+      configured: isConfigured('openai'),
+      model:       getOpenAIConfig()?.model ?? 'gpt-4o-mini',
+      deviceCount: null,
+      lastSyncAt:  null,
+      latencyMs:   null,
+      error:       null,
+      healthy:     isConfigured('openai') ? true : null,
+    },
   ]
 
   res.json({ success: true, data })
@@ -363,6 +389,14 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
         deviceCount = 0
         break
       }
+      case 'openai': {
+        const cfg = getOpenAIConfig()
+        if (!cfg?.apiKey) throw new Error('OpenAI is not configured — push credentials first')
+        const openai = new OpenAI({ apiKey: cfg.apiKey, ...(cfg.orgId ? { organization: cfg.orgId } : {}) })
+        const models = await openai.models.list()
+        deviceCount = models.data.length
+        break
+      }
       default:
         res.status(400).json({ success: false, error: `Cannot sync: ${id}` })
         return
@@ -372,12 +406,15 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
   }
 
   const latencyMs = Date.now() - t0
-  recordFetchResult(id as 'intune' | 'kandji' | 'manageengine' | 'entra' | 'slack', {
-    deviceCount,
-    lastFetchAt: Date.now(),
-    latencyMs,
-    error,
-  })
+  const recordableSources = ['intune', 'kandji', 'manageengine', 'entra', 'slack'] as const
+  if (recordableSources.includes(id as typeof recordableSources[number])) {
+    recordFetchResult(id as typeof recordableSources[number], {
+      deviceCount,
+      lastFetchAt: Date.now(),
+      latencyMs,
+      error,
+    })
+  }
 
   res.json({ success: true, data: { id, deviceCount, latencyMs, error } })
 }))

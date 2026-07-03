@@ -1,10 +1,11 @@
 // Intelligence Platform — frontend HTTP client.
 // All functions call the /api/intelligence/* routes on the Express server.
 
-const BASE = '/api/intelligence'
-const TENANTS = '/api/tenants'
-const AUDIT = '/api/audit'
-const SCHEDULES = '/api/scheduled-reports'
+const SERVER = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+const BASE = `${SERVER}/api/intelligence`
+const TENANTS = `${SERVER}/api/tenants`
+const AUDIT = `${SERVER}/api/audit`
+const SCHEDULES = `${SERVER}/api/scheduled-reports`
 
 async function post<T>(url: string, body: object): Promise<T> {
   const res = await fetch(url, {
@@ -130,6 +131,44 @@ export const intelApi = {
       post(AUDIT, entry),
     actions: (): Promise<{ success: boolean; data: string[] }> =>
       get(`${AUDIT}/actions`),
+  },
+
+  // ─── Device Report ───────────────────────────────────────────────────────────
+  deviceReport: (): Promise<DeviceReportData> =>
+    get(`${BASE}/device-report`),
+
+  async deviceReportExport(): Promise<void> {
+    const res = await fetch(`${BASE}/device-report/export`, { method: 'POST' })
+    if (!res.ok) throw new Error('Export failed')
+    const blob = await res.blob()
+    const url  = URL.createObjectURL(blob)
+    const today = new Date().toISOString().slice(0, 10)
+    const a     = document.createElement('a')
+    a.href     = url
+    a.download = `intune-device-report-${today}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  },
+
+  async deviceInventoryExport(filters?: { ownerType?: string; search?: string }): Promise<void> {
+    const res = await fetch(`${BASE}/device-report/inventory-export`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(filters ?? {}),
+    })
+    if (!res.ok) throw new Error('Export failed')
+    const blob  = await res.blob()
+    const url   = URL.createObjectURL(blob)
+    const today = new Date().toISOString().slice(0, 10)
+    const a     = document.createElement('a')
+    a.href      = url
+    a.download  = `device-inventory-${today}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   },
 
   // ─── Scheduled Reports ───────────────────────────────────────────────────────
@@ -278,4 +317,50 @@ export interface ReportRun {
   triggered_by: string
   started_at: string
   completed_at: string | null
+}
+
+// ─── Device Report ────────────────────────────────────────────────────────────
+
+export interface DeviceReportMonth {
+  key: string
+  label: string
+  year: number
+  month: number
+  count: number
+}
+
+export interface DeviceReportAppsMonth {
+  key: string
+  label: string
+  year: number
+  month: number
+  added: number
+  updated: number
+  total: number
+}
+
+export interface DeviceReportDevice {
+  id: string
+  deviceName: string
+  userPrincipalName: string
+  ownerType: string
+  operatingSystem: string
+  osVersion: string
+  complianceState: string
+  enrolledDateTime: string
+  lastSyncDateTime: string
+  isEncrypted: boolean
+  manufacturer: string
+  model: string
+  serialNumber: string
+  managementAgent: string
+}
+
+export interface DeviceReportData {
+  success: boolean
+  totalDevices: number
+  newDevicesByMonth: DeviceReportMonth[]
+  appsByMonth: DeviceReportAppsMonth[]
+  devices: DeviceReportDevice[]
+  cached?: boolean
 }

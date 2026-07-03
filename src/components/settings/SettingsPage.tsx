@@ -25,7 +25,7 @@ import type { UserToolRole } from '../../types'
 const NAV = [
   { key: 'general',       label: 'General',            icon: Building2       },
   { key: 'navigation',    label: 'Navigation',         icon: LayoutDashboard },
-  { key: 'integrations',  label: 'Integrations',       icon: Plug,        badge: '6' },
+  { key: 'integrations',  label: 'Integrations',       icon: Plug,        badge: '7' },
   { key: 'roles',         label: 'Roles & Permissions',icon: Users           },
   { key: 'compliance',    label: 'Compliance',          icon: ShieldCheck     },
   { key: 'automation',    label: 'Automation',          icon: Zap             },
@@ -504,6 +504,30 @@ const INTEG_DEFS: IntegDef[] = [
       workspaceId:   '',
     },
   },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    icon: Cpu,
+    iconBg: 'bg-violet-100',
+    iconColor: 'text-violet-600',
+    category: 'AI',
+    categoryColor: 'text-violet-700 bg-violet-50 border-violet-200',
+    description: 'Powers all AI features — device analysis, compliance summaries, risk scoring narratives, natural language remediation, automation rule builder, and fleet reports via GPT-4o-mini.',
+    docsHint: 'Create a key at platform.openai.com/api-keys → Create new secret key. The key starts with sk-proj-… or sk-…. Organization ID is optional and only needed if your key belongs to a named OpenAI org.',
+    defaultInterval: 'realtime',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'apiKey', label: 'API Key',          hint: 'platform.openai.com/api-keys — starts with sk-',   placeholder: 'sk-proj-…',       secret: true  },
+      { key: 'orgId',  label: 'Organization ID',  hint: 'Optional — platform.openai.com/settings/organization', placeholder: 'org-…',        secret: false },
+      { key: 'model',  label: 'Default Model',    hint: 'Model used for AI features. gpt-4o-mini is recommended', placeholder: 'gpt-4o-mini', secret: false },
+    ],
+    defaults: {
+      apiKey: '',
+      orgId:  '',
+      model:  'gpt-4o-mini',
+    },
+  },
 ]
 
 const CATALOG_ITEMS = [
@@ -549,6 +573,7 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
     case 'kandji':       return `${f['subdomain']?.value || 'zinnia'}.kandji.io`
     case 'manageengine': return f['serverUrl']?.value || 'me.zinnia.internal'
     case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : 'auditlogs:read · channels:read'
+    case 'openai':       return `Model: ${f['model']?.value || 'gpt-4o-mini'}${f['orgId']?.value ? ' · ' + f['orgId'].value : ''}`
     default:             return ''
   }
 }

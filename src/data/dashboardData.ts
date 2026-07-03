@@ -23,10 +23,9 @@ import {
   Stethoscope,
   Brain,
   FileText,
-  Calendar,
-  Building2,
   ClipboardList,
   Package,
+  Activity,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -47,6 +46,7 @@ export const navItems: NavItem[] = [
   { id: 'device_lookup',        title: 'Device Lookup',           icon: Search,        group: 'Endpoint Management' },
   { id: 'mac_devices',          title: 'Mac Devices',             icon: Monitor,       group: 'Endpoint Management' },
   { id: 'intune_devices',       title: 'Intune Devices',          icon: Server,        group: 'Endpoint Management' },
+  { id: 'intune_device_report', title: 'Intune Device Report',    icon: FileText,      group: 'Endpoint Management' },
   { id: 'windows_devices',      title: 'Windows Devices',         icon: Laptop2,       group: 'Endpoint Management' },
   { id: 'manageengine_devices', title: 'ManageEngine Devices',    icon: Layers,        group: 'Endpoint Management' },
   { id: 'open_issues',          title: 'Open Issues',             icon: AlertTriangle, group: 'Endpoint Management' },
@@ -70,15 +70,13 @@ export const navItems: NavItem[] = [
   { id: 'activity_log',         title: 'Activity Log',        icon: Clock3,        group: 'Analytics & Reports' },
 
   // ── INTELLIGENCE PLATFORM ─────────────────────────────────────────────────────
-  { id: 'intelligence_dashboard', title: 'Intelligence Hub',       icon: Brain,          group: 'Intelligence Platform' },
-  { id: 'compliance_intel',       title: 'Compliance Intelligence', icon: Shield,          group: 'Intelligence Platform' },
-  { id: 'app_deployment',         title: 'App Deployment',          icon: Package,         group: 'Intelligence Platform' },
-  { id: 'policy_conflicts',       title: 'Policy Conflicts',        icon: GitBranch,       group: 'Intelligence Platform' },
-  { id: 'risk_scoring',           title: 'AI Risk Scoring',         icon: Brain,           group: 'Intelligence Platform' },
-  { id: 'report_builder',         title: 'Report Builder',          icon: FileText,        group: 'Intelligence Platform' },
-  { id: 'scheduled_reports',      title: 'Scheduled Reports',       icon: Calendar,        group: 'Intelligence Platform' },
-  { id: 'multi_tenant',           title: 'Multi-Tenant',            icon: Building2,       group: 'Intelligence Platform' },
-  { id: 'audit_log',              title: 'Audit Log',               icon: ClipboardList,   group: 'Intelligence Platform' },
+  { id: 'intelligence_dashboard', title: 'Intelligence Hub',        icon: Brain,          group: 'Intelligence Platform' },
+  { id: 'compliance_intel',       title: 'Compliance Intelligence', icon: ShieldCheck,    group: 'Intelligence Platform' },
+  { id: 'app_deployment',         title: 'App Deployment',          icon: Package,        group: 'Intelligence Platform' },
+  { id: 'policy_conflicts',       title: 'Policy Conflicts',        icon: GitBranch,      group: 'Intelligence Platform' },
+  { id: 'risk_scoring',           title: 'Risk Scoring',            icon: Activity,       group: 'Intelligence Platform' },
+  { id: 'report_builder',         title: 'Report Builder',          icon: FileText,       group: 'Intelligence Platform' },
+  { id: 'audit_log',              title: 'Audit Log',               icon: ClipboardList,  group: 'Intelligence Platform' },
 
   // ── PLATFORM ──────────────────────────────────────────────────────────────────
   { id: 'settings',             title: 'Settings',            icon: Settings,      group: 'Platform' },

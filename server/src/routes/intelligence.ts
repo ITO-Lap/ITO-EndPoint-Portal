@@ -4,6 +4,7 @@
 import { Router } from 'express'
 import OpenAI from 'openai'
 import { credentialsFromEnv, getManagedDevices, getCompliancePolicies, getConfigurationProfiles, getMobileApps } from '../services/graphApi.js'
+import type { GraphMobileApp } from '../services/graphApi.js'
 import { batchComputeRiskScores } from '../services/riskScoring.js'
 import { detectConflicts, conflictSummary } from '../services/policyConflict.js'
 import { exportToCSV, exportToExcel, exportToPDF, exportToPPTX } from '../services/reportExporter.js'
@@ -321,6 +322,349 @@ router.post('/export', async (req, res, next) => {
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.pptx"`)
       return res.send(buf)
     }
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── GET /api/intelligence/device-report ─────────────────────────────────────
+router.get('/device-report', async (_req, res, next) => {
+  try {
+    const cached = getCached<unknown>('intel:device-report')
+    if (cached) return res.json({ success: true, ...cached as object, cached: true })
+
+    const creds = credentialsFromEnv()
+    const [devices, apps] = await Promise.all([
+      getManagedDevices(creds),
+      getMobileApps(creds).catch((): GraphMobileApp[] => []),
+    ])
+
+    const now = new Date()
+    const lastTwoMonths = [1, 2].map(offset => {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+      return {
+        key:   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+        year:  d.getFullYear(),
+        month: d.getMonth() + 1,
+      }
+    })
+
+    const newDevicesByMonth = lastTwoMonths.map(m => ({
+      ...m,
+      count: devices.filter(d => {
+        const e = new Date(d.enrolledDateTime)
+        return e.getFullYear() === m.year && (e.getMonth() + 1) === m.month
+      }).length,
+    }))
+
+    const appsByMonth = lastTwoMonths.map(m => {
+      const added = apps.filter(a => {
+        const c = new Date(a.createdDateTime)
+        return c.getFullYear() === m.year && (c.getMonth() + 1) === m.month
+      }).length
+      const updated = apps.filter(a => {
+        const mod = new Date(a.lastModifiedDateTime)
+        const cre = new Date(a.createdDateTime)
+        return mod.getFullYear() === m.year && (mod.getMonth() + 1) === m.month &&
+          !(cre.getFullYear() === m.year && (cre.getMonth() + 1) === m.month)
+      }).length
+      return { ...m, added, updated, total: added + updated }
+    })
+
+    const deviceList = devices.map(d => ({
+      id:               d.id,
+      deviceName:       d.deviceName,
+      userPrincipalName: d.userPrincipalName,
+      ownerType:        d.managedDeviceOwnerType,
+      operatingSystem:  d.operatingSystem,
+      osVersion:        d.osVersion,
+      complianceState:  d.complianceState,
+      enrolledDateTime: d.enrolledDateTime,
+      lastSyncDateTime: d.lastSyncDateTime,
+      isEncrypted:      d.isEncrypted,
+      manufacturer:     d.manufacturer,
+      model:            d.model,
+      serialNumber:     d.serialNumber,
+      managementAgent:  d.managementAgent,
+    }))
+
+    const result = { totalDevices: devices.length, newDevicesByMonth, appsByMonth, devices: deviceList }
+    setCached('intel:device-report', result)
+    res.json({ success: true, ...result })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── POST /api/intelligence/device-report/export ─────────────────────────────
+router.post('/device-report/export', async (_req, res, next) => {
+  try {
+    const creds = credentialsFromEnv()
+    const [devices, apps] = await Promise.all([
+      getManagedDevices(creds),
+      getMobileApps(creds).catch((): GraphMobileApp[] => []),
+    ])
+
+    const now = new Date()
+    const lastTwoMonths = [1, 2].map(offset => {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+      return {
+        key:   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+        year:  d.getFullYear(),
+        month: d.getMonth() + 1,
+      }
+    })
+
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'Endpoint Intelligence Platform'
+    wb.created = now
+
+    // ── Sheet 1: Summary ─────────────────────────────────────────────────────────
+    const sumSheet = wb.addWorksheet('Summary')
+    sumSheet.columns = [
+      { key: 'metric', header: 'Metric', width: 45 },
+      { key: 'value',  header: 'Value',  width: 25 },
+    ]
+    sumSheet.getRow(1).eachCell(cell => {
+      cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE84C1E' } }
+    })
+    sumSheet.getRow(1).height = 18
+
+    const newByMonth = lastTwoMonths.map(m => ({
+      ...m,
+      count: devices.filter(d => {
+        const e = new Date(d.enrolledDateTime)
+        return e.getFullYear() === m.year && (e.getMonth() + 1) === m.month
+      }).length,
+    }))
+    const appsByMonth = lastTwoMonths.map(m => {
+      const added   = apps.filter(a => { const c = new Date(a.createdDateTime); return c.getFullYear() === m.year && (c.getMonth() + 1) === m.month }).length
+      const updated = apps.filter(a => {
+        const mod = new Date(a.lastModifiedDateTime), cre = new Date(a.createdDateTime)
+        return mod.getFullYear() === m.year && (mod.getMonth() + 1) === m.month &&
+          !(cre.getFullYear() === m.year && (cre.getMonth() + 1) === m.month)
+      }).length
+      return { ...m, added, updated }
+    })
+
+    const summaryRows: Array<{ metric: string; value: string | number }> = [
+      { metric: 'Report Title', value: 'Intune Device Report' },
+      { metric: 'Generated At', value: now.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' }) },
+      { metric: 'Generated By', value: 'Endpoint Intelligence Platform' },
+      { metric: '', value: '' },
+      { metric: 'Total Managed Devices',           value: devices.length },
+      { metric: 'Compliant',                       value: devices.filter(d => d.complianceState === 'compliant').length },
+      { metric: 'Non-Compliant',                   value: devices.filter(d => d.complianceState === 'noncompliant').length },
+      { metric: 'Encrypted',                       value: devices.filter(d => d.isEncrypted).length },
+      { metric: '', value: '' },
+      { metric: `New Enrollments — ${newByMonth[0]?.label ?? ''}`, value: newByMonth[0]?.count ?? 0 },
+      { metric: `New Enrollments — ${newByMonth[1]?.label ?? ''}`, value: newByMonth[1]?.count ?? 0 },
+      { metric: '', value: '' },
+      { metric: `Apps Added — ${appsByMonth[0]?.label ?? ''}`,     value: appsByMonth[0]?.added ?? 0 },
+      { metric: `Apps Updated — ${appsByMonth[0]?.label ?? ''}`,   value: appsByMonth[0]?.updated ?? 0 },
+      { metric: `Apps Added — ${appsByMonth[1]?.label ?? ''}`,     value: appsByMonth[1]?.added ?? 0 },
+      { metric: `Apps Updated — ${appsByMonth[1]?.label ?? ''}`,   value: appsByMonth[1]?.updated ?? 0 },
+    ]
+    for (const r of summaryRows) sumSheet.addRow(r)
+
+    // ── Sheet 2: Device Inventory ─────────────────────────────────────────────
+    const invSheet = wb.addWorksheet('Device Inventory')
+    invSheet.columns = [
+      { key: 'deviceName',      header: 'Device Name',    width: 28 },
+      { key: 'ownerEmail',      header: 'Owner (Email)',  width: 34 },
+      { key: 'ownerType',       header: 'Owner Type',     width: 14 },
+      { key: 'operatingSystem', header: 'OS',             width: 12 },
+      { key: 'osVersion',       header: 'OS Version',     width: 16 },
+      { key: 'complianceState', header: 'Compliance',     width: 14 },
+      { key: 'isEncrypted',     header: 'Encrypted',      width: 10 },
+      { key: 'manufacturer',    header: 'Manufacturer',   width: 16 },
+      { key: 'model',           header: 'Model',          width: 22 },
+      { key: 'serialNumber',    header: 'Serial Number',  width: 18 },
+      { key: 'managementAgent', header: 'Mgmt Agent',     width: 16 },
+      { key: 'enrolledDate',    header: 'Enrolled Date',  width: 16 },
+      { key: 'lastSyncDate',    header: 'Last Sync',      width: 16 },
+    ]
+    invSheet.getRow(1).eachCell(cell => {
+      cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE84C1E' } }
+    })
+    invSheet.getRow(1).height = 18
+    invSheet.autoFilter = { from: 'A1', to: 'M1' }
+
+    for (const d of devices) {
+      invSheet.addRow({
+        deviceName:      d.deviceName,
+        ownerEmail:      d.userPrincipalName,
+        ownerType:       d.managedDeviceOwnerType === 'company' ? 'Company' : d.managedDeviceOwnerType === 'personal' ? 'Personal' : d.managedDeviceOwnerType,
+        operatingSystem: d.operatingSystem,
+        osVersion:       d.osVersion,
+        complianceState: d.complianceState,
+        isEncrypted:     d.isEncrypted ? 'Yes' : 'No',
+        manufacturer:    d.manufacturer,
+        model:           d.model,
+        serialNumber:    d.serialNumber,
+        managementAgent: d.managementAgent,
+        enrolledDate:    d.enrolledDateTime ? new Date(d.enrolledDateTime).toLocaleDateString('en-US') : '',
+        lastSyncDate:    d.lastSyncDateTime  ? new Date(d.lastSyncDateTime).toLocaleDateString('en-US')  : '',
+      })
+    }
+
+    // ── Sheet 3: New Enrollments (last 2 months) ──────────────────────────────
+    const enrollSheet = wb.addWorksheet('New Enrollments')
+    enrollSheet.columns = [
+      { key: 'month',           header: 'Month',          width: 18 },
+      { key: 'deviceName',      header: 'Device Name',    width: 28 },
+      { key: 'ownerEmail',      header: 'Owner (Email)',  width: 34 },
+      { key: 'ownerType',       header: 'Owner Type',     width: 14 },
+      { key: 'operatingSystem', header: 'OS',             width: 12 },
+      { key: 'compliance',      header: 'Compliance',     width: 14 },
+      { key: 'enrolledDate',    header: 'Enrolled Date',  width: 16 },
+    ]
+    enrollSheet.getRow(1).eachCell(cell => {
+      cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE84C1E' } }
+    })
+    enrollSheet.getRow(1).height = 18
+
+    for (const m of lastTwoMonths) {
+      const mDevices = devices.filter(d => {
+        const e = new Date(d.enrolledDateTime)
+        return e.getFullYear() === m.year && (e.getMonth() + 1) === m.month
+      })
+      for (const d of mDevices) {
+        enrollSheet.addRow({
+          month:           m.label,
+          deviceName:      d.deviceName,
+          ownerEmail:      d.userPrincipalName,
+          ownerType:       d.managedDeviceOwnerType === 'company' ? 'Company' : 'Personal',
+          operatingSystem: d.operatingSystem,
+          compliance:      d.complianceState,
+          enrolledDate:    d.enrolledDateTime ? new Date(d.enrolledDateTime).toLocaleDateString('en-US') : '',
+        })
+      }
+    }
+
+    // ── Sheet 4: App Activity ─────────────────────────────────────────────────
+    const appSheet = wb.addWorksheet('App Activity')
+    appSheet.columns = [
+      { key: 'month',       header: 'Month',         width: 18 },
+      { key: 'activity',    header: 'Activity',      width: 12 },
+      { key: 'displayName', header: 'App Name',      width: 34 },
+      { key: 'publisher',   header: 'Publisher',     width: 24 },
+      { key: 'created',     header: 'Created',       width: 16 },
+      { key: 'modified',    header: 'Last Modified', width: 16 },
+    ]
+    appSheet.getRow(1).eachCell(cell => {
+      cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE84C1E' } }
+    })
+    appSheet.getRow(1).height = 18
+
+    if (apps.length === 0) {
+      appSheet.addRow({ month: 'N/A', activity: '—', displayName: 'No data — DeviceManagementApps.Read.All permission required in Azure', publisher: '', created: '', modified: '' })
+    } else {
+      for (const m of lastTwoMonths) {
+        const added   = apps.filter(a => { const c = new Date(a.createdDateTime); return c.getFullYear() === m.year && (c.getMonth() + 1) === m.month })
+        const updated = apps.filter(a => {
+          const mod = new Date(a.lastModifiedDateTime), cre = new Date(a.createdDateTime)
+          return mod.getFullYear() === m.year && (mod.getMonth() + 1) === m.month &&
+            !(cre.getFullYear() === m.year && (cre.getMonth() + 1) === m.month)
+        })
+        for (const a of added)   appSheet.addRow({ month: m.label, activity: 'Added',   displayName: a.displayName, publisher: a.publisher, created: new Date(a.createdDateTime).toLocaleDateString('en-US'),      modified: new Date(a.lastModifiedDateTime).toLocaleDateString('en-US') })
+        for (const a of updated) appSheet.addRow({ month: m.label, activity: 'Updated', displayName: a.displayName, publisher: a.publisher, created: new Date(a.createdDateTime).toLocaleDateString('en-US'), modified: new Date(a.lastModifiedDateTime).toLocaleDateString('en-US') })
+      }
+    }
+
+    const buf = await wb.xlsx.writeBuffer()
+    const dateStr = now.toISOString().slice(0, 10)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="intune-device-report-${dateStr}.xlsx"`)
+    return res.send(Buffer.from(buf as ArrayBuffer))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── POST /api/intelligence/device-report/inventory-export ───────────────────
+// Exports the device inventory as a single-sheet Excel, optionally filtered.
+router.post('/device-report/inventory-export', async (req, res, next) => {
+  try {
+    const { ownerType, search } = req.body as { ownerType?: string; search?: string }
+
+    const creds   = credentialsFromEnv()
+    const devices = await getManagedDevices(creds)
+
+    let filtered = devices
+    if (ownerType && ownerType !== 'all') {
+      filtered = filtered.filter(d => d.managedDeviceOwnerType === ownerType)
+    }
+    if (search?.trim()) {
+      const q = search.toLowerCase()
+      filtered = filtered.filter(d =>
+        d.deviceName?.toLowerCase().includes(q) ||
+        d.userPrincipalName?.toLowerCase().includes(q) ||
+        d.serialNumber?.toLowerCase().includes(q) ||
+        d.model?.toLowerCase().includes(q)
+      )
+    }
+
+    const now = new Date()
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'Endpoint Intelligence Platform'
+    wb.created = now
+
+    const ws = wb.addWorksheet('Device Inventory')
+    ws.columns = [
+      { key: 'deviceName',      header: 'Device Name',    width: 28 },
+      { key: 'ownerEmail',      header: 'Owner (Email)',  width: 34 },
+      { key: 'ownerType',       header: 'Owner Type',     width: 14 },
+      { key: 'operatingSystem', header: 'OS',             width: 12 },
+      { key: 'osVersion',       header: 'OS Version',     width: 16 },
+      { key: 'complianceState', header: 'Compliance',     width: 14 },
+      { key: 'isEncrypted',     header: 'Encrypted',      width: 10 },
+      { key: 'manufacturer',    header: 'Manufacturer',   width: 16 },
+      { key: 'model',           header: 'Model',          width: 22 },
+      { key: 'serialNumber',    header: 'Serial Number',  width: 18 },
+      { key: 'managementAgent', header: 'Mgmt Agent',     width: 16 },
+      { key: 'enrolledDate',    header: 'Enrolled Date',  width: 16 },
+      { key: 'lastSyncDate',    header: 'Last Sync',      width: 16 },
+    ]
+
+    ws.getRow(1).eachCell(cell => {
+      cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE84C1E' } }
+    })
+    ws.getRow(1).height = 18
+    ws.autoFilter = { from: 'A1', to: 'M1' }
+
+    for (const d of filtered) {
+      ws.addRow({
+        deviceName:      d.deviceName,
+        ownerEmail:      d.userPrincipalName,
+        ownerType:       d.managedDeviceOwnerType === 'company' ? 'Company' : d.managedDeviceOwnerType === 'personal' ? 'Personal' : d.managedDeviceOwnerType,
+        operatingSystem: d.operatingSystem,
+        osVersion:       d.osVersion,
+        complianceState: d.complianceState,
+        isEncrypted:     d.isEncrypted ? 'Yes' : 'No',
+        manufacturer:    d.manufacturer,
+        model:           d.model,
+        serialNumber:    d.serialNumber,
+        managementAgent: d.managementAgent,
+        enrolledDate:    d.enrolledDateTime ? new Date(d.enrolledDateTime).toLocaleDateString('en-US') : '',
+        lastSyncDate:    d.lastSyncDateTime  ? new Date(d.lastSyncDateTime).toLocaleDateString('en-US')  : '',
+      })
+    }
+
+    const buf = await wb.xlsx.writeBuffer()
+    const dateStr = now.toISOString().slice(0, 10)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="device-inventory-${dateStr}.xlsx"`)
+    return res.send(Buffer.from(buf as ArrayBuffer))
   } catch (err) {
     next(err)
   }
