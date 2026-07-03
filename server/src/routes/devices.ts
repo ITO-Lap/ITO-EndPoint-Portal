@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { getIntuneDevices, isIntuneConfigured } from '../services/intune.js'
+import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies } from '../services/intune.js'
 import { getKandjiDevices, getKandjiDeviceApps, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
@@ -35,7 +35,18 @@ function categorizeIssue(primaryIssue: string): string | null {
   return 'Other'
 }
 
+// 5-minute in-memory cache — matches the TTL already used for the users list
+// (server/src/routes/users.ts). Without it, every single-device lookup
+// (apps/policies/detail) re-fetches the entire fleet (5000+ Intune devices)
+// from Graph just to find one record, which took ~100s in practice.
+const CACHE_TTL_MS = 5 * 60 * 1000
+let devicesCache: { devices: Device[]; mock: boolean; expiresAt: number } | null = null
+
 export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> {
+  if (devicesCache && Date.now() < devicesCache.expiresAt) {
+    return { devices: devicesCache.devices, mock: devicesCache.mock }
+  }
+
   const anyConfigured = isIntuneConfigured() || isKandjiConfigured() || isManageEngineConfigured()
   if (!anyConfigured) return { devices: [], mock: false }
 
@@ -66,6 +77,7 @@ export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: bool
     }
   }
 
+  devicesCache = { devices, mock: false, expiresAt: Date.now() + CACHE_TTL_MS }
   return { devices, mock: false }
 }
 
@@ -149,6 +161,35 @@ router.get('/:id/apps', asyncHandler(async (req, res) => {
   if (isKandjiConfigured() && device?.managementSource === 'Kandji') {
     const apps = await getKandjiDeviceApps(deviceId)
     res.json({ success: true, data: apps })
+    return
+  }
+
+  // For live Intune devices, lazy-fetch the device's detected-app inventory
+  if (isIntuneConfigured() && device?.managementSource === 'Microsoft Intune') {
+    const apps = await getIntuneDeviceApps(deviceId)
+    res.json({ success: true, data: apps })
+    return
+  }
+
+  res.json({ success: true, data: [] })
+}))
+
+// GET /api/devices/:id/policies — lazy-fetch applied compliance/configuration policies
+router.get('/:id/policies', asyncHandler(async (req, res) => {
+  const deviceId = Array.isArray(req.params['id']) ? req.params['id'][0] : req.params['id']
+  if (!deviceId) { res.json({ success: true, data: [] }); return }
+
+  const { devices } = await fetchAllDevices()
+  const device = devices.find(d => d.id === deviceId)
+
+  if (device?.appliedPolicies && device.appliedPolicies.length > 0) {
+    res.json({ success: true, data: device.appliedPolicies })
+    return
+  }
+
+  if (isIntuneConfigured() && device?.managementSource === 'Microsoft Intune') {
+    const policies = await getIntuneDevicePolicies(deviceId)
+    res.json({ success: true, data: policies })
     return
   }
 

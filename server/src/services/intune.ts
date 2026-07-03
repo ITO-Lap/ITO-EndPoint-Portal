@@ -1,4 +1,4 @@
-import type { Device } from '../types.js'
+import type { Device, AppStatus } from '../types.js'
 import type { RuntimeIntuneConfig } from '../store/integrationStore.js'
 import { getIntuneConfig } from '../store/integrationStore.js'
 
@@ -238,6 +238,86 @@ export async function diagnoseIntune(): Promise<{
 
 export function isIntuneConfigured(): boolean {
   return !!getIntuneConfig()
+}
+
+// ── Per-device detail (lazy-fetched, only when a device is opened) ────────────
+
+interface GraphDetectedApp {
+  displayName: string
+  version: string | null
+  publisher: string | null
+}
+
+// Live device-inventory scan results (registry/Add-Remove-Programs equivalent) —
+// beta-only endpoint; v1.0 doesn't expose this navigation property for this tenant.
+export async function getIntuneDeviceApps(deviceId: string, cfg?: RuntimeIntuneConfig): Promise<AppStatus[]> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const token = await getAccessToken(config)
+
+  const res = await fetch(
+    `https://graph.microsoft.com/beta/deviceManagement/managedDevices/${deviceId}/detectedApps`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    if (res.status === 404) return []
+    const body = await res.text().catch(() => '')
+    throw new Error(`Microsoft Graph ${res.status} on detectedApps: ${body.slice(0, 300)}`)
+  }
+  const data = await res.json() as { value: GraphDetectedApp[] }
+  return data.value.map(a => ({
+    name:      a.displayName,
+    version:   a.version ?? '—',
+    publisher: a.publisher ?? '',
+    status:    'Installed' as const,
+    appType:   'Detected on device',
+  }))
+}
+
+interface GraphPolicyState {
+  id: string
+  displayName: string
+  state: string
+}
+
+function formatPolicyState(state: string): string {
+  if (state === 'compliant' || state === 'remediated') return 'Compliant'
+  if (state === 'nonCompliant') return 'Non-Compliant'
+  if (state === 'error') return 'Error'
+  if (state === 'conflict') return 'Conflict'
+  if (state === 'notApplicable') return 'Not Applicable'
+  if (state === 'unknown') return 'Unknown'
+  return state
+}
+
+// Real per-policy compliance + configuration-profile evaluation state for one device.
+// Encodes state as a "— Compliant"/"— Non-Compliant" suffix on each name so the
+// existing appliedPolicies: string[] shape (shared with Kandji's plain blueprint
+// names) doesn't need a breaking type change — DeviceDetailPanel parses the suffix.
+export async function getIntuneDevicePolicies(deviceId: string, cfg?: RuntimeIntuneConfig): Promise<string[]> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const token = await getAccessToken(config)
+  const headers = { Authorization: `Bearer ${token}` }
+
+  const [complianceRes, configRes] = await Promise.allSettled([
+    fetch(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${deviceId}/deviceCompliancePolicyStates`, { headers }),
+    fetch(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${deviceId}/deviceConfigurationStates`, { headers }),
+  ])
+
+  const policies: string[] = []
+  const seenIds = new Set<string>()
+
+  for (const settled of [complianceRes, configRes]) {
+    if (settled.status !== 'fulfilled' || !settled.value.ok) continue
+    const data = await settled.value.json() as { value: GraphPolicyState[] }
+    for (const p of data.value) {
+      if (seenIds.has(p.id)) continue   // Graph returns duplicate entries for this tenant
+      seenIds.add(p.id)
+      policies.push(`${p.displayName} — ${formatPolicyState(p.state)}`)
+    }
+  }
+  return policies
 }
 
 // ── User summaries derived from managed devices ────────────────────────────────

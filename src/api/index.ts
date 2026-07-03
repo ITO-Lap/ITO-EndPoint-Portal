@@ -518,6 +518,9 @@ export const api = {
   fetchDeviceApps: (id: string) =>
     get<AppStatus[]>(`/api/devices/${id}/apps`),
 
+  fetchDevicePolicies: (id: string) =>
+    get<string[]>(`/api/devices/${id}/policies`),
+
   fetchKandjiApps: () =>
     get<LibraryApp[]>('/api/integrations/kandji/apps'),
 

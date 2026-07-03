@@ -312,7 +312,17 @@ function SecurityTab({ d }: { d: ApiDevice }) {
         </div>
 
         {!laps ? (
-          <p className="px-4 py-3 text-sm text-slate-400 italic">No LAPS data available</p>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <AlertCircle className="h-5 w-5 text-slate-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-slate-600">LAPS status not available</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {d.managementSource === 'Microsoft Intune'
+                  ? 'Reading Windows LAPS from Microsoft Graph requires delegated (signed-in-user) permissions this backend doesn\'t use yet — it only makes app-only requests.'
+                  : 'No LAPS data source is connected for this device.'}
+              </p>
+            </div>
+          </div>
         ) : !laps.enabled ? (
           <div className="flex items-center gap-3 px-4 py-3">
             <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
@@ -590,8 +600,37 @@ function AppsTab({ d }: { d: ApiDevice }) {
 
 // ── Compliance Tab ────────────────────────────────────────────────────────
 
+// Real per-policy state is encoded as a "— <State>" suffix (see server's
+// getIntuneDevicePolicies) so this shape stays a plain string[] shared with
+// Kandji's blueprint names, which carry no per-policy state at all.
+type PolicyVerdict = 'pass' | 'fail' | 'neutral'
+
+function parsePolicyState(policy: string): { name: string; verdict: PolicyVerdict } {
+  const match = policy.match(/^(.*) — (Compliant|Non-Compliant|Error|Conflict|Not Applicable|Unknown)$/)
+  if (!match) return { name: policy, verdict: 'neutral' }
+  const [, name, state] = match
+  const verdict: PolicyVerdict =
+    state === 'Compliant' ? 'pass' :
+    state === 'Non-Compliant' || state === 'Error' || state === 'Conflict' ? 'fail' : 'neutral'
+  return { name, verdict }
+}
+
 function ComplianceTab({ d }: { d: ApiDevice }) {
   const hasIssue = d.primaryIssue && d.primaryIssue !== 'None'
+  const [fetchedPolicies, setFetchedPolicies] = useState<string[] | null>(null)
+  const [policiesLoading, setPoliciesLoading] = useState(false)
+
+  useEffect(() => {
+    if (d.appliedPolicies && d.appliedPolicies.length > 0) return
+    setPoliciesLoading(true)
+    api.fetchDevicePolicies(d.id)
+      .then(policies => setFetchedPolicies(policies.length > 0 ? policies : null))
+      .catch(() => setFetchedPolicies(null))
+      .finally(() => setPoliciesLoading(false))
+  }, [d.id])
+
+  const policies = fetchedPolicies ?? d.appliedPolicies ?? []
+
   return (
     <div className="space-y-3">
       <SectionCard title="Compliance Status" icon={<ShieldCheck className="h-4 w-4" />}>
@@ -620,24 +659,40 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
         )}
       </SectionCard>
 
-      {d.appliedPolicies && d.appliedPolicies.length > 0 && (
-        <SectionCard title="Applied Policies" icon={<Fingerprint className="h-4 w-4" />}>
-          <div className="col-span-2 space-y-1.5">
-            {d.appliedPolicies.map((policy, i) => {
-              const isFailed = d.policyFailed && d.policyFailed !== 'None' &&
-                d.policyFailed.split(';').some(p => policy.startsWith(p.trim().split('–')[0]?.trim() ?? ''))
-              return (
-                <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm border ${isFailed ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                  <span className={`font-medium ${isFailed ? 'text-red-700' : 'text-emerald-700'}`}>{policy}</span>
-                  {isFailed
-                    ? <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                    : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
-                </div>
-              )
-            })}
-          </div>
-        </SectionCard>
-      )}
+      <SectionCard title="Applied Policies" icon={<Fingerprint className="h-4 w-4" />}>
+        <div className="col-span-2 space-y-1.5">
+          {policiesLoading ? (
+            <div className="flex items-center gap-2 py-4 text-slate-400">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading applied policies…</span>
+            </div>
+          ) : policies.length === 0 ? (
+            <p className="text-sm text-slate-400 italic py-2">No policy assignment data available for this device.</p>
+          ) : policies.map((policy, i) => {
+            const parsed = parsePolicyState(policy)
+            // Sources with no real per-policy state (e.g. Kandji blueprint names)
+            // fall back to the coarse device-level policyFailed fuzzy-match.
+            const verdict: PolicyVerdict = parsed.verdict !== 'neutral' ? parsed.verdict :
+              (d.policyFailed && d.policyFailed !== 'None' &&
+                d.policyFailed.split(';').some(p => parsed.name.startsWith(p.trim().split('–')[0]?.trim() ?? '')))
+                ? 'fail' : 'neutral'
+            const cls = verdict === 'fail' ? 'bg-red-50 border-red-200'
+              : verdict === 'pass' ? 'bg-emerald-50 border-emerald-200'
+              : 'bg-slate-50 border-slate-200'
+            const textCls = verdict === 'fail' ? 'text-red-700' : verdict === 'pass' ? 'text-emerald-700' : 'text-slate-600'
+            return (
+              <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm border ${cls}`}>
+                <span className={`font-medium ${textCls}`}>{parsed.name}</span>
+                {verdict === 'fail'
+                  ? <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                  : verdict === 'pass'
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                  : <AlertCircle className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
+              </div>
+            )
+          })}
+        </div>
+      </SectionCard>
     </div>
   )
 }
