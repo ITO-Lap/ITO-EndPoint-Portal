@@ -8,6 +8,7 @@ import { PlaceholderPage } from './components/layout/PlaceholderPage'
 import { DeviceLookupPage } from './components/devices/DeviceLookupPage'
 import { UsersPage } from './pages/UsersPage'
 import { UserIntelligencePage } from './pages/UserIntelligencePage'
+import { UserSearchLanding } from './components/user-intelligence/UserSearchLanding'
 import { ProfilePage } from './pages/ProfilePage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { DocsPage } from './pages/DocsPage'
@@ -372,12 +373,14 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
                 ) : activePage === 'User Intelligence' && selectedIntelUser ? (
                   <UserIntelligencePage
                     user={selectedIntelUser}
-                    onBack={() => { setSelectedIntelUser(null); setActivePage('Users') }}
+                    onBack={() => setSelectedIntelUser(null)}
                     onViewDevice={async (deviceName) => {
                       await handleDeviceSelect(deviceName)
                       setActivePage('Dashboard')
                     }}
                   />
+                ) : activePage === 'User Intelligence' ? (
+                  <UserSearchLanding onSelect={setSelectedIntelUser} />
                 ) : activePage === 'Profile' ? (
                   <ProfilePage />
                 ) : activePage === 'Settings' ? (
