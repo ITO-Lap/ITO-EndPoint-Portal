@@ -26,7 +26,6 @@ import {
   ClipboardList,
   Package,
   Activity,
-  IdCard,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -60,7 +59,6 @@ export const navItems: NavItem[] = [
 
   // ── USERS & IDENTITY ──────────────────────────────────────────────────────────
   { id: 'users',                title: 'Users',               icon: Users,         group: 'Users & Identity' },
-  { id: 'user_intelligence',    title: 'User Intelligence',   icon: IdCard,        group: 'Users & Identity' },
 
   // ── AUTOMATION ────────────────────────────────────────────────────────────────
   { id: 'automation',           title: 'Automation',          icon: Zap,           group: 'Automation' },

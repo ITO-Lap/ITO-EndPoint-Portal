@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown,
-  UserPlus, Mail, CheckCircle2,
+  UserPlus, Mail,
   Lock, Unlock, Laptop2, Clock, Activity,
   Shield, ShieldAlert, RefreshCw, ChevronLeft, ChevronRight,
   Filter, Zap, Edit2, RotateCcw, LogOut,
@@ -65,7 +65,6 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
   const { notify } = useToast()
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', department: '', title: '', role: 'End User' as UserToolRole })
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -74,15 +73,15 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
-  useEffect(() => { if (open) { ref.current?.focus(); setSent(false); setForm({ firstName: '', lastName: '', email: '', department: '', title: '', role: 'End User' }) } }, [open])
+  useEffect(() => { if (open) { ref.current?.focus(); setForm({ firstName: '', lastName: '', email: '', department: '', title: '', role: 'End User' }) } }, [open])
 
   const handleSend = async () => {
     if (!form.email || !form.firstName) return
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
+    await new Promise(r => setTimeout(r, 800))
     setLoading(false)
-    setSent(true)
-    notify('success', 'Invitation Sent', `Invite sent to ${form.email}`)
+    notify('info', 'Not Yet Connected', 'User invitations require a directory-provisioning API that isn\'t wired up yet — contact your Identity Admin to invite this user directly in Entra ID.')
+    onClose()
   }
 
   if (!open) return null
@@ -101,15 +100,6 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
         </div>
 
         <div className="p-6">
-          {sent ? (
-            <div className="flex flex-col items-center py-6 text-center">
-              <div className="rounded-full bg-emerald-100 p-4 mb-3"><CheckCircle2 className="h-7 w-7 text-emerald-600" /></div>
-              <p className="text-sm font-bold text-slate-800">Invitation Sent!</p>
-              <p className="text-xs text-slate-500 mt-1">An invite link has been sent to <span className="font-medium text-slate-700">{form.email}</span></p>
-              <p className="text-[0.65rem] text-slate-400 mt-3">The link expires in 48 hours.</p>
-              <button type="button" onClick={onClose} className="mt-5 rounded-xl bg-orange-600 px-5 py-2 text-xs font-semibold text-white hover:bg-orange-700 transition">Done</button>
-            </div>
-          ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -162,7 +152,6 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
                 </button>
               </div>
             </div>
-          )}
         </div>
       </div>
     </div>
@@ -193,17 +182,17 @@ function EditUserModal({ user, open, onClose }: { user: AppUser | null; open: bo
 
   const handleSave = async () => {
     setSaving(true)
-    await new Promise(r => setTimeout(r, 1200))
+    await new Promise(r => setTimeout(r, 600))
     setSaving(false)
-    notify('success', 'User Updated', `${user.firstName} ${user.lastName} has been updated`)
+    notify('info', 'Not Yet Connected', 'Role and status changes require a directory-write API that isn\'t wired up yet — make this change directly in Entra ID for now.')
     onClose()
   }
 
   const handleMfaReset = async () => {
     setMfaResetting(true)
-    await new Promise(r => setTimeout(r, 1000))
+    await new Promise(r => setTimeout(r, 600))
     setMfaResetting(false)
-    notify('success', 'MFA Reset', `MFA enrollment reset for ${user.firstName} ${user.lastName}`)
+    notify('info', 'Not Yet Connected', `MFA reset requires a live directory action that isn't wired up yet — reset ${user.firstName}'s MFA directly in Entra ID for now.`)
   }
 
   return (
@@ -272,7 +261,7 @@ function EditUserModal({ user, open, onClose }: { user: AppUser | null; open: bo
                 <p className="text-xs font-semibold text-slate-700">Active Sessions</p>
                 <p className="text-[0.65rem] text-slate-500 mt-0.5">Force sign-out all devices</p>
               </div>
-              <button type="button" onClick={() => notify('success', 'Sessions Revoked', `All sessions for ${user.firstName} have been revoked`)}
+              <button type="button" onClick={() => notify('info', 'Not Yet Connected', `Revoking sessions requires a live directory action that isn't wired up yet — revoke ${user.firstName}'s sessions directly in Entra ID for now.`)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition">
                 <LogOut className="h-3 w-3" />Revoke All
               </button>
