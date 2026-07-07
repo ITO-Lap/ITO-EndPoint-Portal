@@ -11,7 +11,6 @@ import { UserIntelligencePage } from './pages/UserIntelligencePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { DocsPage } from './pages/DocsPage'
-import { SignInPage } from './components/auth/SignInPage'
 import { SourceModal } from './components/devices/SourceModal'
 import { ReportsPage } from './components/reports/ReportsPage'
 import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
@@ -40,7 +39,7 @@ import { ReportBuilderPage } from './pages/ReportBuilderPage'
 import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { MultiTenantPage } from './pages/MultiTenantPage'
 import { AuditLogPage } from './pages/AuditLogPage'
-import { api, apiDeviceToDeviceData, verifySessionToken } from './api'
+import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
 import { useNotifications } from './hooks/useNotifications'
@@ -129,7 +128,7 @@ const PAGE_META: Record<string, { description: string }> = {
   'Settings':           { description: 'Configure integrations, notification preferences, and account settings.' },
 }
 
-function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignOut: () => void; viewerRole: string; displayName?: string; userEmail?: string }) {
+function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string; displayName?: string; userEmail?: string }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [activePage, setActivePage] = useLocalStorage('activePage', 'Dashboard')
   const [searchInput, setSearchInput] = useState('')
@@ -271,7 +270,6 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
               onNotificationToggle={handleNotificationToggle}
               onMarkAllNotificationsRead={handleMarkAllRead}
               onProfileNav={setActivePage}
-              onSignOut={onSignOut}
               viewerRole={viewerRole}
               displayName={displayName}
               userEmail={userEmail}
@@ -446,87 +444,11 @@ function AppContent({ onSignOut, viewerRole, displayName, userEmail }: { onSignO
   )
 }
 
-function AuthGate() {
-  const [isAuthenticated, setIsAuthenticated] = useLocalStorage('ito_auth', false)
-  const [viewerRole, setViewerRole]           = useLocalStorage('ito_role', 'Global Admin')
-  const [displayName, setDisplayName]         = useLocalStorage('ito_display_name', '')
-  const [userEmail, setUserEmail]             = useLocalStorage('ito_user_email', '')
-  const [justSignedOut, setJustSignedOut]     = useState(false)
-  const [authError, setAuthError]             = useState('')
-  const [tokenPending, setTokenPending]       = useState(false)
-
-  // Handle OAuth callback: ?session_token=JWT or ?auth_error=message
-  useEffect(() => {
-    const params   = new URLSearchParams(window.location.search)
-    const token    = params.get('session_token')
-    const errParam = params.get('auth_error')
-
-    if (errParam) {
-      window.history.replaceState({}, '', window.location.pathname)
-      setAuthError(decodeURIComponent(errParam))
-      return
-    }
-
-    if (token) {
-      window.history.replaceState({}, '', window.location.pathname)
-      setTokenPending(true)
-      verifySessionToken(token)
-        .then(user => {
-          setViewerRole(user.role)
-          setDisplayName(user.displayName)
-          setUserEmail(user.email)
-          setIsAuthenticated(true)
-          setJustSignedOut(false)
-        })
-        .catch(err => {
-          setAuthError(err instanceof Error ? err.message : 'Session verification failed. Please try again.')
-        })
-        .finally(() => setTokenPending(false))
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleSignIn = useCallback((role: string, name: string, email: string) => {
-    setIsAuthenticated(true)
-    setViewerRole(role)
-    setDisplayName(name)
-    setUserEmail(email)
-    setJustSignedOut(false)
-    setAuthError('')
-  }, [setIsAuthenticated, setViewerRole, setDisplayName, setUserEmail])
-
-  const handleSignOut = useCallback(() => {
-    setIsAuthenticated(false)
-    setDisplayName('')
-    setUserEmail('')
-    setJustSignedOut(true)
-  }, [setIsAuthenticated, setDisplayName, setUserEmail])
-
-  if (tokenPending) {
-    return (
-      <div className="flex min-h-screen items-center justify-center glass-bg">
-        <div className="flex flex-col items-center gap-4">
-          <svg className="h-8 w-8 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <p className="text-sm font-medium text-slate-500">Verifying your session…</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return <SignInPage onSignIn={handleSignIn} justSignedOut={justSignedOut} authError={authError} />
-  }
-
-  return <AppContent onSignOut={handleSignOut} viewerRole={viewerRole} displayName={displayName} userEmail={userEmail} />
-}
-
 function App() {
   return (
     <ToastProvider>
       <NavVisibilityProvider>
-        <AuthGate />
+        <AppContent viewerRole="Global Admin" displayName="Admin" userEmail="admin@zinnia.com" />
       </NavVisibilityProvider>
     </ToastProvider>
   )

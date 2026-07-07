@@ -1,8 +1,7 @@
-import { Bell, ChevronDown, Menu, Search, User, Settings, LogOut } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, User, Settings } from 'lucide-react'
 import { ZinniaIcon } from '../ui/ZinniaLogo'
 import { useRef, useState, useEffect } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import { useToast } from '../ui/ToastProvider'
 import type { NotificationItem } from '../../types'
 
 interface HeaderProps {
@@ -16,7 +15,6 @@ interface HeaderProps {
   onMarkAllNotificationsRead?: () => void
   searchLoading?: boolean
   onProfileNav?: (page: string) => void
-  onSignOut?: () => void
   viewerRole?: string
   displayName?: string
   userEmail?: string
@@ -26,10 +24,9 @@ export function Header({
   onMenuToggle, onSearch, searchValue = '', onSearchChange,
   notificationOpen = false, notifications = [], onNotificationToggle,
   onMarkAllNotificationsRead, searchLoading = false,
-  onProfileNav, onSignOut, viewerRole = 'Global Admin',
+  onProfileNav, viewerRole = 'Global Admin',
   displayName, userEmail,
 }: HeaderProps) {
-  const { notify }                        = useToast()
   const [searchInput, setSearchInput]     = useState(searchValue)
   const [profileOpen, setProfileOpen]     = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
@@ -217,14 +214,13 @@ export function Header({
                   {[
                     { label: 'Profile',   icon: User,     action: 'Profile'  },
                     { label: 'Settings',  icon: Settings, action: 'Settings' },
-                    { label: 'Sign Out',  icon: LogOut,   action: 'Sign Out', danger: true },
-                  ].map(({ label, icon: Icon, action, danger }) => (
+                  ].map(({ label, icon: Icon, action }) => (
                     <button
                       key={label}
                       type="button"
-                      onClick={() => { setProfileOpen(false); action === 'Profile' ? onProfileNav?.('Profile') : action === 'Settings' ? onProfileNav?.('Settings') : action === 'Sign Out' ? onSignOut?.() : notify('info', label, `${label} — coming soon`) }}
+                      onClick={() => { setProfileOpen(false); action === 'Profile' ? onProfileNav?.('Profile') : onProfileNav?.('Settings') }}
                       className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl water-glow"
-                      style={{ color: danger ? '#EF4444' : '#475569' }}
+                      style={{ color: '#475569' }}
                     >
                       <Icon className="h-3.5 w-3.5 flex-shrink-0" />
                       {label}
