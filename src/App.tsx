@@ -140,6 +140,12 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   const [selectedIntelUser, setSelectedIntelUser] = useState<AppUser | null>(null)
   const { notify } = useToast()
 
+  // Reset scroll position whenever the active page changes — the app has no
+  // router/URL-per-page, so the browser never does this automatically.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [activePage])
+
   const { stats, offline, countdown, lastUpdated, refresh: refreshStats } = useStats()
   const { items: activityItems } = useActivity()
   const { notifications, markAllRead } = useNotifications()
