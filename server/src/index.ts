@@ -13,6 +13,7 @@ import reportsRouter from './routes/reports.js'
 import jiraRouter from './routes/jira.js'
 import scriptsRouter from './routes/scripts.js'
 import usersRouter from './routes/users.js'
+import profileRouter from './routes/profile.js'
 import automationsRouter from './routes/automations.js'
 import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
@@ -69,6 +70,7 @@ app.use('/api/reports',      apiLimiter, reportsRouter)
 app.use('/api/jira',         apiLimiter, jiraRouter)
 app.use('/api/scripts',      apiLimiter, scriptsRouter)
 app.use('/api/users',        apiLimiter, usersRouter)
+app.use('/api/profile',      apiLimiter, profileRouter)
 app.use('/api/automations',  apiLimiter, automationsRouter)
 app.use('/api/slack',        apiLimiter, slackRouter)
 app.use('/api/entra',             apiLimiter, entraRouter)

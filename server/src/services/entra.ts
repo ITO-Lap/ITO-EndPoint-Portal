@@ -201,6 +201,44 @@ export interface EntraUserDetails {
   licenses: Array<{ id: string; skuPartNumber: string; servicePlans: Array<{ servicePlanName: string; provisioningStatus: string }> }>
 }
 
+export interface EntraUserProfile {
+  id:                string
+  displayName:       string | null
+  givenName:         string | null
+  surname:           string | null
+  mail:              string | null
+  userPrincipalName: string
+  mobilePhone:       string | null
+  businessPhones:    string[]
+  department:        string | null
+  jobTitle:          string | null
+  officeLocation:    string | null
+  accountEnabled:    boolean
+  createdDateTime:   string | null
+  signInActivity:    { lastSignInDateTime: string | null } | null
+}
+
+// Thrown for callers to classify (401/403 vs 404 vs other) rather than
+// silently swallowing like the tenant-wide list fetchers above — a missing
+// profile or permission error must surface as a real error message, not [].
+export class GraphRequestError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
+    this.name = 'GraphRequestError'
+  }
+}
+
+async function graphGetOrThrow<T>(token: string, path: string): Promise<T> {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new GraphRequestError(res.status, `Graph ${path}: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`)
+  }
+  return res.json() as Promise<T>
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export async function getEntraData(cfg?: RuntimeEntraConfig): Promise<EntraData> {
@@ -248,6 +286,36 @@ export async function getEntraUserDetails(userId: string): Promise<EntraUserDeta
     apps:     appsRes.status     === 'fulfilled' ? (appsRes.value.value     ?? []) : [],
     licenses: licensesRes.status === 'fulfilled' ? licensesRes.value : [],
   }
+}
+
+// Fetches core profile fields for one user by UPN or Entra object ID.
+// Unlike the tenant-wide list fetchers above, errors are NOT swallowed —
+// the profile page needs to distinguish "not found" from "no permission"
+// from "Entra not configured" and show an honest message for each.
+export async function getEntraUserProfile(upnOrId: string): Promise<EntraUserProfile> {
+  const config = getEntraConfig()
+  if (!config) throw new Error('Entra ID credentials not configured')
+
+  const token = await getAccessToken(config)
+  const select = 'id,displayName,givenName,surname,mail,userPrincipalName,mobilePhone,businessPhones,department,jobTitle,officeLocation,accountEnabled,createdDateTime,signInActivity'
+
+  // A plain object-ID "get by key" lookup works for signInActivity, but Graph
+  // rejects "get by key" with a UPN when signInActivity is in $select ("Get By
+  // Key only supports UserId and the key has to be a valid Guid"). A $filter
+  // query works for either UPN or object ID and isn't a "get by key" call.
+  const isObjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(upnOrId)
+  if (isObjectId) {
+    return graphGetOrThrow<EntraUserProfile>(token, `/users/${upnOrId}?$select=${select}`)
+  }
+
+  const filterValue = upnOrId.replace(/'/g, "''")
+  const result = await graphGetOrThrow<{ value: EntraUserProfile[] }>(
+    token,
+    `/users?$filter=userPrincipalName eq '${encodeURIComponent(filterValue)}'&$select=${select}`,
+  )
+  const user = result.value[0]
+  if (!user) throw new GraphRequestError(404, `No Entra ID user found for ${upnOrId}`)
+  return user
 }
 
 export function isEntraConfigured(): boolean {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   User,
   Mail,
@@ -15,22 +15,30 @@ import {
   CheckCircle2,
   AlertTriangle,
   Edit3,
-  Save,
-  X,
   Laptop2,
   ChevronRight,
   Lock,
   LogOut,
   BadgeCheck,
   Layers,
-  Activity,
+  RefreshCw,
+  ServerCrash,
 } from 'lucide-react'
+import { api } from '../api'
+import type { ProfileData, ProfileResult } from '../api'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { DashboardCard } from '../components/ui/DashboardCard'
 import { useToast } from '../components/ui/ToastProvider'
+import { getElevatedPages } from '../lib/permissions'
 import { QuietHoursModal } from '../components/settings/QuietHoursModal'
 import type { QuietHoursConfig } from '../components/settings/QuietHoursModal'
+
+// This app has no per-user login (deliberately removed) — every page always
+// runs as this one fixed admin identity. The Profile page shows that
+// identity's REAL Microsoft Entra ID + Intune data (server/src/routes/profile.ts),
+// not a per-session logged-in user.
+const VIEWER_ROLE = 'Global Admin' as const
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,20 +47,6 @@ interface ToggleProps {
   onChange: (v: boolean) => void
   label: string
   description?: string
-}
-
-interface SessionItem {
-  device: string
-  location: string
-  browser: string
-  lastActive: string
-  icon: React.ElementType
-  current?: boolean
-}
-
-interface Permission {
-  label: string
-  granted: boolean
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -102,26 +96,59 @@ function FieldRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** Renders a real value, or an honest "N/A" when Entra/Intune has none. */
+function val(v: string | null | undefined): string {
+  return v && v.trim() ? v : 'N/A'
+}
+
+function deviceIcon(platform: string) {
+  if (platform === 'macOS') return Laptop2
+  if (platform === 'Android' || platform === 'iOS') return Smartphone
+  return Monitor
+}
+
+function initials(name: string | null): string {
+  if (!name) return '?'
+  const parts = name.split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return 'N/A'
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  } catch { return 'N/A' }
+}
+
+const ERROR_COPY: Record<string, { title: string; body: string }> = {
+  not_configured: {
+    title: 'Microsoft Entra ID not connected',
+    body: 'This environment has no Entra ID credentials configured. Connect Entra ID in Settings → Integrations to populate this page with real data.',
+  },
+  user_not_found: {
+    title: 'User not found in Entra ID',
+    body: 'The configured profile identity could not be found in your Entra ID tenant.',
+  },
+  insufficient_permissions: {
+    title: 'Missing Microsoft Graph permission',
+    body: 'Microsoft Graph denied this request. The app registration may be missing a required permission, or an admin needs to grant consent.',
+  },
+  graph_error: {
+    title: 'Could not load profile data',
+    body: 'Microsoft Graph returned an unexpected error.',
+  },
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function ProfilePage() {
   const { notify } = useToast()
-  const [editMode, setEditMode] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [changingPassword, setChangingPassword] = useState(false)
 
-  // Editable profile fields
-  const [profile, setProfile] = useState({
-    firstName: 'Avinash',
-    lastName: 'Verma',
-    email: 'avinash.verma@zinnia.com',
-    phone: '+1 (415) 555-0182',
-    department: 'IT Operations',
-    location: 'San Francisco, CA',
-    title: 'Global Administrator',
-    timezone: 'America/Los_Angeles (UTC−8)',
-  })
-  const [draft, setDraft] = useState({ ...profile })
+  const [data, setData]           = useState<ProfileData | null>(null)
+  const [errorResult, setErrorResult] = useState<Extract<ProfileResult, { success: false }> | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Security
   const [twoFaEnabled, setTwoFaEnabled] = useState(true)
@@ -150,65 +177,72 @@ export function ProfilePage() {
   const toggleNotif = (key: keyof typeof notifs) =>
     setNotifs((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  const sessions: SessionItem[] = [
-    {
-      device: 'MacBook Pro 16"',
-      location: 'San Francisco, CA',
-      browser: 'Chrome 124',
-      lastActive: 'Active now',
-      icon: Laptop2,
-      current: true,
-    },
-    {
-      device: 'iPhone 15 Pro',
-      location: 'San Francisco, CA',
-      browser: 'Safari Mobile',
-      lastActive: '2 hours ago',
-      icon: Smartphone,
-    },
-    {
-      device: 'Windows Desktop',
-      location: 'Los Angeles, CA',
-      browser: 'Edge 123',
-      lastActive: 'Yesterday, 4:22 PM',
-      icon: Monitor,
-    },
-  ]
+  const load = useCallback((isRefresh: boolean) => {
+    if (isRefresh) { setRefreshing(true) } else { setLoading(true) }
+    api.fetchProfile()
+      .then(result => {
+        if (result.success) { setData(result.data); setErrorResult(null) }
+        else { setErrorResult(result); setData(null) }
+      })
+      .finally(() => { setLoading(false); setRefreshing(false) })
+  }, [])
 
-  const permissions: Permission[] = [
-    { label: 'View all devices', granted: true },
-    { label: 'Manage policies', granted: true },
-    { label: 'Run automations', granted: true },
-    { label: 'Manage users', granted: true },
-    { label: 'Export reports', granted: true },
-    { label: 'Modify integrations', granted: true },
-  ]
+  useEffect(() => { load(false) }, [load])
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise((r) => setTimeout(r, 900))
-    setProfile({ ...draft })
-    setSaving(false)
-    setEditMode(false)
-    notify('success', 'Profile Updated', 'Your profile information has been saved')
+  const handleRefresh = () => {
+    load(true)
+    notify('info', 'Refreshing', 'Reloading your real Entra ID + Intune profile data…')
   }
 
-  const handleCancel = () => {
-    setDraft({ ...profile })
-    setEditMode(false)
-  }
+  const handleEditClick = () =>
+    notify('info', 'Read-only', 'Profile data is synced from Microsoft Entra ID and can’t be edited here — update it in Entra ID directly.')
+
+  const handleRevokeClick = () =>
+    notify('info', 'Not available', 'Per-session revocation is not supported via the Microsoft Graph app-only permissions this integration uses.')
 
   const handlePasswordChange = async () => {
-    setChangingPassword(true)
-    await new Promise((r) => setTimeout(r, 800))
-    setChangingPassword(false)
-    notify('info', 'Email Sent', 'A password reset link has been sent to your email')
+    notify('info', 'Not available', 'Password reset requires Entra ID delegated sign-in, which this app does not use.')
   }
 
   const handle2FAToggle = (v: boolean) => {
     setTwoFaEnabled(v)
     notify('success', v ? '2FA Enabled' : '2FA Disabled', v ? 'Two-factor authentication is now active' : 'Two-factor authentication has been turned off')
   }
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-2">
+        <RefreshCw className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading your Entra ID + Intune profile…</span>
+      </div>
+    )
+  }
+
+  // ── Error state ────────────────────────────────────────────────────────────
+  if (errorResult) {
+    const copy = ERROR_COPY[errorResult.code] ?? ERROR_COPY.graph_error
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3 text-center max-w-lg mx-auto">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-red-50 border border-red-200">
+          <ServerCrash className="h-6 w-6 text-red-500" />
+        </div>
+        <p className="text-sm font-bold text-slate-800">{copy.title}</p>
+        <p className="text-xs text-slate-500 leading-relaxed">{copy.body}</p>
+        <p className="text-[0.65rem] text-slate-400 font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-1">{errorResult.error}</p>
+        <button type="button" onClick={() => load(false)}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-500">
+          <RefreshCw className="h-3 w-3" />Try again
+        </button>
+      </div>
+    )
+  }
+
+  if (!data) return null
+
+  const elevatedPages = getElevatedPages(VIEWER_ROLE)
+  const securityGroups = data.groups.filter(g => g.securityEnabled)
+  const primaryRole = data.roles[0]?.displayName ?? VIEWER_ROLE
 
   return (
     <div className="space-y-5 w-full">
@@ -224,104 +258,90 @@ export function ProfilePage() {
           {/* Avatar */}
           <div className="relative flex-shrink-0">
             <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-900/40">
-              <span className="text-2xl font-bold text-white select-none">AV</span>
+              <span className="text-2xl font-bold text-white select-none">{initials(data.displayName)}</span>
             </div>
-            <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-[#141408]">
-              <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={2.5} />
-            </span>
+            {data.accountEnabled && (
+              <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-[#141408]">
+                <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={2.5} />
+              </span>
+            )}
           </div>
 
           {/* Name + meta */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h2 className="text-xl font-bold text-white leading-tight">
-                {profile.firstName} {profile.lastName}
+                {val(data.displayName)}
               </h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 border border-orange-400/30 px-2 py-0.5 text-[0.62rem] font-semibold text-orange-300">
-                <BadgeCheck className="h-2.5 w-2.5" />
-                Verified
-              </span>
+              {data.accountEnabled && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 border border-orange-400/30 px-2 py-0.5 text-[0.62rem] font-semibold text-orange-300">
+                  <BadgeCheck className="h-2.5 w-2.5" />
+                  Verified
+                </span>
+              )}
             </div>
-            <p className="text-sm font-medium text-orange-300">{profile.title}</p>
+            <p className="text-sm font-medium text-orange-300">{val(data.jobTitle)}</p>
             <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem] text-slate-400">
               <span className="flex items-center gap-1">
                 <Building2 className="h-3 w-3 text-slate-500" />
-                {profile.department}
+                {val(data.department)}
               </span>
               <span className="flex items-center gap-1">
                 <Mail className="h-3 w-3 text-slate-500" />
-                {profile.email}
+                {val(data.mail ?? data.userPrincipalName)}
               </span>
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3 text-slate-500" />
-                {profile.location}
+                {val(data.officeLocation)}
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3 text-slate-500" />
-                Member since Jan 2024
+                Member since {formatDate(data.createdDateTime)}
               </span>
             </div>
           </div>
 
           {/* Stats */}
           <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:flex-col xl:flex-row">
-            <StatPill label="Devices Managed" value="12,842" sub="↑ 5.6% this week" />
-            <StatPill label="Issues Resolved" value="1,891" sub="last 30 days" />
-            <StatPill label="Uptime" value="99.7%" sub="all integrations" />
+            <StatPill label="Devices Managed" value={data.tenantDeviceTotal.toLocaleString()} sub="all sources" />
+            <StatPill label="Own Devices" value={String(data.ownDevices.length)} sub="Intune-enrolled" />
           </div>
         </div>
 
         {/* Tab-style footer strip */}
         <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-white/5 px-6 py-2.5">
           <div className="flex gap-1">
-            {[
-              { icon: Layers, label: 'Global Admin' },
-              { icon: ShieldCheck, label: 'Security Cleared' },
-              { icon: Activity, label: 'Active' },
-            ].map(({ icon: Icon, label }) => (
-              <span key={label} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/10 px-2.5 py-1 text-[0.62rem] font-medium text-slate-300">
-                <Icon className="h-3 w-3 text-orange-400" />
-                {label}
-              </span>
-            ))}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/10 px-2.5 py-1 text-[0.62rem] font-medium text-slate-300">
+              <Layers className="h-3 w-3 text-orange-400" />
+              {VIEWER_ROLE}
+            </span>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.62rem] font-medium ${
+              data.accountEnabled ? 'bg-white/10 border-white/10 text-slate-300' : 'bg-red-500/10 border-red-400/30 text-red-300'
+            }`}>
+              <ShieldCheck className="h-3 w-3 text-orange-400" />
+              {data.accountEnabled ? 'Account Active' : 'Account Disabled'}
+            </span>
           </div>
-          {!editMode ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setEditMode(true)}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="Refresh from Entra ID + Intune"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              onClick={handleEditClick}
               className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-500 focus-visible:ring-2 focus-visible:ring-orange-300"
             >
               <Edit3 className="h-3 w-3" />
               Edit Profile
             </button>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20"
-              >
-                <X className="h-3 w-3" />
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
-              >
-                {saving ? (
-                  <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <Save className="h-3 w-3" />
-                )}
-                {saving ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -330,44 +350,19 @@ export function ProfilePage() {
 
         {/* Personal Information */}
         <DashboardCard title="Personal Information" icon={User}>
-          {editMode ? (
-            <div className="space-y-3">
-              {(
-                [
-                  { key: 'firstName', label: 'First Name' },
-                  { key: 'lastName', label: 'Last Name' },
-                  { key: 'email', label: 'Email' },
-                  { key: 'phone', label: 'Phone' },
-                  { key: 'department', label: 'Department' },
-                  { key: 'title', label: 'Job Title' },
-                  { key: 'location', label: 'Location' },
-                  { key: 'timezone', label: 'Timezone' },
-                ] as { key: keyof typeof draft; label: string }[]
-              ).map(({ key, label }) => (
-                <div key={key}>
-                  <label className="block text-[0.62rem] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                    {label}
-                  </label>
-                  <input
-                    value={draft[key]}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div>
-              <FieldRow label="First Name" value={profile.firstName} />
-              <FieldRow label="Last Name" value={profile.lastName} />
-              <FieldRow label="Email" value={profile.email} />
-              <FieldRow label="Phone" value={profile.phone} />
-              <FieldRow label="Department" value={profile.department} />
-              <FieldRow label="Job Title" value={profile.title} />
-              <FieldRow label="Location" value={profile.location} />
-              <FieldRow label="Timezone" value={profile.timezone} />
-            </div>
-          )}
+          <div>
+            <FieldRow label="First Name" value={val(data.givenName)} />
+            <FieldRow label="Last Name" value={val(data.surname)} />
+            <FieldRow label="Email" value={val(data.mail ?? data.userPrincipalName)} />
+            <FieldRow label="Phone" value={val(data.mobilePhone ?? data.businessPhones[0])} />
+            <FieldRow label="Department" value={val(data.department)} />
+            <FieldRow label="Job Title" value={val(data.jobTitle)} />
+            <FieldRow label="Location" value={val(data.officeLocation)} />
+            <FieldRow label="Timezone" value="N/A" />
+          </div>
+          <p className="mt-3 text-[0.6rem] text-slate-400 leading-relaxed">
+            Timezone isn't exposed by the Microsoft Graph permissions this app uses. Synced live from Microsoft Entra ID.
+          </p>
         </DashboardCard>
 
         {/* Role & Permissions */}
@@ -380,61 +375,74 @@ export function ProfilePage() {
                   <Layers className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-slate-900">Global Administrator</p>
-                  <p className="text-[0.65rem] text-slate-500 mt-0.5">Full access across all tenants and integrations</p>
+                  <p className="text-xs font-bold text-slate-900">{primaryRole}</p>
+                  <p className="text-[0.65rem] text-slate-500 mt-0.5">
+                    {data.roles.length > 0 ? `${data.roles.length} Entra ID directory role${data.roles.length !== 1 ? 's' : ''} assigned` : 'No Entra ID directory role assigned'}
+                  </p>
                 </div>
               </div>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                <Badge label="Intune Admin" variant="blue" className="text-[0.6rem] px-1.5 py-0.5" />
-                <Badge label="Kandji Admin" variant="blue" className="text-[0.6rem] px-1.5 py-0.5" />
-                <Badge label="ManageEngine" variant="blue" className="text-[0.6rem] px-1.5 py-0.5" />
-                <Badge label="AI Copilot" variant="orange" className="text-[0.6rem] px-1.5 py-0.5" />
-              </div>
+              {data.roles.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {data.roles.map(r => <Badge key={r.id} label={r.displayName} variant="blue" className="text-[0.6rem] px-1.5 py-0.5" />)}
+                </div>
+              )}
             </div>
 
-            {/* Permissions list */}
+            {/* App role assignments */}
             <div>
-              <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-slate-400 mb-2">Permissions</p>
+              <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-slate-400 mb-2">App Role Assignments</p>
+              {data.apps.length === 0 ? (
+                <p className="text-xs text-slate-400">No app role assignments found in Entra ID.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {data.apps.map(a => <Badge key={a.id} label={a.appDisplayName} variant="orange" className="text-[0.6rem] px-1.5 py-0.5" />)}
+                </div>
+              )}
+            </div>
+
+            {/* Elevated access */}
+            <div>
+              <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-slate-400 mb-2">Elevated App Access ({VIEWER_ROLE})</p>
               <div className="space-y-1.5">
-                {permissions.map((p) => (
-                  <div key={p.label} className="flex items-center gap-2">
-                    {p.granted ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
-                    )}
-                    <span className={`text-xs ${p.granted ? 'text-slate-700' : 'text-slate-400'}`}>{p.label}</span>
-                    {!p.granted && (
-                      <span className="ml-auto text-[0.6rem] text-amber-600 font-medium">Restricted</span>
-                    )}
+                {elevatedPages.map((p) => (
+                  <div key={p} className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
+                    <span className="text-xs text-slate-700">{p}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Access scope */}
+            {/* Access scope — real security groups */}
             <div className="rounded-xl bg-slate-50 border border-slate-200/80 px-3 py-2.5">
-              <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-slate-400 mb-2">Access Scope</p>
-              <div className="space-y-1">
-                {['All tenants', 'All device platforms', 'All compliance policies', 'All integrations'].map((s) => (
-                  <div key={s} className="flex items-center gap-1.5 text-[0.68rem] text-slate-700">
+              <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Security Groups ({securityGroups.length})
+              </p>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {securityGroups.length === 0 ? (
+                  <p className="text-[0.68rem] text-slate-400">No security group memberships found.</p>
+                ) : securityGroups.slice(0, 8).map((g) => (
+                  <div key={g.id} className="flex items-center gap-1.5 text-[0.68rem] text-slate-700">
                     <Globe className="h-3 w-3 text-orange-500 flex-shrink-0" />
-                    {s}
+                    <span className="truncate">{g.displayName}</span>
                   </div>
                 ))}
+                {securityGroups.length > 8 && (
+                  <p className="text-[0.62rem] text-slate-400 pl-4.5">+{securityGroups.length - 8} more</p>
+                )}
               </div>
             </div>
           </div>
         </DashboardCard>
 
-        {/* Active Sessions */}
+        {/* Devices (real Intune-enrolled devices — Graph has no per-browser "session" concept) */}
         <DashboardCard
-          title="Active Sessions"
+          title="Devices"
           icon={Monitor}
           action={
             <button
               type="button"
-              onClick={() => notify('info', 'Sessions', 'All other sessions have been revoked')}
+              onClick={handleRevokeClick}
               className="text-[0.68rem] font-medium text-red-500 hover:text-red-600 transition focus-visible:ring-1 focus-visible:ring-red-300 rounded px-1"
             >
               Revoke all others
@@ -442,46 +450,44 @@ export function ProfilePage() {
           }
         >
           <div className="space-y-2.5">
-            {sessions.map((s) => {
-              const Icon = s.icon
+            {data.ownDevices.length === 0 ? (
+              <p className="text-xs text-slate-400">No Intune-enrolled devices found for this user.</p>
+            ) : data.ownDevices.map((d) => {
+              const Icon = deviceIcon(d.platform)
+              const compliant = d.complianceState === 'Compliant'
               return (
                 <div
-                  key={s.device}
+                  key={d.deviceName}
                   className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${
-                    s.current
-                      ? 'border-orange-200 bg-orange-50'
-                      : 'border-slate-200/80 bg-slate-50'
+                    compliant ? 'border-slate-200/80 bg-slate-50' : 'border-red-200 bg-red-50'
                   }`}
                 >
-                  <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg ${s.current ? 'bg-orange-100' : 'bg-slate-200'}`}>
-                    <Icon className={`h-4 w-4 ${s.current ? 'text-orange-600' : 'text-slate-500'}`} />
+                  <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg ${compliant ? 'bg-slate-200' : 'bg-red-100'}`}>
+                    <Icon className={`h-4 w-4 ${compliant ? 'text-slate-500' : 'text-red-500'}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-xs font-semibold text-slate-900 truncate">{s.device}</p>
-                      {s.current && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[0.55rem] font-bold text-emerald-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                          Current
-                        </span>
-                      )}
+                      <p className="text-xs font-semibold text-slate-900 truncate">{d.deviceName}</p>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold ${
+                        compliant ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {d.complianceState}
+                      </span>
                     </div>
-                    <p className="text-[0.65rem] text-slate-500 mt-0.5">{s.browser} · {s.location}</p>
+                    <p className="text-[0.65rem] text-slate-500 mt-0.5">{d.platform} · {d.model || 'Unknown model'}</p>
                     <p className="text-[0.62rem] text-slate-400 mt-0.5 flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
-                      {s.lastActive}
+                      {d.lastCheckIn}
                     </p>
                   </div>
-                  {!s.current && (
-                    <button
-                      type="button"
-                      onClick={() => notify('success', 'Session Revoked', `${s.device} session has been ended`)}
-                      className="flex-shrink-0 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 focus-visible:ring-1 focus-visible:ring-red-300 transition"
-                      aria-label={`Revoke ${s.device} session`}
-                    >
-                      <LogOut className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleRevokeClick}
+                    className="flex-shrink-0 rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 focus-visible:ring-1 focus-visible:ring-red-300 transition"
+                    aria-label={`Manage ${d.deviceName}`}
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               )
             })}
@@ -532,14 +538,8 @@ export function ProfilePage() {
                   variant="outline"
                   className="h-7 px-2.5 text-[0.68rem] flex-shrink-0"
                   onClick={handlePasswordChange}
-                  disabled={changingPassword}
                 >
-                  {changingPassword ? (
-                    <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : 'Reset'}
+                  Reset
                 </Button>
               </div>
             </div>

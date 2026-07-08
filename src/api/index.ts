@@ -490,6 +490,54 @@ export interface CreateAutomationRuleInput {
 export type { UserSignIn, UserDetails, UserDeviceDetail, UserHealthScore, UserIntelligenceTab } from '../types'
 import type { UserDetails } from '../types'
 
+// ── Profile (real Entra ID + Intune data for the app's fixed admin identity) ───
+// No per-user login exists in this app, so /api/profile always returns data
+// for one fixed, server-configured UPN — see server/src/routes/profile.ts.
+
+export interface ProfileData {
+  id:                string
+  displayName:       string | null
+  givenName:         string | null
+  surname:           string | null
+  mail:              string | null
+  userPrincipalName: string
+  mobilePhone:       string | null
+  businessPhones:    string[]
+  department:        string | null
+  jobTitle:          string | null
+  officeLocation:    string | null
+  accountEnabled:    boolean
+  createdDateTime:   string | null
+  signInActivity:    { lastSignInDateTime: string | null } | null
+  roles:  Array<{ id: string; displayName: string }>
+  groups: Array<{ id: string; displayName: string; groupTypes: string[]; mailEnabled: boolean; securityEnabled: boolean }>
+  apps:   Array<{ id: string; appDisplayName: string; resourceDisplayName: string; createdDateTime: string }>
+  tenantDeviceTotal: number
+  ownDevices: Array<{
+    deviceName: string
+    platform: string
+    complianceState: string
+    lastCheckIn: string
+    model: string
+    osVersion: string
+  }>
+}
+
+export type ProfileResult =
+  | { success: true; data: ProfileData }
+  | { success: false; code: 'not_configured' | 'user_not_found' | 'insufficient_permissions' | 'graph_error'; error: string }
+
+/** Raw fetch (not the shared get() helper) — we need the {code, error} body
+ * even on non-2xx responses, which get() would otherwise discard. */
+async function fetchProfileRaw(): Promise<ProfileResult> {
+  try {
+    const res = await fetch(`${BASE_URL}/api/profile`)
+    return await res.json() as ProfileResult
+  } catch {
+    return { success: false, code: 'graph_error', error: 'Could not reach the server.' }
+  }
+}
+
 export const api = {
   fetchStats:    () => get<ApiStats>('/api/devices/stats'),
   fetchDevices:  (q?: string) =>
@@ -563,6 +611,9 @@ export const api = {
     get<import('../types').AppUser[]>('/api/users'),
   fetchUserDetails: (id: string, email?: string) =>
     get<UserDetails>(`/api/users/${encodeURIComponent(id)}${email ? `?email=${encodeURIComponent(email)}` : ''}`),
+
+  // Profile (real Entra ID + Intune data — see ProfileResult above)
+  fetchProfile: () => fetchProfileRaw(),
 
   // Jira
   jiraStatus: () =>

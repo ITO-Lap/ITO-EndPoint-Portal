@@ -48,3 +48,12 @@ export function canAccess(role: UserToolRole, page: string): boolean {
   if (!allowed) return role === 'Global Admin'
   return allowed.includes(role)
 }
+
+/** Pages restricted to this role's tier or above (i.e. NOT available to every
+ * tier below it) — used to show a role's real elevated access on the Profile
+ * page instead of a generic hardcoded permissions list. */
+export function getElevatedPages(role: UserToolRole): string[] {
+  return Object.entries(PAGE_ROLES)
+    .filter(([, roles]) => roles.includes(role) && roles.length < 3)
+    .map(([page]) => page)
+}
