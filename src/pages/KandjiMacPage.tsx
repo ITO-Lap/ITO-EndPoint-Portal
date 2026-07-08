@@ -109,11 +109,11 @@ const DEVICE_COLS = [
   { key: 'user',       label: 'User',               min:  80, default: 140 },
   { key: 'model',      label: 'Model',              min:  80, default: 140 },
   { key: 'macos',      label: 'macOS',              min:  80, default: 100 },
-  { key: 'blueprint',  label: 'Blueprint / Policy', min: 100, default: 180 },
+  { key: 'actions',    label: 'Actions',             min:  80, default:  90, noResize: true },
   { key: 'checkin',    label: 'Last Check-in',      min: 100, default: 140 },
   { key: 'filevault',  label: 'FileVault',          min:  80, default: 100 },
   { key: 'compliance', label: 'Compliance',         min:  80, default: 110 },
-  { key: 'actions',    label: 'Actions',             min:  80, default:  90, noResize: true },
+  { key: 'blueprint',  label: 'Blueprint / Policy', min: 100, default: 180 },
 ] as const
 type DColKey = typeof DEVICE_COLS[number]['key']
 
@@ -802,13 +802,20 @@ function DevicesTab({
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden"><span className="truncate block">{d.model ? extractModelBase(d.model) : '—'}</span></td>
                       <td className="px-4 py-3 text-xs font-mono text-slate-500 overflow-hidden"><span className="truncate block">{d.osVersion}</span></td>
                       <td className="px-4 py-3 overflow-hidden">
-                        {d.appliedPolicies && d.appliedPolicies.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 max-w-full">
-                            <Shield className="h-3 w-3 text-orange-400 flex-shrink-0" />
-                            <span className="truncate">{d.appliedPolicies[0]}</span>
-                            {d.appliedPolicies.length > 1 && <span className="text-[0.6rem] text-slate-400 flex-shrink-0">+{d.appliedPolicies.length - 1}</span>}
-                          </span>
-                        ) : <span className="text-xs text-slate-300">—</span>}
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }}
+                            title="View device logs"
+                            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-violet-600 hover:bg-violet-100 hover:border-violet-300 transition">
+                            <Terminal className="h-3 w-3" />
+                            <span className="text-[0.6rem] font-semibold">Logs</span>
+                          </button>
+                          <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
+                            title="Device details"
+                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
+                            <Info className="h-3 w-3" />
+                            <span className="text-[0.6rem] font-semibold">Info</span>
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden">
                         <span className="flex items-center gap-1.5">
@@ -832,20 +839,13 @@ function DevicesTab({
                         }
                       </td>
                       <td className="px-4 py-3 overflow-hidden">
-                        <div className="flex items-center gap-1.5">
-                          <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }}
-                            title="View device logs"
-                            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-violet-600 hover:bg-violet-100 hover:border-violet-300 transition">
-                            <Terminal className="h-3 w-3" />
-                            <span className="text-[0.6rem] font-semibold">Logs</span>
-                          </button>
-                          <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
-                            title="Device details"
-                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
-                            <Info className="h-3 w-3" />
-                            <span className="text-[0.6rem] font-semibold">Info</span>
-                          </button>
-                        </div>
+                        {d.appliedPolicies && d.appliedPolicies.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 max-w-full">
+                            <Shield className="h-3 w-3 text-orange-400 flex-shrink-0" />
+                            <span className="truncate">{d.appliedPolicies[0]}</span>
+                            {d.appliedPolicies.length > 1 && <span className="text-[0.6rem] text-slate-400 flex-shrink-0">+{d.appliedPolicies.length - 1}</span>}
+                          </span>
+                        ) : <span className="text-xs text-slate-300">—</span>}
                       </td>
                     </tr>
                   )
