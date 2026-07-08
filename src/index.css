@@ -60,6 +60,21 @@ body {
   color: var(--text-primary);
 }
 
+/* ── Pointer cursor on every interactive element ──────────────────
+   Tailwind v4 preflight no longer sets cursor:pointer on <button>,
+   so without this every button in the app shows the default arrow
+   cursor on hover instead of a pointing hand. */
+button:not(:disabled):not([aria-disabled="true"]),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+select,
+summary,
+label[for],
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
 /* ── Animated pearl background ────────────────────────────────── */
 .glass-bg {
   background: var(--bg-gradient);

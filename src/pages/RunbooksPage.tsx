@@ -96,8 +96,8 @@ function ExecuteModal({ runbook, onClose, onStart }: ExecuteModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-3xl glass-strong p-6 space-y-5 shadow-2xl"
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4 cursor-pointer" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-3xl glass-strong p-6 space-y-5 shadow-2xl cursor-default"
         onClick={e => e.stopPropagation()}
         style={{ boxShadow: '0 32px 96px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)' }}>
 
@@ -463,8 +463,8 @@ function ImportModal({ onClose, onImport }: { onClose: () => void; onImport: (da
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-3xl glass-strong p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4 cursor-pointer" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-3xl glass-strong p-6 space-y-4 shadow-2xl cursor-default" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-black text-slate-900">Import Runbook from JSON</h3>
           <button onClick={onClose}><X className="h-4 w-4 text-slate-400" /></button>

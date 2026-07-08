@@ -278,7 +278,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
                     return (
                       <th
                         key={col.key}
-                        className="relative px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 select-none whitespace-nowrap overflow-hidden"
+                        className={`relative px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 select-none whitespace-nowrap overflow-hidden ${isSortable ? 'cursor-pointer' : ''}`}
                         style={{ width: widths[col.key as OColKey] }}
                         onClick={isSortable ? () => handleSort(col.key as SortField) : undefined}
                       >

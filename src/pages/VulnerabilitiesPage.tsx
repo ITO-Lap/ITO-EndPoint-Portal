@@ -1196,7 +1196,7 @@ export function VulnerabilitiesPage() {
       {selectedCve && (
         <>
           <div
-            className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[1px]"
+            className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[1px] cursor-pointer"
             onClick={() => setSelectedCve(null)}
           />
           <DetailPanel cve={selectedCve} onClose={() => setSelectedCve(null)} />

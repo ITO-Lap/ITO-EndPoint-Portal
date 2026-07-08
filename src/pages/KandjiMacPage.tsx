@@ -463,7 +463,7 @@ function AddDeviceModal({ onClose, onAdd }: { onClose: () => void; onAdd: (d: Ad
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] cursor-pointer" onClick={onClose} />
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
@@ -590,7 +590,7 @@ function AddAppModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: Added
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] cursor-pointer" onClick={onClose} />
       <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2.5">
@@ -2434,7 +2434,7 @@ function KpiDrillModal({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" />
       <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}>
         {/* Header */}
@@ -2814,7 +2814,7 @@ export function KandjiMacPage({ onBack, onViewDevice: _onViewDevice }: Props) {
       {/* ── Device detail panel ── */}
       {panelDevice && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[1px]" onClick={() => setPanelDevice(null)} aria-hidden />
+          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[1px] cursor-pointer" onClick={() => setPanelDevice(null)} aria-hidden />
           <div className="fixed right-0 top-0 bottom-0 z-40 w-full max-w-[600px] shadow-2xl border-l border-slate-200 overflow-hidden flex flex-col">
             <DeviceDetailPanel device={panelDevice} onBack={() => setPanelDevice(null)} backLabel="Mac Devices" />
           </div>

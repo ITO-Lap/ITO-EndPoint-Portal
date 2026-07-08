@@ -619,7 +619,7 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px] cursor-pointer" onClick={onClose} aria-hidden />
       <div role="dialog" aria-modal aria-label="Add Integration"
         className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl shadow-slate-950/20 overflow-hidden max-h-[90vh] flex flex-col">
 

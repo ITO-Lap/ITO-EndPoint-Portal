@@ -250,7 +250,7 @@ function SecurityReportModal({ devices, open, onClose }: { devices: DeviceData[]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px] cursor-pointer" onClick={onClose} aria-hidden />
       <div
         ref={ref}
         tabIndex={-1}
@@ -774,7 +774,7 @@ function DetailDrawer({
   return (
     <>
       <div
-        className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ${device ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] cursor-pointer transition-opacity duration-200 ${device ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
         aria-hidden
       />

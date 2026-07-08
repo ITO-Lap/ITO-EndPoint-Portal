@@ -148,7 +148,7 @@ export function Sidebar({
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 z-40 xl:hidden" style={{ background: 'rgba(15,23,42,0.20)', backdropFilter: 'blur(4px)' }} onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 z-40 xl:hidden cursor-pointer" style={{ background: 'rgba(15,23,42,0.20)', backdropFilter: 'blur(4px)' }} onClick={onClose} />}
 
       <aside
         className={`flex min-h-full w-full max-w-[260px] xl:w-[260px] xl:max-w-none flex-col px-3 py-4 glass-light transition-transform duration-300 xl:translate-x-0 fixed left-0 top-0 z-50 h-full overflow-y-auto xl:static xl:z-auto xl:h-auto ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}

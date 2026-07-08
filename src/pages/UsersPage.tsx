@@ -88,7 +88,7 @@ function InviteUserModal({ open, onClose }: { open: boolean; onClose: () => void
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px] cursor-pointer" onClick={onClose} aria-hidden />
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal aria-label="Invite User"
         className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-950/20 overflow-hidden outline-none">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06]">
@@ -197,7 +197,7 @@ function EditUserModal({ user, open, onClose }: { user: AppUser | null; open: bo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px] cursor-pointer" onClick={onClose} aria-hidden />
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal aria-label="Edit User"
         className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-950/20 overflow-hidden outline-none">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-[#141408] to-[#1e1e06]">

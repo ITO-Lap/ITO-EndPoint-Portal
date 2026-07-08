@@ -112,7 +112,7 @@ function LibraryItemDrawer({ app, onClose }: { app: LibraryApp; onClose: () => v
 
   return (
     <div className="fixed inset-0 z-40 flex" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <div className="flex-1 bg-black/20 backdrop-blur-sm cursor-pointer" onClick={onClose} />
       <div className="w-full max-w-[560px] bg-white border-l border-slate-200 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">

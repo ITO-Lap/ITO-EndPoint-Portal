@@ -1373,7 +1373,7 @@ export function IntuneDevicesPage({ onBack }: Props) {
       {/* Device panel */}
       {panelDevice && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm" onClick={() => setPanelDevice(null)} />
+          <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm cursor-pointer" onClick={() => setPanelDevice(null)} />
           <div className="fixed right-0 top-0 bottom-0 z-40 w-full max-w-[600px] shadow-2xl border-l border-white/20 overflow-hidden flex flex-col">
             <DeviceDetailPanel device={panelDevice} onBack={() => setPanelDevice(null)} backLabel="Intune Devices" />
           </div>
