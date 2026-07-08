@@ -1350,20 +1350,49 @@ function ReportsTab({
                                   {count === 0 ? (
                                     <p className="text-[0.68rem] text-slate-400">No new devices enrolled this period</p>
                                   ) : (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {userAdded.map(d => (
-                                        <span key={d.id} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-[0.62rem] font-medium text-emerald-800">
-                                          <Apple className="h-2.5 w-2.5" />{d.deviceName}
-                                          <span className="text-emerald-500">· {d.user}</span>
-                                          <span className="rounded-full bg-emerald-200 px-1 text-[0.52rem] font-bold text-emerald-700">Added</span>
-                                        </span>
-                                      ))}
-                                      {mdmPick.map(d => (
-                                        <span key={d.id} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[0.62rem] font-medium text-emerald-800">
-                                          <Apple className="h-2.5 w-2.5" />{d.deviceName}
-                                          <span className="text-slate-400">· {d.user}</span>
-                                        </span>
-                                      ))}
+                                    <div className="overflow-x-auto rounded-lg border border-emerald-200 bg-white">
+                                      <table className="w-full text-[0.68rem]">
+                                        <thead>
+                                          <tr className="border-b border-emerald-100 bg-emerald-50/60 text-left">
+                                            <th className="px-3 py-1.5 text-[0.58rem] font-semibold uppercase tracking-wide text-emerald-700/70">Device Name</th>
+                                            <th className="px-3 py-1.5 text-[0.58rem] font-semibold uppercase tracking-wide text-emerald-700/70">User</th>
+                                            <th className="px-3 py-1.5 text-[0.58rem] font-semibold uppercase tracking-wide text-emerald-700/70">Model</th>
+                                            <th className="px-3 py-1.5 text-[0.58rem] font-semibold uppercase tracking-wide text-emerald-700/70">macOS</th>
+                                            <th className="px-3 py-1.5 text-[0.58rem] font-semibold uppercase tracking-wide text-emerald-700/70">Serial Number</th>
+                                            <th className="px-3 py-1.5 text-[0.58rem] font-semibold uppercase tracking-wide text-emerald-700/70">Source</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-emerald-50">
+                                          {userAdded.map(d => (
+                                            <tr key={d.id} className="hover:bg-emerald-50/40 transition">
+                                              <td className="px-3 py-1.5 font-medium text-slate-800">
+                                                <span className="flex items-center gap-1.5"><Apple className="h-3 w-3 text-emerald-600 flex-shrink-0" />{d.deviceName}</span>
+                                              </td>
+                                              <td className="px-3 py-1.5 text-slate-600">{d.user}</td>
+                                              <td className="px-3 py-1.5 text-slate-600">{d.model || '—'}</td>
+                                              <td className="px-3 py-1.5 text-slate-600">{d.osVersion || '—'}</td>
+                                              <td className="px-3 py-1.5 font-mono text-slate-500">{d.serialNumber || '—'}</td>
+                                              <td className="px-3 py-1.5">
+                                                <span className="rounded-full bg-emerald-200 px-1.5 py-0.5 text-[0.52rem] font-bold text-emerald-700">Added</span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                          {mdmPick.map(d => (
+                                            <tr key={d.id} className="hover:bg-slate-50 transition">
+                                              <td className="px-3 py-1.5 font-medium text-slate-800">
+                                                <span className="flex items-center gap-1.5"><Apple className="h-3 w-3 text-slate-400 flex-shrink-0" />{d.deviceName}</span>
+                                              </td>
+                                              <td className="px-3 py-1.5 text-slate-600">{d.user}</td>
+                                              <td className="px-3 py-1.5 text-slate-600">{d.model ?? '—'}</td>
+                                              <td className="px-3 py-1.5 text-slate-600">{d.osVersion ?? '—'}</td>
+                                              <td className="px-3 py-1.5 font-mono text-slate-500">{d.serialNumber ?? '—'}</td>
+                                              <td className="px-3 py-1.5">
+                                                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.52rem] font-medium text-slate-500">MDM Synced</span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
                                     </div>
                                   )}
                                 </div>
