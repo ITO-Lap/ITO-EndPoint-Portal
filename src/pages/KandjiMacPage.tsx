@@ -809,12 +809,6 @@ function DevicesTab({
                             <Terminal className="h-3 w-3" />
                             <span className="text-[0.6rem] font-semibold">Logs</span>
                           </button>
-                          <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
-                            title="Device details"
-                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
-                            <Info className="h-3 w-3" />
-                            <span className="text-[0.6rem] font-semibold">Info</span>
-                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden">
