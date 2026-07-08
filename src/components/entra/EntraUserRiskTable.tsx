@@ -1,5 +1,9 @@
 import { AlertTriangle, Shield, CheckCircle2, User } from 'lucide-react'
 import type { EntraUser } from '../../data/entraData'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 25
 
 const riskChip = (level: EntraUser['riskLevel']) => {
   switch (level) {
@@ -24,6 +28,8 @@ export function EntraUserRiskTable({ users }: Props) {
     return (order[a.riskLevel] ?? 4) - (order[b.riskLevel] ?? 4)
   })
 
+  const { page, setPage, totalPages, paginated } = usePagination(sorted, PAGE_SIZE)
+
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-700/60">
       <table className="w-full text-xs">
@@ -38,7 +44,7 @@ export function EntraUserRiskTable({ users }: Props) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((user, i) => (
+          {paginated.map((user, i) => (
             <tr key={user.id}
               className={`border-b border-slate-800 hover:bg-slate-800/60 transition-colors ${i % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'}`}>
               <td className="px-4 py-3">
@@ -88,6 +94,7 @@ export function EntraUserRiskTable({ users }: Props) {
           ))}
         </tbody>
       </table>
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={sorted.length} pageSize={PAGE_SIZE} itemLabel="user" />
     </div>
   )
 }

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import { Brain, RefreshCw, XCircle, ChevronDown, ChevronRight, AlertTriangle, Shield } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { RiskScore } from '../api/intelligence'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
+
+const PAGE_SIZE = 25
 
 const LEVEL_STYLES = {
   critical: { bar: 'bg-red-500',    badge: 'bg-red-100 text-red-700',    label: 'Critical' },
@@ -38,6 +42,7 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const filtered = filter === 'all' ? data : data.filter(d => d.riskLevel === filter)
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
 
   return (
     <div className="space-y-6">
@@ -111,7 +116,7 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
 
           {/* Device risk list */}
           <div className="space-y-2">
-            {filtered.map(score => {
+            {paginated.map(score => {
               const styles = LEVEL_STYLES[score.riskLevel]
               const isOpen = expanded.has(score.deviceId)
               return (
@@ -184,6 +189,8 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
               )
             })}
           </div>
+
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />
         </>
       )}
     </div>

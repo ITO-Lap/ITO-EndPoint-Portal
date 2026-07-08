@@ -6,6 +6,10 @@ import type { UserDetails } from '../../types'
 import { api } from '../../api'
 import { useToast } from '../ui/ToastProvider'
 import { PlatformIcon, ComplianceDot, TabLoading, EmptyTabState } from './shared'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 10
 
 export function DevicesTab({
   details, loading, onViewDevice,
@@ -15,8 +19,9 @@ export function DevicesTab({
   onViewDevice: (deviceName: string) => void
 }) {
   const { notify } = useToast()
-  if (loading) return <TabLoading />
   const devices = details?.devices ?? []
+  const { page, setPage, totalPages, paginated } = usePagination(devices, PAGE_SIZE)
+  if (loading) return <TabLoading />
 
   const handleSync = (deviceId: string | undefined, name: string) => {
     if (!deviceId) { notify('info', 'Sync', `No linked Entra device record for ${name} yet.`); return }
@@ -37,7 +42,7 @@ export function DevicesTab({
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">{devices.length} device{devices.length !== 1 ? 's' : ''} assigned</p>
-      {devices.map(d => {
+      {paginated.map(d => {
         const stateColor = d.complianceState === 'Compliant' ? 'border-emerald-200 bg-emerald-50'
           : d.complianceState === 'Warning' ? 'border-amber-200 bg-amber-50'
           : 'border-red-200 bg-red-50'
@@ -84,6 +89,8 @@ export function DevicesTab({
           </div>
         )
       })}
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+        totalItems={devices.length} pageSize={PAGE_SIZE} itemLabel="device" />
     </div>
   )
 }

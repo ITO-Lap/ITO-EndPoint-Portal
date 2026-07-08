@@ -5,6 +5,8 @@ import {
   Shield, Package, Monitor, Globe, Apple, Server,
 } from 'lucide-react'
 import { useColumnResize } from '../hooks/useColumnResize'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +31,8 @@ interface CVE {
 
 type SortField = 'cvss' | 'affectedDevices' | 'published' | 'patchDeadline'
 type SortDir = 'asc' | 'desc'
+
+const PAGE_SIZE = 50
 
 // ─── Mock Data ─────────────────────────────────────────────────────────────────
 
@@ -795,6 +799,8 @@ export function VulnerabilitiesPage() {
     return result
   }, [search, severityFilter, patchFilter, sortField, sortDir, sourceCves])
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   // Stats derive from source-scoped set for accurate per-source numbers
   const stats = useMemo(() => ({
     critical:      sourceCves.filter(c => c.severity === 'Critical').length,
@@ -1107,7 +1113,7 @@ export function VulnerabilitiesPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map(cve => {
+                paginated.map(cve => {
                   const { badge } = cvssColorClasses(cve.cvss)
                   const days = cve.patchDeadline ? daysUntil(cve.patchDeadline) : null
                   const isSelected = selectedCve?.id === cve.id
@@ -1190,6 +1196,8 @@ export function VulnerabilitiesPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+          totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="vulnerability" itemLabelPlural="vulnerabilities" />
       </div>
 
       {/* ── Detail Panel overlay backdrop ── */}

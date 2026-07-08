@@ -9,9 +9,15 @@ import {
 import { runbooksApi } from '../api'
 import { useToast } from '../components/ui/ToastProvider'
 import { ExecutionDrawer } from '../components/runbooks/ExecutionDrawer'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
 import type {
   EnterpriseRunbook, RunbookExecution, ExecMode, ExecStatus,
 } from '../types'
+
+const LIBRARY_PAGE_SIZE  = 12
+const EXEC_PAGE_SIZE     = 25
+const APPROVAL_PAGE_SIZE = 25
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +40,16 @@ const STATUS_BADGE: Record<ExecStatus, string> = {
 const STATUS_LABELS: Record<ExecStatus, string> = {
   pending: 'Pending', waiting_approval: 'Awaiting Approval',
   running: 'Running', completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled',
+}
+
+const MODE_BADGE: Record<ExecMode, string> = {
+  normal: 'bg-red-100 text-red-700 border-red-200',
+  safe: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  'dry-run': 'bg-violet-100 text-violet-700 border-violet-200',
+}
+
+const MODE_TAG: Record<ExecMode, string> = {
+  normal: 'LIVE', safe: 'SAFE', 'dry-run': 'DRY RUN',
 }
 
 const CAT_ICONS: Record<string, React.ElementType> = {
@@ -336,75 +352,6 @@ function RunbookCard({ runbook, onExecute, onClone, onExport, viewerRole }: Runb
   )
 }
 
-// ─── Execution row ────────────────────────────────────────────────────────────
-
-function ExecutionRow({
-  exec, onOpen, onApprove, viewerRole,
-}: {
-  exec: RunbookExecution; onOpen: (id: string) => void
-  onApprove?: (execId: string, runbookId: string) => void; viewerRole: string
-}) {
-  const isRunning = exec.status === 'running'
-  const canApprove = exec.status === 'waiting_approval' && (viewerRole === 'Global Admin' || viewerRole === 'IT Admin')
-  const modeColors: Record<ExecMode, string> = {
-    normal: 'bg-red-100 text-red-700 border-red-200',
-    safe: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    'dry-run': 'bg-violet-100 text-violet-700 border-violet-200',
-  }
-
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-slate-100 bg-white hover:shadow-md transition-all"
-      style={{ boxShadow: '0 1px 8px rgba(14,165,233,0.04)' }}>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-xs font-bold text-slate-800 truncate">{exec.runbookName}</p>
-          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${STATUS_BADGE[exec.status]}`}>
-            {exec.status === 'running' && <span className="mr-1 h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />}
-            {STATUS_LABELS[exec.status]}
-          </span>
-          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${modeColors[exec.mode]}`}>
-            {exec.mode === 'dry-run' ? 'DRY RUN' : exec.mode === 'safe' ? 'SAFE' : 'LIVE'}
-          </span>
-        </div>
-        <div className="flex items-center gap-3 text-[0.65rem] text-slate-400">
-          <span>Device: <span className="font-semibold text-slate-600">{exec.deviceName}</span></span>
-          <span>·</span>
-          <span>{fmtRelative(exec.startedAt)}</span>
-          {exec.durationMs && <><span>·</span><span>{fmtDuration(exec.durationMs)}</span></>}
-        </div>
-        {isRunning && (
-          <div className="mt-1">
-            <div className="h-1 w-full max-w-xs rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-orange-400 to-blue-500 transition-all duration-500"
-                style={{ width: `${exec.progress}%` }}
-              />
-            </div>
-            <p className="text-[0.6rem] text-slate-400 mt-0.5">{exec.progress}% — {exec.steps.filter(s => s.status === 'running')[0]?.name ?? 'Processing…'}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {canApprove && onApprove && (
-          <button
-            type="button"
-            onClick={() => onApprove(exec.id, exec.runbookId)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-[0.7rem] font-bold text-white hover:bg-emerald-700 transition">
-            <CheckCircle2 className="h-3 w-3" /> Approve
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => onOpen(exec.id)}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[0.7rem] font-semibold text-slate-600 hover:bg-slate-50 transition">
-          <Eye className="h-3 w-3" /> View
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
 function StatsBar({ runbooks, executions }: { runbooks: EnterpriseRunbook[]; executions: RunbookExecution[] }) {
@@ -624,6 +571,18 @@ export function RunbooksPage({ viewerRole = 'IT Admin', userName = 'admin' }: Ru
   const pendingApprovals = useMemo(() =>
     executions.filter(e => e.status === 'waiting_approval'), [executions])
 
+  const {
+    page: libraryPage, setPage: setLibraryPage, totalPages: libraryTotalPages, paginated: paginatedRunbooks,
+  } = usePagination(filteredRunbooks, LIBRARY_PAGE_SIZE)
+
+  const {
+    page: execPage, setPage: setExecPage, totalPages: execTotalPages, paginated: paginatedExecutions,
+  } = usePagination(executions, EXEC_PAGE_SIZE)
+
+  const {
+    page: approvalPage, setPage: setApprovalPage, totalPages: approvalTotalPages, paginated: paginatedApprovals,
+  } = usePagination(pendingApprovals, APPROVAL_PAGE_SIZE)
+
   const tabs: Array<{ id: Tab; label: string; badge?: number }> = [
     { id: 'library',    label: 'Library',    badge: runbooks.length },
     { id: 'executions', label: 'Executions', badge: executions.filter(e => e.status === 'running').length || undefined },
@@ -737,17 +696,23 @@ export function RunbooksPage({ viewerRole = 'IT Admin', userName = 'admin' }: Ru
               <p className="text-sm text-slate-400 font-medium">No runbooks match your filters</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredRunbooks.map(rb => (
-                <RunbookCard
-                  key={rb.id}
-                  runbook={rb}
-                  onExecute={setExecuteTarget}
-                  onClone={handleClone}
-                  onExport={handleExport}
-                  viewerRole={viewerRole}
-                />
-              ))}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {paginatedRunbooks.map(rb => (
+                  <RunbookCard
+                    key={rb.id}
+                    runbook={rb}
+                    onExecute={setExecuteTarget}
+                    onClone={handleClone}
+                    onExport={handleExport}
+                    viewerRole={viewerRole}
+                  />
+                ))}
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white">
+                <Pagination page={libraryPage} totalPages={libraryTotalPages} onPageChange={setLibraryPage}
+                  totalItems={filteredRunbooks.length} pageSize={LIBRARY_PAGE_SIZE} itemLabel="runbook" />
+              </div>
             </div>
           )}
         </div>
@@ -772,16 +737,76 @@ export function RunbooksPage({ viewerRole = 'IT Admin', userName = 'admin' }: Ru
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              {executions.map(exec => (
-                <ExecutionRow
-                  key={exec.id}
-                  exec={exec}
-                  onOpen={setActiveExecId}
-                  onApprove={handleApprove}
-                  viewerRole={viewerRole}
-                />
-              ))}
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Runbook</th>
+                      <th className="px-4 py-3 text-left">Device</th>
+                      <th className="px-4 py-3 text-left">Mode</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Started</th>
+                      <th className="px-4 py-3 text-left">Duration</th>
+                      <th className="px-4 py-3 text-left">Triggered By</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedExecutions.map(exec => {
+                      const canApprove = exec.status === 'waiting_approval' && (viewerRole === 'Global Admin' || viewerRole === 'IT Admin')
+                      return (
+                        <tr
+                          key={exec.id}
+                          className="hover:bg-slate-50 transition cursor-pointer"
+                          onClick={() => setActiveExecId(exec.id)}
+                        >
+                          <td className="px-4 py-3 font-medium text-slate-800">
+                            <div className="flex items-center gap-1.5">
+                              {exec.status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />}
+                              <span className="truncate max-w-[220px]" title={exec.runbookName}>{exec.runbookName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 text-xs">{exec.deviceName}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${MODE_BADGE[exec.mode]}`}>
+                              {MODE_TAG[exec.mode]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${STATUS_BADGE[exec.status]}`}>
+                              {STATUS_LABELS[exec.status]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{fmtRelative(exec.startedAt)}</td>
+                          <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{exec.durationMs ? fmtDuration(exec.durationMs) : '—'}</td>
+                          <td className="px-4 py-3 text-xs text-slate-500">{exec.initiatedBy}</td>
+                          <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              {canApprove && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApprove(exec.id, exec.runbookId)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[0.65rem] font-bold text-white hover:bg-emerald-700 transition">
+                                  <CheckCircle2 className="h-3 w-3" /> Approve
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setActiveExecId(exec.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[0.65rem] font-semibold text-slate-600 hover:bg-slate-50 transition">
+                                <Eye className="h-3 w-3" /> View
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination page={execPage} totalPages={execTotalPages} onPageChange={setExecPage}
+                totalItems={executions.length} pageSize={EXEC_PAGE_SIZE} itemLabel="execution" />
             </div>
           )}
         </div>
@@ -811,15 +836,63 @@ export function RunbooksPage({ viewerRole = 'IT Admin', userName = 'admin' }: Ru
                   {pendingApprovals.length} execution{pendingApprovals.length !== 1 ? 's' : ''} pending your approval
                 </p>
               </div>
-              {pendingApprovals.map(exec => (
-                <ExecutionRow
-                  key={exec.id}
-                  exec={exec}
-                  onOpen={setActiveExecId}
-                  onApprove={handleApprove}
-                  viewerRole={viewerRole}
-                />
-              ))}
+              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Runbook</th>
+                        <th className="px-4 py-3 text-left">Device</th>
+                        <th className="px-4 py-3 text-left">Mode</th>
+                        <th className="px-4 py-3 text-left">Requested</th>
+                        <th className="px-4 py-3 text-left">Initiated By</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paginatedApprovals.map(exec => (
+                        <tr
+                          key={exec.id}
+                          className="hover:bg-slate-50 transition cursor-pointer"
+                          onClick={() => setActiveExecId(exec.id)}
+                        >
+                          <td className="px-4 py-3 font-medium text-slate-800">
+                            <span className="truncate max-w-[220px] block" title={exec.runbookName}>{exec.runbookName}</span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 text-xs">{exec.deviceName}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${MODE_BADGE[exec.mode]}`}>
+                              {MODE_TAG[exec.mode]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{fmtRelative(exec.startedAt)}</td>
+                          <td className="px-4 py-3 text-xs text-slate-500">{exec.initiatedBy}</td>
+                          <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              {(viewerRole === 'Global Admin' || viewerRole === 'IT Admin') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApprove(exec.id, exec.runbookId)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[0.65rem] font-bold text-white hover:bg-emerald-700 transition">
+                                  <CheckCircle2 className="h-3 w-3" /> Approve
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setActiveExecId(exec.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[0.65rem] font-semibold text-slate-600 hover:bg-slate-50 transition">
+                                <Eye className="h-3 w-3" /> View
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination page={approvalPage} totalPages={approvalTotalPages} onPageChange={setApprovalPage}
+                  totalItems={pendingApprovals.length} pageSize={APPROVAL_PAGE_SIZE} itemLabel="approval" />
+              </div>
             </div>
           )}
         </div>

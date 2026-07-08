@@ -7,6 +7,10 @@ import {
 import { api } from '../../api'
 import type { ApiDevice } from '../../api'
 import { useColumnResize } from '../../hooks/useColumnResize'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 50
 
 type ComplianceFilter = 'Compliant' | 'Non-Compliant' | 'Warning' | 'Windows' | 'Mac' | 'Intune' | 'ManageEngine'
 type SortField = 'deviceName' | 'user' | 'platform' | 'osVersion' | 'managementSource' | 'lastCheckIn' | 'severity'
@@ -224,12 +228,15 @@ export function FilteredDevicesPage({ filter, onBack, onViewDevice }: Props) {
     setActiveCategory(null)
     setLoading(true)
     try {
+      // 10,000 is the server's max allowed limit (server/src/routes/devices.ts) —
+      // comfortably above this fleet's real device count, so nothing gets
+      // silently truncated before pagination even sees it.
       const result = await api.fetchAllDevicesRaw(
-        filter === 'Windows'       ? { platform: 'Windows',   limit: 500 }
-        : filter === 'Mac'         ? { platform: 'macOS',     limit: 500 }
-        : filter === 'Intune'      ? { source: 'intune',      limit: 500 }
-        : filter === 'ManageEngine'? { source: 'manageengine',limit: 500 }
-        : { compliance: filter as 'Compliant' | 'Non-Compliant' | 'Warning', limit: 500 }
+        filter === 'Windows'       ? { platform: 'Windows',   limit: 10000 }
+        : filter === 'Mac'         ? { platform: 'macOS',     limit: 10000 }
+        : filter === 'Intune'      ? { source: 'intune',      limit: 10000 }
+        : filter === 'ManageEngine'? { source: 'manageengine',limit: 10000 }
+        : { compliance: filter as 'Compliant' | 'Non-Compliant' | 'Warning', limit: 10000 }
       )
       setDevices(result.devices)
       setTotal(result.total)
@@ -313,6 +320,7 @@ export function FilteredDevicesPage({ filter, onBack, onViewDevice }: Props) {
     return true
   }) as typeof COLS[number][]
   const { widths, startResize, totalWidth } = useColumnResize(activeCols, 'filtered-devices')
+  const { page, setPage, totalPages, paginated } = usePagination(sorted, PAGE_SIZE)
 
   return (
     <div className="flex flex-col gap-5">
@@ -497,7 +505,7 @@ export function FilteredDevicesPage({ filter, onBack, onViewDevice }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((device, idx) => (
+                {paginated.map((device, idx) => (
                   <tr
                     key={device.id}
                     className={`border-b border-slate-100 last:border-0 transition hover:bg-slate-50 ${idx % 2 !== 0 ? 'bg-slate-50/40' : ''} ${onViewDevice ? 'cursor-pointer' : ''}`}
@@ -561,10 +569,13 @@ export function FilteredDevicesPage({ filter, onBack, onViewDevice }: Props) {
                 ))}
               </tbody>
             </table>
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-              Showing {sorted.length.toLocaleString()} of {total.toLocaleString()} {filter.toLowerCase()} devices
-              {activeFilterCount > 0 && <span className="text-orange-500"> · {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active</span>}
-            </div>
+            {activeFilterCount > 0 && (
+              <div className="px-4 py-1.5 border-t border-slate-100 bg-slate-50 text-xs text-orange-500">
+                {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active
+              </div>
+            )}
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+              totalItems={sorted.length} pageSize={PAGE_SIZE} itemLabel="device" />
           </div>
         )}
       </div>

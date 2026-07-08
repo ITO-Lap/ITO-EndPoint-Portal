@@ -15,6 +15,8 @@ import { intelApi } from '../api/intelligence'
 import type { DeviceReportData, DeviceReportDevice } from '../api/intelligence'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useToast } from '../components/ui/ToastProvider'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -869,6 +871,8 @@ function PermissionNotice({ permission, description }: { permission: string; des
   )
 }
 
+const ENTRA_PAGE_SIZE = 50
+
 function EntraIDTab() {
   const [overview,     setOverview]     = useState<EOvr | null>(null)
   const [users,        setUsers]        = useState<EUser[]>([])
@@ -909,6 +913,9 @@ function EntraIDTab() {
   const filteredUsers   = useMemo(() => { const q = uSearch.toLowerCase(); return q ? users.filter(u => u.displayName.toLowerCase().includes(q) || u.upn.toLowerCase().includes(q) || (u.department ?? '').toLowerCase().includes(q)) : users }, [users, uSearch])
   const filteredDevices = useMemo(() => { const q = dSearch.toLowerCase(); return q ? devices.filter(d => d.deviceName.toLowerCase().includes(q) || d.primaryUser.toLowerCase().includes(q)) : devices }, [devices, dSearch])
   const riskCounts      = useMemo(() => ({ high: users.filter(u => u.riskLevel === 'High').length, medium: users.filter(u => u.riskLevel === 'Medium').length }), [users])
+
+  const { page: usersPage,   setPage: setUsersPage,   totalPages: usersTotalPages,   paginated: paginatedUsers }   = usePagination(filteredUsers, ENTRA_PAGE_SIZE)
+  const { page: devicesPage, setPage: setDevicesPage, totalPages: devicesTotalPages, paginated: paginatedDevices } = usePagination(filteredDevices, ENTRA_PAGE_SIZE)
 
   return (
     <div className="flex flex-col gap-4">
@@ -1006,7 +1013,7 @@ function EntraIDTab() {
                   ))}</tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.slice(0, 50).flatMap((u, i) => {
+                  {paginatedUsers.flatMap((u, i) => {
                     const rows = [(
                       <tr key={u.id} onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
                         className={`border-b border-slate-100/50 last:border-0 cursor-pointer transition-colors hover:bg-blue-50/40 ${i % 2 ? 'bg-slate-50/30' : ''} ${u.riskLevel === 'High' ? 'border-l-2 border-l-red-400' : u.riskLevel === 'Medium' ? 'border-l-2 border-l-amber-400' : ''}`}>
@@ -1059,11 +1066,8 @@ function EntraIDTab() {
                   })}
                 </tbody>
               </table>
-              {filteredUsers.length > 50 && (
-                <p className="px-4 py-2.5 border-t border-slate-100/50 bg-slate-50/50 text-[0.65rem] text-slate-400 text-center">
-                  Showing 50 of {filteredUsers.length} — use search to filter
-                </p>
-              )}
+              <Pagination page={usersPage} totalPages={usersTotalPages} onPageChange={setUsersPage}
+                totalItems={filteredUsers.length} pageSize={ENTRA_PAGE_SIZE} itemLabel="user" />
             </div>
           )}
         </div>
@@ -1098,7 +1102,7 @@ function EntraIDTab() {
                   ))}</tr>
                 </thead>
                 <tbody>
-                  {filteredDevices.slice(0, 100).map((d, i) => (
+                  {paginatedDevices.map((d, i) => (
                     <tr key={d.id} className={`border-b border-slate-100/50 last:border-0 transition-colors hover:bg-blue-50/40 ${i % 2 ? 'bg-slate-50/30' : ''} ${(d.openIssues?.length ?? 0) > 0 ? 'border-l-2 border-l-amber-400' : ''}`}>
                       <td className="px-4 py-2.5"><div className="flex items-center gap-2"><Laptop2 className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" /><span className="font-semibold text-slate-700 truncate max-w-[130px]">{d.deviceName}</span></div></td>
                       <td className="px-4 py-2.5 text-slate-500 max-w-[110px] truncate">{d.primaryUser || '—'}</td>
@@ -1112,7 +1116,8 @@ function EntraIDTab() {
                   ))}
                 </tbody>
               </table>
-              {filteredDevices.length > 100 && <p className="px-4 py-2.5 border-t border-slate-100/50 bg-slate-50/50 text-[0.65rem] text-slate-400 text-center">Showing 100 of {filteredDevices.length} devices</p>}
+              <Pagination page={devicesPage} totalPages={devicesTotalPages} onPageChange={setDevicesPage}
+                totalItems={filteredDevices.length} pageSize={ENTRA_PAGE_SIZE} itemLabel="device" />
             </div>
           )}
         </div>

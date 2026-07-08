@@ -10,6 +10,10 @@ import { api } from '../api'
 import type { ApiDevice } from '../api'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useToast } from '../components/ui/ToastProvider'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
+
+const PAGE_SIZE = 50
 
 type Tab = 'devices' | 'patches' | 'software' | 'automation' | 'reports'
 
@@ -64,6 +68,8 @@ function DevicesTab({ devices, loading, onSelect }: { devices: ApiDevice[]; load
     return devices.filter(d => d.deviceName?.toLowerCase().includes(q) || d.user?.toLowerCase().includes(q))
   }, [devices, search])
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   if (loading) return (
     <div className="glass rounded-2xl p-10 text-center">
       <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[#F46C00] border-t-transparent mb-3" />
@@ -94,7 +100,7 @@ function DevicesTab({ devices, loading, onSelect }: { devices: ApiDevice[]; load
             <table className="z-table">
               <thead><tr>{['Device','User','Platform','OS Version','Compliance','Encryption','Last Scan'].map(h => <th key={h}>{h}</th>)}</tr></thead>
               <tbody>
-                {filtered.map(d => (
+                {paginated.map(d => (
                   <tr key={d.id} onClick={() => onSelect(d)} className="cursor-pointer">
                     <td><span className="font-semibold text-slate-700">{d.deviceName || '—'}</span></td>
                     <td className="text-slate-500">{d.user || '—'}</td>
@@ -107,6 +113,8 @@ function DevicesTab({ devices, loading, onSelect }: { devices: ApiDevice[]; load
                 ))}
               </tbody>
             </table>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+              totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />
           </div>
         )}
       </div>

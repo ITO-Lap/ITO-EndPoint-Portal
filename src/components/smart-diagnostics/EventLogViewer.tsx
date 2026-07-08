@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Search, X, ChevronDown, AlertTriangle, Info, AlertCircle, XCircle } from 'lucide-react'
 import type { EventLogEntry } from '../../types'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 25
 
 interface Props {
   logs: EventLogEntry[]
@@ -62,6 +66,8 @@ export function EventLogViewer({ logs, loading }: Props) {
     return true
   })
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   if (loading) return <div className="flex items-center justify-center py-16 text-slate-400 text-xs">Loading event logs…</div>
 
   return (
@@ -95,31 +101,44 @@ export function EventLogViewer({ logs, loading }: Props) {
           <p className="text-xs font-medium">{logs.length === 0 ? 'No event logs recorded' : 'No logs match your filters'}</p>
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {filtered.map(log => {
-            const cfg = LEVEL_CONFIG[log.level]
-            const Icon = cfg.icon
-            return (
-              <button
-                key={log.id}
-                type="button"
-                onClick={() => setSelected(log)}
-                className="w-full flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-left hover:bg-slate-100 hover:border-orange-200 transition"
-              >
-                <Icon className={`mt-0.5 h-3.5 w-3.5 flex-shrink-0 ${cfg.cls}`} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[0.6rem] font-bold ${cfg.badge}`}>{log.level}</span>
-                    <span className="text-[0.65rem] font-mono text-slate-500">Event {log.eventId}</span>
-                    <span className="text-[0.62rem] text-slate-400">{log.category}</span>
-                  </div>
-                  <p className="text-xs font-medium text-slate-800 mt-0.5 leading-snug truncate">{log.source}</p>
-                  <p className="text-[0.65rem] text-slate-500 mt-0.5 line-clamp-2 leading-snug">{log.description}</p>
-                </div>
-                <span className="flex-shrink-0 text-[0.6rem] font-mono text-slate-400 whitespace-nowrap mt-0.5">{log.timestamp.split(' ')[1]}</span>
-              </button>
-            )
-          })}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3 text-left">Level</th>
+                  <th className="px-4 py-3 text-left">Event ID</th>
+                  <th className="px-4 py-3 text-left">Source</th>
+                  <th className="px-4 py-3 text-left">Category</th>
+                  <th className="px-4 py-3 text-left">Message</th>
+                  <th className="px-4 py-3 text-left">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginated.map(log => {
+                  const cfg = LEVEL_CONFIG[log.level]
+                  return (
+                    <tr
+                      key={log.id}
+                      onClick={() => setSelected(log)}
+                      className="cursor-pointer hover:bg-slate-50 transition"
+                    >
+                      <td className="px-4 py-2.5 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-bold ${cfg.badge}`}>{log.level}</span>
+                      </td>
+                      <td className="px-4 py-2.5 align-top text-slate-500 text-xs font-mono whitespace-nowrap">{log.eventId || '—'}</td>
+                      <td className="px-4 py-2.5 align-top text-slate-800 text-xs font-medium max-w-[160px] truncate" title={log.source || undefined}>{log.source || '—'}</td>
+                      <td className="px-4 py-2.5 align-top text-slate-500 text-xs whitespace-nowrap">{log.category || '—'}</td>
+                      <td className="px-4 py-2.5 align-top text-slate-600 text-xs max-w-[360px] truncate" title={log.description || undefined}>{log.description || '—'}</td>
+                      <td className="px-4 py-2.5 align-top text-slate-400 text-xs font-mono whitespace-nowrap">{log.timestamp || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+            totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="event" />
         </div>
       )}
 

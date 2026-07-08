@@ -6,6 +6,10 @@ import {
 import { api } from '../../api'
 import type { ApiDevice } from '../../api'
 import { useColumnResize } from '../../hooks/useColumnResize'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 50
 
 type SortField = 'deviceName' | 'user' | 'issueSource' | 'primaryIssue' | 'severity' | 'firstDetected' | 'complianceState'
 type SortDir = 'asc' | 'desc'
@@ -75,9 +79,12 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
   const fetchData = async () => {
     setLoading(true)
     try {
+      // 10,000 is the server's max allowed limit (server/src/routes/devices.ts) —
+      // comfortably above this fleet's real device count, so nothing gets
+      // silently truncated before pagination even sees it.
       const [ncResult, warnResult] = await Promise.all([
-        api.fetchAllDevicesRaw({ compliance: 'Non-Compliant', limit: 500 }),
-        api.fetchAllDevicesRaw({ compliance: 'Warning', limit: 500 }),
+        api.fetchAllDevicesRaw({ compliance: 'Non-Compliant', limit: 10000 }),
+        api.fetchAllDevicesRaw({ compliance: 'Warning', limit: 10000 }),
       ])
       setDevices([...ncResult.devices, ...warnResult.devices])
     } catch {
@@ -145,6 +152,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
   }), [devices])
 
   const { widths, startResize, totalWidth } = useColumnResize(COLS, 'open-issues')
+  const { page, setPage, totalPages, paginated } = usePagination(sorted, PAGE_SIZE)
 
   return (
     <div className="flex flex-col gap-5">
@@ -299,7 +307,7 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((device, idx) => (
+                {paginated.map((device, idx) => (
                   <tr
                     key={device.id}
                     className={`border-b border-slate-100 last:border-0 transition hover:bg-slate-50 ${idx % 2 === 0 ? '' : 'bg-slate-50/40'} ${onViewDevice ? 'cursor-pointer' : ''}`}
@@ -355,10 +363,13 @@ export function OpenIssuesPage({ onBack, onViewDevice }: Props) {
                 ))}
               </tbody>
             </table>
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-              Showing {sorted.length.toLocaleString()} of {devices.length.toLocaleString()} open issues
-              {activeCategory && <span> · filtered by <strong className="text-slate-600">{activeCategory}</strong></span>}
-            </div>
+            {activeCategory && (
+              <div className="px-4 py-1.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
+                Filtered by <strong className="text-slate-600">{activeCategory}</strong>
+              </div>
+            )}
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+              totalItems={sorted.length} pageSize={PAGE_SIZE} itemLabel="issue" />
           </div>
         )}
       </div>

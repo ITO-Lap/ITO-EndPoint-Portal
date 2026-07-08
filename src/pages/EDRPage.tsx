@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
 import {
   X,
   AlertTriangle,
@@ -28,6 +30,8 @@ import {
   Server,
   Laptop2,
 } from 'lucide-react'
+
+const PAGE_SIZE = 50
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -829,6 +833,8 @@ function DetectionsTab() {
     return true
   })
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 items-center">
@@ -857,7 +863,7 @@ function DetectionsTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((d, i) => (
+              {paginated.map((d, i) => (
                 <tr
                   key={d.id}
                   onClick={() => setSelected(d)}
@@ -884,6 +890,8 @@ function DetectionsTab() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+          totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="detection" />
       </div>
 
       <DetailModal open={!!selected} title={`Detection ${selected?.id}: ${selected?.name ?? ''}`} onClose={() => setSelected(null)}>
@@ -908,6 +916,8 @@ function IncidentsTab() {
     if (status && inc.status !== status) return false
     return true
   })
+
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
 
   return (
     <div className="space-y-4">
@@ -937,7 +947,7 @@ function IncidentsTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inc, i) => (
+              {paginated.map((inc, i) => (
                 <tr
                   key={inc.id}
                   onClick={() => setSelected(inc)}
@@ -963,6 +973,8 @@ function IncidentsTab() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+          totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="incident" />
       </div>
 
       <DetailModal open={!!selected} title={`Incident ${selected?.id}: ${selected?.title ?? ''}`} onClose={() => setSelected(null)}>

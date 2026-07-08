@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useColumnResize } from '../../hooks/useColumnResize'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
 import { X, Monitor, Laptop, Globe, Search, RefreshCw, Lock, LockOpen, ChevronRight, Package } from 'lucide-react'
 import { api, type ApiDevice, type LibraryApp } from '../../api'
 import { DeviceDetailPanel } from './DeviceDetailPanel'
+
+const PAGE_SIZE = 50
 
 // ── Resizable column definitions ──────────────────────────────────────────────
 const COLS = [
@@ -346,7 +350,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
         ...(source !== 'all' ? { source } : {}),
         ...(compliance ? { compliance }   : {}),
         ...(platform   ? { platform }     : {}),
-        limit: 2000,
+        limit: 10000,
       })
       setAllDevices(result.devices)
       setServerTotal(result.total)
@@ -363,6 +367,8 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
   // Client-side search — instant, no server round-trip
   const devices = searchRaw ? allDevices.filter(d => matchesSearch(d, searchRaw)) : allDevices
   const total   = searchRaw ? devices.length : serverTotal
+
+  const { page, setPage, totalPages, paginated } = usePagination(devices, PAGE_SIZE)
 
   const totalAll = (sourceCounts?.intune ?? 0) + (sourceCounts?.kandji ?? 0) + (sourceCounts?.manageEngine ?? 0)
   const getTabCount = (id: SourceId) => {
@@ -597,6 +603,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                 </div>
               ) : (
                 /* Full table — resizable columns */
+                <>
                 <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
                   <colgroup>
                     {COLS.map(c => <col key={c.key} style={{ width: widths[c.key] }} />)}
@@ -622,7 +629,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {devices.map(device => (
+                    {paginated.map(device => (
                       <tr
                         key={device.id}
                         className="group hover:bg-orange-50/40 cursor-pointer transition-colors"
@@ -668,6 +675,9 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     ))}
                   </tbody>
                 </table>
+                <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+                  totalItems={devices.length} pageSize={PAGE_SIZE} itemLabel="device" />
+                </>
               )}
             </div>
 
@@ -678,9 +688,6 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                   <span className="font-semibold text-slate-700">{devices.length.toLocaleString()}</span> of{' '}
                   <span className="font-semibold text-slate-700">{total.toLocaleString()}</span> devices
                 </span>
-                {total > devices.length && (
-                  <span className="text-amber-600 font-medium">Showing first 2,000 — use filters to narrow</span>
-                )}
               </div>
             )}
             </>

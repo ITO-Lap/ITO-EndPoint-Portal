@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Search, X, ChevronDown } from 'lucide-react'
 import type { ApplicationFailureReport } from '../../types'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 25
 
 interface Props {
   failures: ApplicationFailureReport[]
@@ -73,6 +77,8 @@ export function ApplicationFailureTable({ failures, loading }: Props) {
     return true
   })
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   if (loading) return (
     <div className="flex items-center justify-center py-16 text-slate-400 text-xs">Loading application failures…</div>
   )
@@ -122,7 +128,7 @@ export function ApplicationFailureTable({ failures, loading }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((f, i) => (
+                {paginated.map((f, i) => (
                   <tr
                     key={f.id}
                     onClick={() => setSelected(f)}
@@ -142,6 +148,8 @@ export function ApplicationFailureTable({ failures, loading }: Props) {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+            totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="failure" />
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Apple, ArrowLeft, RefreshCw, Shield, Lock, ShieldCheck, ShieldAlert,
@@ -13,6 +13,8 @@ import type { ApiDevice, LibraryApp } from '../api'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { DeviceLogDrawer } from '../components/mac/DeviceLogDrawer'
 import { useColumnResize } from '../hooks/useColumnResize'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
 import { IruPatchReportPage }         from './IruPatchReportPage'
 import { MacFleetReportsPage }       from './MacFleetReportsPage'
 import { KandjiLibraryItemsTab }     from '../components/kandji/KandjiLibraryItemsTab'
@@ -41,6 +43,7 @@ interface AddedApp {
 
 const LS_DEVICES = 'kandji-added-devices'
 const LS_APPS    = 'kandji-added-apps'
+const PAGE_SIZE  = 50
 
 function loadLS<T>(key: string): T[] {
   try { return JSON.parse(localStorage.getItem(key) ?? '[]') as T[] } catch { return [] }
@@ -703,6 +706,8 @@ function DevicesTab({
     })
   }, [devices, search, activeModel, activeOS, activeCompliance])
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   if (loading) return (
     <div className="flex items-center justify-center py-24 text-slate-400 gap-2">
       <RefreshCw className="h-4 w-4 animate-spin" /><span className="text-sm">Loading devices…</span>
@@ -780,7 +785,7 @@ function DevicesTab({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((d, i) => {
+                {paginated.map((d, i) => {
                   const fv = filevaultOn(d)
                   const isNew = d.id.startsWith('added-')
                   return (
@@ -848,14 +853,13 @@ function DevicesTab({
               </tbody>
             </table>
             <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span className="text-xs text-slate-400">Showing {filtered.length.toLocaleString()} of {devices.length.toLocaleString()} Mac devices</span>
-              <span className="text-slate-300 hidden sm:inline">·</span>
               <span className="text-[0.6rem] text-slate-400 font-medium uppercase tracking-wide hidden sm:inline">Check-in status:</span>
               <span className="flex items-center gap-1 text-[0.6rem] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Today</span>
               <span className="flex items-center gap-1 text-[0.6rem] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-lime-500" />1–2 days</span>
               <span className="flex items-center gap-1 text-[0.6rem] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />3–6 days</span>
               <span className="flex items-center gap-1 text-[0.6rem] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-red-500" />7+ days stale</span>
             </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />
           </div>
         )}
       </div>
@@ -892,6 +896,7 @@ function AppCurrencyTab({ apps }: { apps: LibraryApp[] }) {
   }
 
   const filtered = appFilter === 'all' ? appRows : appRows.filter(r => r.status === appFilter)
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
 
   return (
     <div className="flex flex-col gap-4">
@@ -907,7 +912,8 @@ function AppCurrencyTab({ apps }: { apps: LibraryApp[] }) {
           )
         })}
       </div>
-      <TableWrap title="App & Profile Currency" count={filtered.length} footer="Update Available → click to find download · Failed Install → click for failure reason · Drag edges to resize">
+      <TableWrap title="App & Profile Currency" count={filtered.length} footer="Update Available → click to find download · Failed Install → click for failure reason · Drag edges to resize"
+        pagination={<Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="app" />}>
         {failPopover && (
           <div className="mx-4 mb-3 mt-1 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
             <XCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -936,7 +942,7 @@ function AppCurrencyTab({ apps }: { apps: LibraryApp[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r, i) => {
+              {paginated.map((r, i) => {
                 const isFailed      = r.status === 'failed'
                 const isUpdate      = r.status === 'update_available'
                 const failReason    = FAIL_REASONS[hashCode(r.app.id) % FAIL_REASONS.length]
@@ -1102,7 +1108,7 @@ const FAIL_REASONS = [
 
 // ─── Reports Tab ───────────────────────────────────────────────────────────────
 
-function TableWrap({ title, count, footer, children }: { title: string; count?: number; footer?: string; children: React.ReactNode }) {
+function TableWrap({ title, count, footer, pagination, children }: { title: string; count?: number; footer?: string; pagination?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
@@ -1112,6 +1118,7 @@ function TableWrap({ title, count, footer, children }: { title: string; count?: 
       </div>
       {children}
       {footer && <div className="px-5 py-2 border-t border-slate-100 bg-slate-50 text-[0.6rem] text-slate-400">{footer}</div>}
+      {pagination}
     </div>
   )
 }
@@ -1195,6 +1202,40 @@ function ReportsTab({
       devices: devs,
     })).sort((a, b) => b.total - a.total)
   }, [devices])
+
+  // ── Filtered lists + pagination — one hook call per report table (rules of hooks:
+  // these must live here, not inside the individual xReport() functions below, since
+  // those are invoked conditionally based on activeReport) ──────────────────────────
+
+  const patchFilteredRows = useMemo(
+    () => patchFilter === 'all' ? patchRows : patchRows.filter(r => r.status === patchFilter),
+    [patchRows, patchFilter],
+  )
+  const { page: patchPage, setPage: setPatchPage, totalPages: patchTotalPages, paginated: patchPaginated } = usePagination(patchFilteredRows, PAGE_SIZE)
+
+  const macFilteredRows = useMemo(() => {
+    const catFiltered = macFilter === 'all' ? devices : devices.filter(d => macOSCategory(d.osVersion ?? '') === macFilter)
+    return catFiltered.filter(d => {
+      const days = stalenessDays(d.lastCheckIn)
+      if (checkInFilter === 'today')  return days === 0
+      if (checkInFilter === '1-2d')   return days >= 1 && days <= 2
+      if (checkInFilter === '3-6d')   return days >= 3 && days <= 6
+      if (checkInFilter === '7plus')  return days >= 7
+      return true
+    })
+  }, [devices, macFilter, checkInFilter])
+  const { page: macPage, setPage: setMacPage, totalPages: macTotalPages, paginated: macPaginated } = usePagination(macFilteredRows, PAGE_SIZE)
+
+  const reportAppFilteredRows = useMemo(
+    () => appFilter === 'all' ? appRows : appRows.filter(r => r.status === appFilter),
+    [appRows, appFilter],
+  )
+  const { page: reportAppPage, setPage: setReportAppPage, totalPages: reportAppTotalPages, paginated: reportAppPaginated } = usePagination(reportAppFilteredRows, PAGE_SIZE)
+
+  const staleSortedRows = useMemo(() => [...staleRows].sort((a, b) => b.days - a.days), [staleRows])
+  const { page: stalePage, setPage: setStalePage, totalPages: staleTotalPages, paginated: stalePaginated } = usePagination(staleSortedRows, PAGE_SIZE)
+
+  const { page: bpPage, setPage: setBpPage, totalPages: bpTotalPages, paginated: bpPaginated } = usePagination(blueprintRows, PAGE_SIZE)
 
   // ── CSV export ────────────────────────────────────────────────────────────────
 
@@ -1296,8 +1337,8 @@ function ReportsTab({
                   const showDevDetail = monthDetail?.month === r.month && monthDetail.type === 'devices'
                   const showAppDetail = monthDetail?.month === r.month && monthDetail.type === 'apps'
                   return (
-                    <>
-                      <tr key={r.month} onClick={() => setExpandedRow(p => p === r.month ? null : r.month)}
+                    <Fragment key={r.month}>
+                      <tr onClick={() => setExpandedRow(p => p === r.month ? null : r.month)}
                         className={`border-b border-slate-100 cursor-pointer transition ${isOpen ? 'bg-orange-50' : 'hover:bg-slate-50'}`}>
                         <td className="px-4 py-2.5 font-semibold text-slate-700 overflow-hidden">
                           <span className="flex items-center gap-2 truncate">{r.label}
@@ -1466,7 +1507,7 @@ function ReportsTab({
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>
@@ -1490,7 +1531,7 @@ function ReportsTab({
       security_missing:  patchRows.filter(r => r.status === 'security_missing').length,
       updates_available: patchRows.filter(r => r.status === 'updates_available').length,
     }
-    const filtered = patchFilter === 'all' ? patchRows : patchRows.filter(r => r.status === patchFilter)
+    const filtered = patchFilteredRows
     return (
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1507,7 +1548,8 @@ function ReportsTab({
             )
           })}
         </div>
-        <TableWrap title="Patch Status by Device" count={filtered.length} footer="Click summary cards above to filter · Drag column edges to resize">
+        <TableWrap title="Patch Status by Device" count={filtered.length} footer="Click summary cards above to filter · Drag column edges to resize"
+          pagination={<Pagination page={patchPage} totalPages={patchTotalPages} onPageChange={setPatchPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />}>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
             <table className="text-xs" style={{ tableLayout: 'fixed', width: prT }}>
               <colgroup>{RPT_PATCH_COLS.map(c => <col key={c.key} style={{ width: prW[c.key] }} />)}</colgroup>
@@ -1521,7 +1563,7 @@ function ReportsTab({
                 ))}
               </tr></thead>
               <tbody>
-                {filtered.map((r, i) => (
+                {patchPaginated.map((r, i) => (
                   <tr key={r.device.id} className={`border-b border-slate-100 last:border-0 ${i%2 ? 'bg-slate-50/40' : ''}`}>
                     <td className="px-4 py-2.5 overflow-hidden"><span className="flex items-center gap-1.5"><Apple className="h-3 w-3 text-slate-400 flex-shrink-0" /><span className="font-medium text-slate-700 truncate block">{r.device.deviceName}</span></span></td>
                     <td className="px-4 py-2.5 text-slate-500 truncate overflow-hidden">{r.device.user}</td>
@@ -1549,15 +1591,7 @@ function ReportsTab({
 
   function MacOSVersionsReport() {
     const CAT_ORDER: MacOSCategory[] = ['latest', 'outdated', 'eol']
-    const catFiltered = macFilter === 'all' ? devices : devices.filter(d => macOSCategory(d.osVersion ?? '') === macFilter)
-    const filtered = catFiltered.filter(d => {
-      const days = stalenessDays(d.lastCheckIn)
-      if (checkInFilter === 'today')  return days === 0
-      if (checkInFilter === '1-2d')   return days >= 1 && days <= 2
-      if (checkInFilter === '3-6d')   return days >= 3 && days <= 6
-      if (checkInFilter === '7plus')  return days >= 7
-      return true
-    })
+    const filtered = macFilteredRows
     const CI_OPTS: { key: typeof checkInFilter; label: string; dot: string; active: string }[] = [
       { key: 'all',    label: 'All',       dot: 'bg-slate-400',   active: 'bg-slate-600 text-white border-slate-600'   },
       { key: 'today',  label: 'Today',     dot: 'bg-emerald-500', active: 'bg-emerald-500 text-white border-emerald-500' },
@@ -1588,7 +1622,8 @@ function ReportsTab({
             )
           })}
         </div>
-        <TableWrap title="Devices by macOS Version" count={filtered.length} footer="Click cards above to filter by OS · Use check-in chips to filter by activity · Drag column edges to resize">
+        <TableWrap title="Devices by macOS Version" count={filtered.length} footer="Click cards above to filter by OS · Use check-in chips to filter by activity · Drag column edges to resize"
+          pagination={<Pagination page={macPage} totalPages={macTotalPages} onPageChange={setMacPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />}>
           {/* Check-in filter chips */}
           <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 border-b border-slate-100 bg-white">
             <span className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mr-1">Last Check-in:</span>
@@ -1616,7 +1651,7 @@ function ReportsTab({
                 ))}
               </tr></thead>
               <tbody>
-                {filtered.map((d, i) => {
+                {macPaginated.map((d, i) => {
                   const cat  = macOSCategory(d.osVersion ?? '')
                   const meta = MACOS_CAT_META[cat]
                   const badgeCls = cat === 'latest' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : cat === 'outdated' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-red-50 border-red-200 text-red-700'
@@ -1658,7 +1693,7 @@ function ReportsTab({
       outdated:         appRows.filter(r => r.status === 'outdated').length,
       failed:           appRows.filter(r => r.status === 'failed').length,
     }
-    const filtered = appFilter === 'all' ? appRows : appRows.filter(r => r.status === appFilter)
+    const filtered = reportAppFilteredRows
     return (
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1673,7 +1708,8 @@ function ReportsTab({
             )
           })}
         </div>
-        <TableWrap title="App & Profile Currency" count={filtered.length} footer="Update Available → click to find download · Failed Install → click for failure reason · Drag edges to resize">
+        <TableWrap title="App & Profile Currency" count={filtered.length} footer="Update Available → click to find download · Failed Install → click for failure reason · Drag edges to resize"
+          pagination={<Pagination page={reportAppPage} totalPages={reportAppTotalPages} onPageChange={setReportAppPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="app" />}>
           {/* Failure reason panel — lives outside the scroll container so it doesn't break overflow */}
           {failPopover && (
             <div className="mx-4 mb-3 mt-1 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
@@ -1701,7 +1737,7 @@ function ReportsTab({
                 ))}
               </tr></thead>
               <tbody>
-                {filtered.map((r, i) => {
+                {reportAppPaginated.map((r, i) => {
                   const isFailed  = r.status === 'failed'
                   const isUpdate  = r.status === 'update_available'
                   const failReason = FAIL_REASONS[hashCode(r.app.id) % FAIL_REASONS.length]
@@ -1771,7 +1807,8 @@ function ReportsTab({
             </div>
           ))}
         </div>
-        <TableWrap title={`Devices Inactive ≥ ${staleThresh} days`} count={staleRows.length} footer="Stale devices may need re-enrollment or manual check-in">
+        <TableWrap title={`Devices Inactive ≥ ${staleThresh} days`} count={staleRows.length} footer="Stale devices may need re-enrollment or manual check-in"
+          pagination={staleRows.length > 0 && <Pagination page={stalePage} totalPages={staleTotalPages} onPageChange={setStalePage} totalItems={staleRows.length} pageSize={PAGE_SIZE} itemLabel="device" />}>
           {staleRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
               <CheckCircle className="h-8 w-8 opacity-30" />
@@ -1791,7 +1828,7 @@ function ReportsTab({
                   ))}
                 </tr></thead>
                 <tbody>
-                  {staleRows.sort((a,b) => b.days - a.days).map((r, i) => (
+                  {stalePaginated.map((r, i) => (
                     <tr key={r.device.id} className={`border-b border-slate-100 last:border-0 ${i%2 ? 'bg-slate-50/40' : ''}`}>
                       <td className="px-4 py-2.5 overflow-hidden"><span className="flex items-center gap-1.5"><Apple className="h-3 w-3 text-slate-400" /><span className="font-medium text-slate-700 truncate block">{r.device.deviceName}</span></span></td>
                       <td className="px-4 py-2.5 text-slate-500 truncate overflow-hidden">{r.device.user}</td>
@@ -1838,7 +1875,8 @@ function ReportsTab({
             </div>
           ))}
         </div>
-        <TableWrap title="Blueprint & Policy Breakdown" count={blueprintRows.length} footer="Click a row to see devices under that blueprint · Drag column edges to resize">
+        <TableWrap title="Blueprint & Policy Breakdown" count={blueprintRows.length} footer="Click a row to see devices under that blueprint · Drag column edges to resize"
+          pagination={<Pagination page={bpPage} totalPages={bpTotalPages} onPageChange={setBpPage} totalItems={blueprintRows.length} pageSize={PAGE_SIZE} itemLabel="blueprint" />}>
           <div className="overflow-x-auto">
             <table className="text-xs" style={{ tableLayout: 'fixed', width: brT }}>
               <colgroup>{RPT_BP_COLS.map(c => <col key={c.key} style={{ width: brW[c.key] }} />)}</colgroup>
@@ -1852,13 +1890,13 @@ function ReportsTab({
                 ))}
               </tr></thead>
               <tbody>
-                {blueprintRows.map((r) => {
+                {bpPaginated.map((r) => {
                   const pct     = Math.round(r.compliant / r.total * 100)
                   const isOpen  = expandedRow === r.blueprint
                   const nonComp = r.total - r.compliant
                   return (
-                    <>
-                      <tr key={r.blueprint} onClick={() => setExpandedRow(p => p === r.blueprint ? null : r.blueprint)}
+                    <Fragment key={r.blueprint}>
+                      <tr onClick={() => setExpandedRow(p => p === r.blueprint ? null : r.blueprint)}
                         className={`border-b border-slate-100 cursor-pointer transition ${isOpen ? 'bg-orange-50' : 'hover:bg-slate-50'}`}>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1.5">
@@ -1886,7 +1924,7 @@ function ReportsTab({
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>
@@ -2056,6 +2094,8 @@ function SecurityTab({
     })
   }, [devices, search, riskFilter, gapFilter])
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   function toggleGap(gap: GapFilter) {
     setGapFilter(prev => prev === gap ? null : gap)
     setRiskFilter('All')
@@ -2183,7 +2223,7 @@ function SecurityTab({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((d, i) => {
+                {paginated.map((d, i) => {
                   const fv  = filevaultOn(d)
                   const edr = edrLabel(d)
                   const fw  = firewallEnabled(d)
@@ -2252,9 +2292,7 @@ function SecurityTab({
                 })}
               </tbody>
             </table>
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-              {filtered.length.toLocaleString()} of {devices.length.toLocaleString()} Mac devices
-            </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />
           </div>
         )}
       </div>
@@ -2419,6 +2457,8 @@ function KpiDrillModal({
     )
   }, [devices, search])
 
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
+
   function handleExport() {
     const headers = ['Device', 'User', 'Model', 'macOS', 'FileVault', 'EDR', 'Compliance']
     const rows = filtered.map(d => [
@@ -2479,7 +2519,7 @@ function KpiDrillModal({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((d, i) => (
+                {paginated.map((d, i) => (
                   <tr key={d.id} onClick={() => onSelectDevice(d)}
                     className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-orange-50/60 ${i % 2 !== 0 ? 'bg-slate-50/40' : ''}`}>
                     <td className="px-4 py-2.5">
@@ -2517,9 +2557,12 @@ function KpiDrillModal({
             </table>
           )}
         </div>
+        {filtered.length > 0 && (
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />
+        )}
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
-          <span className="text-[0.65rem] text-slate-400">{filtered.length} of {devices.length} device{devices.length !== 1 ? 's' : ''} · click a row to view details</span>
+          <span className="text-[0.65rem] text-slate-400">click a row to view details</span>
           <button type="button" onClick={onClose}
             className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600 transition shadow-sm">
             Close

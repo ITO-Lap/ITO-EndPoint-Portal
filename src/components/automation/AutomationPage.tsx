@@ -12,6 +12,8 @@ import { useAutomations, useAutomationExecutions } from '../../hooks/useAutomati
 import { api } from '../../api'
 import type { AutomationRule, AutomationCategory, AutomationActionType, AutomationTriggerType, AutomationExecution } from '../../api'
 import { useToast } from '../ui/ToastProvider'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
 import { IntuneHealthTab } from './tabs/IntuneHealthTab'
 import { DeviceLifecycleTab } from './tabs/DeviceLifecycleTab'
 import { ComplianceIntelTab } from './tabs/ComplianceIntelTab'
@@ -20,6 +22,9 @@ import { HelpdeskCopilotTab } from './tabs/HelpdeskCopilotTab'
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
 type ViewTab = 'rules' | 'history' | 'intune-health' | 'device-lifecycle' | 'compliance-intel' | 'copilot'
+
+const RULES_PAGE_SIZE   = 12
+const HISTORY_PAGE_SIZE = 25
 
 const CATEGORIES: { key: AutomationCategory | 'all'; label: string; icon: React.ElementType; color: string }[] = [
   { key: 'all',        label: 'All',          icon: Layers,      color: 'text-slate-500'   },
@@ -431,6 +436,7 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
   const [selectedExec, setSelectedExec] = useState<AutomationExecution | null>(null)
 
   const filtered = statusFilter === 'all' ? executions : executions.filter(e => e.status === statusFilter)
+  const { page, setPage, totalPages, paginated } = usePagination(filtered, HISTORY_PAGE_SIZE)
 
   const hasDetail = (exec: AutomationExecution) =>
     exec.actionsExecuted.some(a => a.detail && Object.keys(a.detail).length > 0)
@@ -478,57 +484,62 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
             <p className="text-[0.65rem] text-slate-400 mt-1">Use "Test Run" on a rule or click "Scan Now" to trigger real executions.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filtered.map(exec => (
-              <div
-                key={exec.id}
-                onClick={() => setSelectedExec(exec)}
-                className="px-5 py-3.5 hover:bg-slate-50 transition cursor-pointer"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex-shrink-0">{statusIcon(exec.status)}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-bold text-slate-900 truncate">{exec.ruleName}</p>
-                      <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[0.55rem] font-bold uppercase ${CATEGORY_BADGE[exec.category]}`}>
-                        {exec.category}
-                      </span>
-                      {exec.deviceName && (
-                        <span className="text-[0.6rem] font-mono text-slate-400 bg-slate-100 rounded px-1.5 py-0.5">{exec.deviceName}</span>
-                      )}
-                      {exec.matchedDeviceCount !== undefined && (
-                        <span className="text-[0.58rem] text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-1.5 py-0.5 flex items-center gap-1">
-                          <Cpu className="h-2 w-2" />{exec.matchedDeviceCount} matched
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-[0.68rem] text-slate-500 truncate max-w-lg">{exec.triggerReason}</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {exec.actionsExecuted.map((a, i) => {
-                        const Icon = ACTION_ICONS[a.type]
-                        const hasRich = a.detail && Object.values(a.detail).some(Boolean)
-                        return (
-                          <span key={i} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${
-                            a.status === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
-                          }`}>
-                            <Icon className="h-2.5 w-2.5" />{a.label}
-                            {hasRich && <Sparkles className="h-2 w-2 text-violet-400 ml-0.5" />}
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Rule Name</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Started</th>
+                    <th className="px-4 py-3 text-left">Result</th>
+                    <th className="px-4 py-3 text-right">Duration</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginated.map(exec => (
+                    <tr
+                      key={exec.id}
+                      onClick={() => setSelectedExec(exec)}
+                      className="hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900">{exec.ruleName}</span>
+                          <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[0.55rem] font-bold uppercase ${CATEGORY_BADGE[exec.category]}`}>
+                            {exec.category}
                           </span>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
-                    <p className="text-[0.62rem] text-slate-400">{relativeTime(exec.triggeredAt)}</p>
-                    <p className="text-[0.58rem] text-slate-300">{exec.durationMs}ms</p>
-                    {hasDetail(exec) && (
-                      <span className="text-[0.55rem] text-violet-600 font-bold">View detail →</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                        </div>
+                        {exec.deviceName && (
+                          <p className="mt-1 text-[0.6rem] font-mono text-slate-400 bg-slate-100 rounded px-1.5 py-0.5 inline-block">{exec.deviceName}</p>
+                        )}
+                        {exec.matchedDeviceCount !== undefined && (
+                          <span className="mt-1 ml-1.5 text-[0.58rem] text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-1.5 py-0.5 inline-flex items-center gap-1">
+                            <Cpu className="h-2 w-2" />{exec.matchedDeviceCount} matched
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 capitalize">
+                          {statusIcon(exec.status)}{exec.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{relativeTime(exec.triggeredAt)}</td>
+                      <td className="px-4 py-3 max-w-sm">
+                        <p className="text-xs text-slate-600 truncate" title={exec.triggerReason}>{exec.triggerReason}</p>
+                        {hasDetail(exec) && (
+                          <span className="text-[0.58rem] text-violet-600 font-bold">View detail →</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500 text-right whitespace-nowrap">{exec.durationMs}ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+              totalItems={filtered.length} pageSize={HISTORY_PAGE_SIZE} itemLabel="execution" />
+          </>
         )}
       </div>
 
@@ -1093,6 +1104,7 @@ export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: s
   const { rules, stats, loading, error, refresh, toggle, remove, test } = useAutomations(
     activeCategory === 'all' ? undefined : activeCategory
   )
+  const { page: rulesPage, setPage: setRulesPage, totalPages: rulesTotalPages, paginated: paginatedRules } = usePagination(rules, RULES_PAGE_SIZE)
 
   const handleToggle = useCallback(async (id: string, name: string) => {
     setTogglingId(id)
@@ -1359,7 +1371,7 @@ export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: s
                   </button>
                 </div>
               )}
-              {!loading && rules.map(rule => (
+              {!loading && paginatedRules.map(rule => (
                 <RuleCard
                   key={rule.id}
                   rule={rule}
@@ -1371,6 +1383,12 @@ export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: s
                   deleting={deletingId === rule.id}
                 />
               ))}
+              {!loading && rules.length > 0 && (
+                <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+                  <Pagination page={rulesPage} totalPages={rulesTotalPages} onPageChange={setRulesPage}
+                    totalItems={rules.length} pageSize={RULES_PAGE_SIZE} itemLabel="rule" />
+                </div>
+              )}
             </div>
 
             {/* Sidebar */}

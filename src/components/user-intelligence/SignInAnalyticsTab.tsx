@@ -1,6 +1,10 @@
-import { Globe, MapPin, Key, ShieldAlert, LogIn } from 'lucide-react'
+import { LogIn } from 'lucide-react'
 import type { UserDetails } from '../../types'
 import { TabLoading, EmptyTabState } from './shared'
+import { usePagination } from '../../hooks/usePagination'
+import { Pagination } from '../ui/Pagination'
+
+const PAGE_SIZE = 20
 
 function last14DayBuckets(signIns: UserDetails['signIns']) {
   const days: { key: string; label: string; success: number; failed: number }[] = []
@@ -78,6 +82,68 @@ function CountryBreakdown({ signIns }: { signIns: UserDetails['signIns'] }) {
   )
 }
 
+function SignInHistoryTable({ signIns }: { signIns: UserDetails['signIns'] }) {
+  const { page, setPage, totalPages, paginated } = usePagination(signIns, PAGE_SIZE)
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-slate-400 uppercase font-bold tracking-wide px-1">Interactive Sign-in History</p>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <tr>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Application</th>
+                <th className="px-4 py-3 text-left">Time</th>
+                <th className="px-4 py-3 text-left">IP Address</th>
+                <th className="px-4 py-3 text-left">Location</th>
+                <th className="px-4 py-3 text-left">MFA Method</th>
+                <th className="px-4 py-3 text-left">Risk Level</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginated.map(s => {
+                const failed = s.status.errorCode !== 0
+                const riskColor = s.riskLevelDuringSignIn === 'high' ? 'text-red-600'
+                  : s.riskLevelDuringSignIn === 'medium' ? 'text-amber-600' : 'text-slate-500'
+                const loc = s.location ? `${s.location.city}, ${s.location.countryOrRegion}` : null
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-2.5 align-top">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-bold whitespace-nowrap ${failed ? 'bg-red-100 border-red-200 text-red-700' : 'bg-emerald-100 border-emerald-200 text-emerald-700'}`}>
+                        {failed ? 'Failed' : 'Success'}
+                      </span>
+                      {failed && s.status.failureReason && (
+                        <p className="text-[0.62rem] text-red-600 mt-1 max-w-[180px]">{s.status.failureReason}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 align-top">
+                      <p className="font-medium text-slate-800 max-w-[180px] truncate" title={s.appDisplayName || undefined}>{s.appDisplayName || '—'}</p>
+                      {s.clientAppUsed && <p className="text-[0.62rem] text-slate-400 mt-0.5">{s.clientAppUsed}</p>}
+                    </td>
+                    <td className="px-4 py-2.5 align-top text-slate-500 text-xs whitespace-nowrap">{new Date(s.createdDateTime).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 align-top text-slate-600 text-xs whitespace-nowrap">{s.ipAddress || '—'}</td>
+                    <td className="px-4 py-2.5 align-top text-slate-600 text-xs max-w-[160px] truncate" title={loc || undefined}>{loc || '—'}</td>
+                    <td className="px-4 py-2.5 align-top text-slate-600 text-xs whitespace-nowrap">{s.mfaDetail?.authMethod || '—'}</td>
+                    <td className="px-4 py-2.5 align-top text-xs font-semibold whitespace-nowrap">
+                      {s.riskLevelDuringSignIn && s.riskLevelDuringSignIn !== 'none'
+                        ? <span className={riskColor}>{s.riskLevelDuringSignIn}</span>
+                        : <span className="text-slate-400 font-normal">—</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+          totalItems={signIns.length} pageSize={PAGE_SIZE} itemLabel="sign-in" />
+      </div>
+    </div>
+  )
+}
+
 export function SignInAnalyticsTab({ details, loading }: { details: UserDetails | null; loading: boolean }) {
   if (loading) return <TabLoading />
   if (!details || details.signIns.length === 0) {
@@ -91,40 +157,7 @@ export function SignInAnalyticsTab({ details, loading }: { details: UserDetails 
         <CountryBreakdown signIns={details.signIns} />
       </div>
 
-      <div className="space-y-2">
-        <p className="text-[0.62rem] text-slate-400 uppercase font-bold tracking-wide px-1">Interactive Sign-in History</p>
-        {details.signIns.map(s => {
-          const failed = s.status.errorCode !== 0
-          const riskColor = s.riskLevelDuringSignIn === 'high' ? 'text-red-600'
-            : s.riskLevelDuringSignIn === 'medium' ? 'text-amber-600' : 'text-slate-400'
-          const loc = s.location ? `${s.location.city}, ${s.location.countryOrRegion}` : null
-          return (
-            <div key={s.id} className={`rounded-xl border px-3 py-3 space-y-1.5 ${failed ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${failed ? 'bg-red-100 border-red-200 text-red-700' : 'bg-emerald-100 border-emerald-200 text-emerald-700'}`}>
-                    {failed ? 'Failed' : 'Success'}
-                  </span>
-                  <span className="text-[0.72rem] font-semibold text-slate-800 truncate max-w-[160px]">{s.appDisplayName || '—'}</span>
-                </div>
-                <span className="text-[0.62rem] text-slate-400 flex-shrink-0">{new Date(s.createdDateTime).toLocaleString()}</span>
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {s.ipAddress && <span className="text-[0.65rem] text-slate-500 flex items-center gap-1"><Globe className="h-2.5 w-2.5" />{s.ipAddress}</span>}
-                {loc && <span className="text-[0.65rem] text-slate-500 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />{loc}</span>}
-                {s.clientAppUsed && <span className="text-[0.65rem] text-slate-500">{s.clientAppUsed}</span>}
-                {s.mfaDetail?.authMethod && <span className="text-[0.65rem] text-lime-600 flex items-center gap-1"><Key className="h-2.5 w-2.5" />{s.mfaDetail.authMethod}</span>}
-                {s.riskLevelDuringSignIn && s.riskLevelDuringSignIn !== 'none' && (
-                  <span className={`text-[0.65rem] font-semibold flex items-center gap-1 ${riskColor}`}><ShieldAlert className="h-2.5 w-2.5" />Risk: {s.riskLevelDuringSignIn}</span>
-                )}
-              </div>
-              {failed && s.status.failureReason && (
-                <p className="text-[0.62rem] text-red-600">{s.status.failureReason}</p>
-              )}
-            </div>
-          )
-        })}
-      </div>
+      <SignInHistoryTable signIns={details.signIns} />
     </div>
   )
 }

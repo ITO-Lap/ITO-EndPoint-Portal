@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import {
   Terminal,
   Play,
@@ -30,6 +30,8 @@ import {
 } from 'lucide-react'
 import { api } from '../api'
 import type { Script, ScriptExecution, ExecuteScriptInput, CreateScriptInput } from '../api'
+import { usePagination } from '../hooks/usePagination'
+import { Pagination } from '../components/ui/Pagination'
 
 // ── OS + Type badge helpers ───────────────────────────────────────────────────
 
@@ -579,6 +581,8 @@ function ScriptDetailPanel({ script, onExecuted, onEdit, onDelete, onDuplicate }
 
 // ── History table ─────────────────────────────────────────────────────────────
 
+const HISTORY_PAGE_SIZE = 25
+
 function HistoryTab() {
   // loadedFor tracks which filter value was last fetched — used to derive loading state
   // without ever calling setState synchronously inside an effect body.
@@ -600,10 +604,19 @@ function HistoryTab() {
     return () => { cancelled = true }
   }, [statusFilter, refreshKey])
 
+  const { page, setPage, totalPages, paginated } = usePagination(executions, HISTORY_PAGE_SIZE)
+
   const statuses = ['', 'completed', 'failed', 'running', 'queued', 'timeout', 'cancelled', 'pending_approval']
 
   function fmt(iso: string) {
     return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
+  function fmtResult(exec: ScriptExecution) {
+    const parts: string[] = []
+    if (exec.exitCode !== undefined) parts.push(`exit ${exec.exitCode}`)
+    if (exec.runtimeMs !== undefined) parts.push(`${(exec.runtimeMs / 1000).toFixed(1)}s`)
+    return parts.length ? parts.join(' · ') : '—'
   }
 
   return (
@@ -641,54 +654,71 @@ function HistoryTab() {
             <p className="text-sm">No executions found</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {executions.map(exec => {
-              const isOpen = expanded === exec.id
-              return (
-                <div key={exec.id}>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isOpen ? null : exec.id)}
-                    className="w-full text-left px-4 py-3 hover:bg-slate-50 transition grid grid-cols-[1fr_140px_100px_90px] gap-4 items-center"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-800 truncate">{exec.scriptName}</p>
-                      <p className="text-xs text-slate-500 truncate">on {exec.deviceName} · {exec.managementSource}</p>
-                    </div>
-                    <span className="text-xs text-slate-500">{fmt(exec.startedAt)}</span>
-                    <StatusBadge status={exec.status} />
-                    <span className="text-xs text-slate-500 text-right">
-                      {exec.runtimeMs !== undefined ? `${(exec.runtimeMs / 1000).toFixed(1)}s` : '—'}
-                    </span>
-                  </button>
-                  {isOpen && (
-                    <div className="px-4 pb-4 bg-slate-50">
-                      <div className="grid grid-cols-2 gap-3 mb-3 text-xs text-slate-600">
-                        <div><span className="font-medium">Executed by:</span> {exec.executedBy}</div>
-                        {exec.approvedBy && <div><span className="font-medium">Approved by:</span> {exec.approvedBy}</div>}
-                        {exec.exitCode !== undefined && <div><span className="font-medium">Exit code:</span> {exec.exitCode}</div>}
-                        {exec.completedAt && <div><span className="font-medium">Completed:</span> {fmt(exec.completedAt)}</div>}
-                        {exec.parameters && Object.keys(exec.parameters).length > 0 && (
-                          <div className="col-span-2">
-                            <span className="font-medium">Parameters:</span>{' '}
-                            {Object.entries(exec.parameters).map(([k, v]) => `${k}=${v}`).join(', ')}
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Script Name</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Target Device</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-36">Status</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-40">Started</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-32">Result</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginated.map(exec => {
+                const isOpen = expanded === exec.id
+                return (
+                  <Fragment key={exec.id}>
+                    <tr
+                      onClick={() => setExpanded(isOpen ? null : exec.id)}
+                      className="cursor-pointer hover:bg-slate-50 transition"
+                    >
+                      <td className="px-4 py-2.5 font-medium text-slate-800 truncate max-w-[220px]" title={exec.scriptName}>
+                        {exec.scriptName}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600 text-xs truncate max-w-[220px]" title={`${exec.deviceName} · ${exec.managementSource}`}>
+                        {exec.deviceName} <span className="text-slate-400">· {exec.managementSource}</span>
+                      </td>
+                      <td className="px-4 py-2.5"><StatusBadge status={exec.status} /></td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{fmt(exec.startedAt)}</td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500 font-mono whitespace-nowrap">{fmtResult(exec)}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="bg-slate-50">
+                        <td colSpan={5} className="px-4 pb-4 pt-3">
+                          <div className="grid grid-cols-2 gap-3 mb-3 text-xs text-slate-600">
+                            <div><span className="font-medium">Executed by:</span> {exec.executedBy}</div>
+                            {exec.approvedBy && <div><span className="font-medium">Approved by:</span> {exec.approvedBy}</div>}
+                            {exec.exitCode !== undefined && <div><span className="font-medium">Exit code:</span> {exec.exitCode}</div>}
+                            {exec.completedAt && <div><span className="font-medium">Completed:</span> {fmt(exec.completedAt)}</div>}
+                            {exec.parameters && Object.keys(exec.parameters).length > 0 && (
+                              <div className="col-span-2">
+                                <span className="font-medium">Parameters:</span>{' '}
+                                {Object.entries(exec.parameters).map(([k, v]) => `${k}=${v}`).join(', ')}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      {exec.stdout && (
-                        <pre className="bg-slate-900 rounded-lg px-4 py-3 text-xs font-mono text-emerald-300 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">{exec.stdout}</pre>
-                      )}
-                      {exec.stderr && (
-                        <pre className="mt-2 bg-slate-900 rounded-lg px-4 py-3 text-xs font-mono text-red-300 whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">{exec.stderr}</pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                          {exec.stdout && (
+                            <pre className="bg-slate-900 rounded-lg px-4 py-3 text-xs font-mono text-emerald-300 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">{exec.stdout}</pre>
+                          )}
+                          {exec.stderr && (
+                            <pre className="mt-2 bg-slate-900 rounded-lg px-4 py-3 text-xs font-mono text-red-300 whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">{exec.stderr}</pre>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
         )}
       </div>
+
+      {!loading && executions.length > 0 && (
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage}
+          totalItems={executions.length} pageSize={HISTORY_PAGE_SIZE} itemLabel="execution" />
+      )}
     </div>
   )
 }
@@ -956,6 +986,8 @@ function ScriptFormModal({ onClose, onSaved, editScript, forceCreate }: {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const LIBRARY_PAGE_SIZE = 12
+
 export function RemoteScriptsPage() {
   const [tab, setTab] = useState<'library' | 'history'>('library')
   const [scripts, setScripts] = useState<Script[]>([])
@@ -1033,6 +1065,9 @@ export function RemoteScriptsPage() {
     setRecentExec(exec)
     setScripts(prev => prev.map(s => s.id === exec.scriptId ? { ...s, useCount: s.useCount + 1 } : s))
   }
+
+  const { page: libraryPage, setPage: setLibraryPage, totalPages: libraryTotalPages, paginated: libraryScripts } =
+    usePagination(scripts, LIBRARY_PAGE_SIZE)
 
   const osList = ['', 'Windows', 'macOS', 'Linux', 'Cross-platform']
   const typeList = ['', 'PowerShell', 'Bash', 'Batch', 'Python']
@@ -1147,7 +1182,7 @@ export function RemoteScriptsPage() {
                   <p className="text-sm">No scripts found</p>
                 </div>
               ) : (
-                scripts.map(s => (
+                libraryScripts.map(s => (
                   <ScriptCard
                     key={s.id}
                     script={s}
@@ -1161,10 +1196,15 @@ export function RemoteScriptsPage() {
               )}
             </div>
 
-            {/* Footer count */}
-            <div className="px-4 py-2.5 border-t border-slate-100 text-xs text-slate-400">
-              {scripts.length} script{scripts.length !== 1 ? 's' : ''}
-            </div>
+            {/* Footer pagination */}
+            <Pagination
+              page={libraryPage}
+              totalPages={libraryTotalPages}
+              onPageChange={setLibraryPage}
+              totalItems={scripts.length}
+              pageSize={LIBRARY_PAGE_SIZE}
+              itemLabel="script"
+            />
           </div>
 
           {/* Right: detail + execution */}
