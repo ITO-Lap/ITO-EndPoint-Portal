@@ -22,6 +22,10 @@ server/node_modules
 !.env.example
 !server/.env.example
 
+# Certificates / private keys — never commit real secrets
+*.pem
+*.key
+
 # Runtime-persisted integration credentials (written by the backend on save)
 server/.integration-credentials.json
 
