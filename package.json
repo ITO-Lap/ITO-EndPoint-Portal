@@ -11,7 +11,8 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "npm --prefix server run build",
-    "start": "node server/dist/index.js",
+    "heroku-postbuild": "npm run build",
+    "start": "npm run build && node server/dist/index.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
