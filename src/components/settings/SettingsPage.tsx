@@ -414,20 +414,22 @@ const INTEG_DEFS: IntegDef[] = [
     iconColor: 'text-orange-600',
     category: 'MDM',
     categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
-    description: 'On-premise endpoint & patch management for legacy Windows and Linux systems',
-    docsHint: 'Admin Console → Admin → API Configuration → Generate API Key. Server must be reachable from this host.',
+    description: 'ManageEngine MDM On-Demand (Endpoint Central Cloud) — cross-platform device inventory, policies, apps',
+    docsHint: 'Zoho API Console → Self Client → generate a refresh token with MDMOnDemand.MDMInventory.READ scope.',
     defaultInterval: 'realtime',
     defaultDevices: '640',
     defaultLastSync: '15 min ago',
     fields: [
-      { key: 'apiKey',    label: 'API Key',    hint: 'Admin → API Configuration',  placeholder: 'Enter ManageEngine API key',  secret: true  },
-      { key: 'serverUrl', label: 'Server URL', hint: 'On-prem server base URL',    placeholder: 'https://me.yourorg.internal', secret: false },
-      { key: 'port',      label: 'Port',       hint: 'Default HTTPS port is 8443', placeholder: '8443',                       secret: false },
+      { key: 'clientId',     label: 'Client ID',     hint: 'Zoho API Console self-client',      placeholder: '1000.XXXXXXXXXX', secret: false },
+      { key: 'clientSecret', label: 'Client Secret',  hint: 'Zoho API Console self-client',      placeholder: 'Enter client secret', secret: true },
+      { key: 'refreshToken', label: 'Refresh Token',  hint: 'Generated with MDMInventory.READ scope', placeholder: '1000.XXXX...', secret: true },
+      { key: 'apiDomain',    label: 'API Domain',     hint: 'MDM data-center base URL',          placeholder: 'https://mdm.manageengine.com', secret: false },
     ],
     defaults: {
-      apiKey:    '',
-      serverUrl: '',
-      port:      '8443',
+      clientId:     '',
+      clientSecret: '',
+      refreshToken: '',
+      apiDomain:    'https://mdm.manageengine.com',
     },
   },
   {
@@ -571,7 +573,7 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
     case 'intune':       return f['endpoint']?.value || 'zinnia.onmicrosoft.com'
     case 'entra':        return `Tenant: ${(f['tenantId']?.value || '').slice(0, 8) || 'not set'}…`
     case 'kandji':       return `${f['subdomain']?.value || 'zinnia'}.kandji.io`
-    case 'manageengine': return f['serverUrl']?.value || 'me.zinnia.internal'
+    case 'manageengine': return f['apiDomain']?.value || 'mdm.manageengine.com'
     case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : 'auditlogs:read · channels:read'
     case 'openai':       return `Model: ${f['model']?.value || 'gpt-4o-mini'}${f['orgId']?.value ? ' · ' + f['orgId'].value : ''}`
     default:             return ''

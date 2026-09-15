@@ -65,6 +65,8 @@ interface GraphDevice {
   managedDeviceOwnerType: string | null
   userDisplayName: string | null
   notes: string | null
+  azureADDeviceId: string | null
+  deviceCategoryDisplayName: string | null
 }
 
 function fmtBytes(bytes: number | null | undefined, suffix: string): string | undefined {
@@ -147,6 +149,8 @@ function mapGraphDevice(d: GraphDevice): Device {
     enrollmentType:  mapJoinType(d.joinType),
     ownership:       d.managedDeviceOwnerType === 'personal' ? 'Personal' : 'Corporate',
     isAadRegistered: d.azureADRegistered ?? true,
+    ...(d.azureADDeviceId          ? { azureAdDeviceId: d.azureADDeviceId }          : {}),
+    ...(d.deviceCategoryDisplayName ? { deviceCategory: d.deviceCategoryDisplayName } : {}),
 
     // OS
     ...(d.osBuildNumber ? { osBuildNumber: d.osBuildNumber } : {}),

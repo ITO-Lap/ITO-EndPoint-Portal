@@ -119,15 +119,15 @@ interface GraphRiskyUser {
 // ── Live Graph fetchers (each logs + returns [] on error) ─────────────────────
 
 async function fetchDevices(token: string): Promise<GraphDevice[]> {
-  const fields = [
-    'id','deviceName','userPrincipalName','operatingSystem','osVersion',
-    'complianceState','lastSyncDateTime','joinType','serialNumber',
-    'manufacturer','model','isEncrypted','managedDeviceOwnerType','isManaged',
-  ].join(',')
   try {
+    // No $select — 'joinType' is not a selectable property on managedDevice
+    // in every tenant (confirmed 400: "Could not find a property named
+    // 'joinType' on type 'microsoft.graph.managedDevice'"), and Graph
+    // rejects the whole request rather than dropping the bad field. Same
+    // fix already applied in services/intune.ts for this reason.
     const devices = await gGetAll<GraphDevice>(
       token,
-      `/deviceManagement/managedDevices?$select=${fields}&$top=999`,
+      `/deviceManagement/managedDevices?$top=999`,
     )
     console.log(`[EntraIntelligence] ✓ Fetched ${devices.length} managed devices from Intune`)
     return devices
@@ -278,7 +278,7 @@ export async function getEntraUsers(params?: { riskLevel?: string }) {
       fetchRiskyUsers(token),
     ])
 
-    const riskyMap = new Map(riskyUsers.map(r => [r.userPrincipalName.toLowerCase(), r]))
+    const riskyMap = new Map(riskyUsers.map(r => [(r.userPrincipalName ?? '').toLowerCase(), r]))
     const rawUsers = entraData?.users ?? []
 
     const mapped = rawUsers.map(u => {
@@ -328,6 +328,147 @@ export async function getEntraGroups() {
   } catch (e) {
     console.warn('[EntraIntelligence] groups fetch failed:', (e as Error).message)
     return mockEntraGroups
+  }
+}
+
+// ── Group typeahead search (matches any word in the display name, not just prefix) ──
+
+export interface EntraGroupSuggestion { id: string; displayName: string }
+
+export async function searchEntraGroups(query: string): Promise<EntraGroupSuggestion[]> {
+  const q = query.trim()
+  if (!q) return []
+
+  if (!isConfigured()) {
+    const lc = q.toLowerCase()
+    return mockEntraGroups
+      .filter(g => g.displayName.toLowerCase().includes(lc))
+      .slice(0, 15)
+      .map(g => ({ id: g.id, displayName: g.displayName }))
+  }
+
+  try {
+    const token = await getToken()
+    const escaped = q.replace(/"/g, '\\"')
+    // $search on displayName matches a leading word anywhere in the string (e.g. "Sales" → "All Sales Laptops"),
+    // unlike $filter startswith which only matches from position 0 — requires the ConsistencyLevel header.
+    const qs = new URLSearchParams({
+      '$search': `"displayName:${escaped}"`,
+      '$select': 'id,displayName',
+      '$top':    '15',
+    })
+    const res = await fetch(`https://graph.microsoft.com/v1.0/groups?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as { value: EntraGroupSuggestion[] }
+    return data.value ?? []
+  } catch (e) {
+    console.warn('[EntraIntelligence] group search failed:', (e as Error).message)
+    return []
+  }
+}
+
+// ── Group Member Report (resolve by display name, branch by member type) ──────
+
+export interface EntraGroupReportRow {
+  memberType: 'user' | 'device'
+  displayName: string
+  userPrincipalName: string
+  operatingSystem?: string
+  flagged?: boolean
+  flagReason?: string
+}
+
+export interface EntraGroupReportResult {
+  group: { id: string; displayName: string }
+  memberTypes: ('user' | 'device')[]
+  rows: EntraGroupReportRow[]
+  totalMembers: number
+  flaggedCount: number
+}
+
+interface GraphGroupMember {
+  '@odata.type'?: string
+  id: string
+  displayName: string
+  userPrincipalName?: string
+  operatingSystem?: string
+}
+
+async function resolveDeviceOwnerUpn(token: string, deviceId: string): Promise<string | null> {
+  for (const endpoint of ['registeredOwners', 'registeredUsers']) {
+    try {
+      const results = await gGetAll<{ userPrincipalName?: string }>(
+        token, `/devices/${deviceId}/${endpoint}?$select=userPrincipalName`,
+      )
+      const upn = results.find(r => r.userPrincipalName)?.userPrincipalName
+      if (upn) return upn
+    } catch (e) {
+      console.warn(`[EntraIntelligence] ${endpoint} lookup failed for device ${deviceId}:`, (e as Error).message)
+    }
+  }
+  return null
+}
+
+export async function getEntraGroupMemberReport(displayName: string, osFilter?: string): Promise<EntraGroupReportResult> {
+  if (!isConfigured()) throw new Error('Entra ID is not configured — add Entra credentials in Settings to run group reports')
+  const trimmed = displayName.trim()
+  if (!trimmed) throw new Error('Group display name is required')
+
+  const token = await getToken()
+
+  const filter = `displayName eq '${trimmed.replace(/'/g, "''")}'`
+  const qs = new URLSearchParams({ '$filter': filter, '$select': 'id,displayName' })
+  const matches = await gGetAll<{ id: string; displayName: string }>(token, `/groups?${qs.toString()}`)
+  const group = matches[0]
+  if (!group) throw new Error(`No Entra ID group found with display name "${trimmed}"`)
+
+  const members = await gGetAll<GraphGroupMember>(
+    token,
+    `/groups/${group.id}/members?$select=id,displayName,userPrincipalName,operatingSystem`,
+  )
+
+  const userRows: EntraGroupReportRow[] = []
+  const deviceMembers: GraphGroupMember[] = []
+
+  for (const m of members) {
+    const odType = m['@odata.type'] ?? ''
+    if (odType.includes('.user')) {
+      userRows.push({ memberType: 'user', displayName: m.displayName, userPrincipalName: m.userPrincipalName ?? '' })
+    } else if (odType.includes('.device')) {
+      deviceMembers.push(m)
+    }
+    // Other member types (nested groups, service principals) are not identity rows — skipped
+  }
+
+  const deviceRows: EntraGroupReportRow[] = await Promise.all(deviceMembers.map(async d => {
+    const upn = await resolveDeviceOwnerUpn(token, d.id)
+    return {
+      memberType: 'device' as const,
+      displayName: d.displayName,
+      userPrincipalName: upn ?? '',
+      operatingSystem: d.operatingSystem ?? '',
+      flagged: !upn,
+      ...(!upn && { flagReason: 'No registered owner or user found — may need Intune "All devices" report instead' }),
+    }
+  }))
+
+  const allRows = [...userRows, ...deviceRows]
+  const memberTypes: ('user' | 'device')[] = []
+  if (userRows.length)   memberTypes.push('user')
+  if (deviceRows.length) memberTypes.push('device')
+
+  const rows = (!osFilter || osFilter === 'all')
+    ? allRows
+    : allRows.filter(r => r.memberType === 'user' || mapOs(r.operatingSystem ?? '').toLowerCase() === osFilter.toLowerCase())
+
+  return {
+    group,
+    memberTypes,
+    rows,
+    totalMembers: allRows.length,
+    flaggedCount: allRows.filter(r => r.flagged).length,
   }
 }
 

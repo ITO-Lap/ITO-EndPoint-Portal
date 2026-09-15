@@ -96,7 +96,8 @@ function runDiagnostics(device: ApiDevice): DiagResult[] {
   let diskStatus: DiagStatus = 'Healthy', diskSeverity: DiagSeverity = 'None', diskConf = 92
   let diskIssue = 'Storage within acceptable range, encryption active'
   let diskCause = 'No anomalies detected', diskAction = 'No action required'
-  if (encryption.includes('off') || encryption.includes('pending') || encryption.includes('disabled')) {
+  const encryptionOk = /encrypt|on|luks|enabled/i.test(encryption) && !/off|pending|not |disabled/i.test(encryption)
+  if (!encryptionOk) {
     diskStatus = 'Critical'; diskSeverity = 'High'; diskConf = 97
     diskIssue = 'Disk encryption is NOT enabled'
     diskCause = `Encryption reported as "${device.encryptionStatus}"`

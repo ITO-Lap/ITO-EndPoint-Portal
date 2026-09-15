@@ -20,7 +20,7 @@ import {
 } from '../store/integrationStore.js'
 import { getIntuneDevices, diagnoseIntune } from '../services/intune.js'
 import { getKandjiDevices, invalidateKandjiCache, getKandjiLibraryApps } from '../services/kandji.js'
-import { getManageEngineDevices } from '../services/manageEngine.js'
+import { getManageEngineDevices, getManageEngineAppInventory } from '../services/manageEngine.js'
 import { getEntraData, invalidateEntraTokenCache } from '../services/entra.js'
 import { testSlackConnection } from '../services/slack.js'
 
@@ -39,9 +39,10 @@ const credentialSchemas: Record<string, z.ZodObject<any>> = {
     subdomain: z.string().min(1, 'subdomain required'),
   }),
   manageengine: z.object({
-    apiKey:    z.string().min(1, 'apiKey required'),
-    serverUrl: z.string().url('serverUrl must be a valid URL'),
-    port:      z.string().regex(/^\d+$/).optional(),
+    clientId:     z.string().min(1, 'clientId required'),
+    clientSecret: z.string().min(1, 'clientSecret required'),
+    refreshToken: z.string().min(1, 'refreshToken required'),
+    apiDomain:    z.string().url('apiDomain must be a valid URL'),
   }),
   entra: z.object({
     tenantId:     z.string().min(1, 'tenantId required'),
@@ -96,9 +97,10 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
       break
     case 'manageengine':
       setManageEngineConfig({
-        apiKey:    f['apiKey']    as string,
-        serverUrl: f['serverUrl'] as string,
-        ...(f['port'] ? { port: f['port'] as string } : {}),
+        clientId:     f['clientId']     as string,
+        clientSecret: f['clientSecret'] as string,
+        refreshToken: f['refreshToken'] as string,
+        apiDomain:    f['apiDomain']    as string,
       })
       break
     case 'entra':
@@ -132,6 +134,13 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
 router.get('/intune/debug', asyncHandler(async (_req, res) => {
   const result = await diagnoseIntune()
   res.json({ success: true, data: result })
+}))
+
+// GET /api/integrations/manageengine/apps — fleet-wide installed-app inventory,
+// separated into Windows/macOS buckets by device platform
+router.get('/manageengine/apps', asyncHandler(async (_req, res) => {
+  const apps = await getManageEngineAppInventory()
+  res.json({ success: true, data: apps })
 }))
 
 // GET /api/integrations/kandji/apps — Kandji Library items with blueprint associations

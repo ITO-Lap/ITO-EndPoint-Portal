@@ -24,7 +24,6 @@ import { KandjiMacPage } from './pages/KandjiMacPage'
 import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
 import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
 import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
-import { IntuneDeviceReportPage } from './pages/IntuneDeviceReportPage'
 import { WindowsDevicesPage } from './pages/WindowsDevicesPage'
 import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
 import { AutomationPage } from './components/automation/AutomationPage'
@@ -39,6 +38,8 @@ import { ReportBuilderPage } from './pages/ReportBuilderPage'
 import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { MultiTenantPage } from './pages/MultiTenantPage'
 import { AuditLogPage } from './pages/AuditLogPage'
+import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
+import { SecurityPoliciesPage } from './pages/SecurityPoliciesPage'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useActivity } from './hooks/useActivity'
@@ -338,9 +339,7 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                     }}
                   />
                 ) : activePage === 'Intune Devices' ? (
-                  <IntuneDevicesPage onBack={() => setActivePage('Dashboard')} />
-                ) : activePage === 'Intune Device Report' ? (
-                  <IntuneDeviceReportPage onBack={() => setActivePage('Dashboard')} />
+                  <IntuneDevicesPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Windows Devices' ? (
                   <WindowsDevicesPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'ManageEngine Devices' ? (
@@ -400,6 +399,10 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                   <SecurityPosturePage />
                 ) : activePage === 'Vulnerabilities' ? (
                   <VulnerabilitiesPage />
+                ) : activePage === 'Role Activity Audit' ? (
+                  <RoleActivityAuditPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Security Policies' ? (
+                  <SecurityPoliciesPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Automation' ? (
                   <AutomationPage viewerRole={viewerRole} />
                 ) : activePage === 'EDR' ? (

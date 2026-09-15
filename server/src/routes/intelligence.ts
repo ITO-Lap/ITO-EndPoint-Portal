@@ -30,6 +30,28 @@ function getOpenAI(): OpenAI | null {
   return key ? new OpenAI({ apiKey: key }) : null
 }
 
+// ─── Month bucketing (UTC-safe, since Graph timestamps are UTC instants) ─────
+interface MonthBucket { key: string; label: string; year: number; month: number }
+
+function getLastTwoMonths(now: Date): MonthBucket[] {
+  return [0, 1].map(offset => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1))
+    return {
+      key:   `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+      label: d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+      year:  d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+    }
+  })
+}
+
+function isInMonthUTC(dateStr: string | null | undefined, bucket: MonthBucket): boolean {
+  if (!dateStr) return false
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return false
+  return d.getUTCFullYear() === bucket.year && (d.getUTCMonth() + 1) === bucket.month
+}
+
 // ─── GET /api/intelligence/devices ───────────────────────────────────────────
 router.get('/devices', async (_req, res, next) => {
   try {
@@ -340,35 +362,18 @@ router.get('/device-report', async (_req, res, next) => {
     ])
 
     const now = new Date()
-    const lastTwoMonths = [1, 2].map(offset => {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
-      return {
-        key:   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
-        year:  d.getFullYear(),
-        month: d.getMonth() + 1,
-      }
-    })
+    const lastTwoMonths = getLastTwoMonths(now)
 
     const newDevicesByMonth = lastTwoMonths.map(m => ({
       ...m,
-      count: devices.filter(d => {
-        const e = new Date(d.enrolledDateTime)
-        return e.getFullYear() === m.year && (e.getMonth() + 1) === m.month
-      }).length,
+      count: devices.filter(d => isInMonthUTC(d.enrolledDateTime, m)).length,
     }))
 
     const appsByMonth = lastTwoMonths.map(m => {
-      const added = apps.filter(a => {
-        const c = new Date(a.createdDateTime)
-        return c.getFullYear() === m.year && (c.getMonth() + 1) === m.month
-      }).length
-      const updated = apps.filter(a => {
-        const mod = new Date(a.lastModifiedDateTime)
-        const cre = new Date(a.createdDateTime)
-        return mod.getFullYear() === m.year && (mod.getMonth() + 1) === m.month &&
-          !(cre.getFullYear() === m.year && (cre.getMonth() + 1) === m.month)
-      }).length
+      const added = apps.filter(a => isInMonthUTC(a.createdDateTime, m)).length
+      const updated = apps.filter(a =>
+        isInMonthUTC(a.lastModifiedDateTime, m) && !isInMonthUTC(a.createdDateTime, m)
+      ).length
       return { ...m, added, updated, total: added + updated }
     })
 
@@ -407,15 +412,7 @@ router.post('/device-report/export', async (_req, res, next) => {
     ])
 
     const now = new Date()
-    const lastTwoMonths = [1, 2].map(offset => {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
-      return {
-        key:   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
-        year:  d.getFullYear(),
-        month: d.getMonth() + 1,
-      }
-    })
+    const lastTwoMonths = getLastTwoMonths(now)
 
     const { default: ExcelJS } = await import('exceljs')
     const wb = new ExcelJS.Workbook()
@@ -436,18 +433,13 @@ router.post('/device-report/export', async (_req, res, next) => {
 
     const newByMonth = lastTwoMonths.map(m => ({
       ...m,
-      count: devices.filter(d => {
-        const e = new Date(d.enrolledDateTime)
-        return e.getFullYear() === m.year && (e.getMonth() + 1) === m.month
-      }).length,
+      count: devices.filter(d => isInMonthUTC(d.enrolledDateTime, m)).length,
     }))
     const appsByMonth = lastTwoMonths.map(m => {
-      const added   = apps.filter(a => { const c = new Date(a.createdDateTime); return c.getFullYear() === m.year && (c.getMonth() + 1) === m.month }).length
-      const updated = apps.filter(a => {
-        const mod = new Date(a.lastModifiedDateTime), cre = new Date(a.createdDateTime)
-        return mod.getFullYear() === m.year && (mod.getMonth() + 1) === m.month &&
-          !(cre.getFullYear() === m.year && (cre.getMonth() + 1) === m.month)
-      }).length
+      const added   = apps.filter(a => isInMonthUTC(a.createdDateTime, m)).length
+      const updated = apps.filter(a =>
+        isInMonthUTC(a.lastModifiedDateTime, m) && !isInMonthUTC(a.createdDateTime, m)
+      ).length
       return { ...m, added, updated }
     })
 
@@ -531,16 +523,13 @@ router.post('/device-report/export', async (_req, res, next) => {
     enrollSheet.getRow(1).height = 18
 
     for (const m of lastTwoMonths) {
-      const mDevices = devices.filter(d => {
-        const e = new Date(d.enrolledDateTime)
-        return e.getFullYear() === m.year && (e.getMonth() + 1) === m.month
-      })
+      const mDevices = devices.filter(d => isInMonthUTC(d.enrolledDateTime, m))
       for (const d of mDevices) {
         enrollSheet.addRow({
           month:           m.label,
           deviceName:      d.deviceName,
           ownerEmail:      d.userPrincipalName,
-          ownerType:       d.managedDeviceOwnerType === 'company' ? 'Company' : 'Personal',
+          ownerType:       d.managedDeviceOwnerType === 'company' ? 'Company' : d.managedDeviceOwnerType === 'personal' ? 'Personal' : d.managedDeviceOwnerType,
           operatingSystem: d.operatingSystem,
           compliance:      d.complianceState,
           enrolledDate:    d.enrolledDateTime ? new Date(d.enrolledDateTime).toLocaleDateString('en-US') : '',

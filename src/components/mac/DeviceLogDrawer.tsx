@@ -597,7 +597,7 @@ export function DeviceLogDrawer({ device, onClose }: DeviceLogDrawerProps) {
                       eventFilter === et ? 'bg-slate-700 text-slate-200' : 'text-slate-600 hover:text-slate-400'
                     }`}>
                     <Icon className="h-2.5 w-2.5" />
-                    {et === 'all' ? 'All Types' : EVENT_FILTER_LABELS[et]}
+                    {et === 'all' ? 'All Types' : et === 'kandji' ? (device.managementSource === 'ManageEngine' ? 'ManageEngine' : 'Kandji') : EVENT_FILTER_LABELS[et]}
                   </button>
                 )
               })}

@@ -6,7 +6,7 @@
 
 import { Router } from 'express'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { getKandjiDevices } from '../services/kandji.js'
+import { fetchAllDevices } from './devices.js'
 import { isOpenAIConfigured } from '../services/openai.js'
 import type { Device } from '../types.js'
 import OpenAI from 'openai'
@@ -49,7 +49,15 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   const fvEnabled = enc.includes('on') || enc.includes('enabled')
   const compliant = device.complianceState === 'Compliant'
   const hasEdr    = (device.antivirusStatus ?? '').toLowerCase().includes('crowd')
+  const fwTracked = device.firewallStatus !== undefined && device.firewallStatus !== 'Not Applicable'
   const fwEnabled = device.firewallStatus === 'Enabled'
+
+  // Agent identity mirrors the device's real management source rather than
+  // assuming Kandji — this drawer is reused for any macOS device regardless
+  // of MDM (Kandji, ManageEngine, etc).
+  const agent = device.managementSource === 'ManageEngine'
+    ? { name: 'ManageEngine', subsystem: 'com.manageengine.uems_agent', process: 'me_agent' }
+    : { name: 'Kandji', subsystem: 'io.kandji.agent', process: 'kandji_agent' }
 
   const logs: MacLogEntry[] = []
   let offset = 0 // minutes ago
@@ -104,19 +112,19 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   }
   offset += 2
 
-  // ── Kandji agent ──────────────────────────────────────────────────────────
+  // ── MDM agent sync ────────────────────────────────────────────────────────
   logs.push({
     id: uid(), timestamp: ts(offset), level: 'info',
-    subsystem: 'io.kandji.agent', category: 'sync', process: 'kandji_agent', pid: rndPid(),
-    message: `Kandji agent sync started — blueprint: ${device.appliedPolicies?.[0] ?? 'Default'}`,
+    subsystem: agent.subsystem, category: 'sync', process: agent.process, pid: rndPid(),
+    message: `${agent.name} agent sync started — policy: ${device.appliedPolicies?.[0] ?? 'Default'}`,
     eventType: 'kandji',
   })
   offset += 1
 
   logs.push({
     id: uid(), timestamp: ts(offset), level: 'info',
-    subsystem: 'io.kandji.agent', category: 'library', process: 'kandji_agent', pid: rndPid(),
-    message: `Library items evaluated: ${Math.floor(Math.random() * 15) + 5} configured, ${Math.floor(Math.random() * 3)} pending installation`,
+    subsystem: agent.subsystem, category: 'library', process: agent.process, pid: rndPid(),
+    message: `Managed items evaluated: ${Math.floor(Math.random() * 15) + 5} configured, ${Math.floor(Math.random() * 3)} pending installation`,
     eventType: 'kandji',
   })
   offset += 2
@@ -147,7 +155,14 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   offset += 2
 
   // ── Firewall ──────────────────────────────────────────────────────────────
-  if (fwEnabled) {
+  if (!fwTracked) {
+    logs.push({
+      id: uid(), timestamp: ts(offset), level: 'info',
+      subsystem: 'com.apple.alf', category: 'firewall', process: 'socketfilterfw', pid: rndPid(),
+      message: `Firewall state not reported by ${agent.name} for this device type`,
+      eventType: 'security',
+    })
+  } else if (fwEnabled) {
     logs.push({
       id: uid(), timestamp: ts(offset), level: 'info',
       subsystem: 'com.apple.alf', category: 'firewall', process: 'socketfilterfw', pid: rndPid(),
@@ -199,7 +214,7 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   } else {
     logs.push({
       id: uid(), timestamp: ts(offset), level: 'error',
-      subsystem: 'io.kandji.agent', category: 'edr', process: 'kandji_agent', pid: rndPid(),
+      subsystem: agent.subsystem, category: 'edr', process: agent.process, pid: rndPid(),
       message: `EDR sensor (CrowdStrike Falcon) not installed or not responding. Security gap detected.`,
       eventType: 'security',
     })
@@ -212,20 +227,20 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   const appleInstallerPid = rndPid()
   ;[
     {
-      level: 'info' as const, subsystem: 'io.kandji.agent', category: 'library_item',
-      process: 'kandji_agent', pid: citrixPid,
-      message: 'Library item "Citrix Workspace" queued for installation. Version target: 24.5.0. Assignment source: Blueprint "Corporate-Mac-Standard".',
+      level: 'info' as const, subsystem: agent.subsystem, category: 'library_item',
+      process: agent.process, pid: citrixPid,
+      message: `Managed item "Citrix Workspace" queued for installation. Version target: 24.5.0. Assignment source: "Corporate-Mac-Standard".`,
       eventType: 'kandji' as const,
     },
     {
-      level: 'info' as const, subsystem: 'io.kandji.agent', category: 'app_download',
-      process: 'kandji_agent', pid: citrixPid,
-      message: 'Downloading "CitrixWorkspaceApp.dmg" (164.3 MB) from Kandji CDN. SHA-256 verification enabled.',
+      level: 'info' as const, subsystem: agent.subsystem, category: 'app_download',
+      process: agent.process, pid: citrixPid,
+      message: `Downloading "CitrixWorkspaceApp.dmg" (164.3 MB) from ${agent.name} CDN. SHA-256 verification enabled.`,
       eventType: 'kandji' as const,
     },
     {
-      level: 'info' as const, subsystem: 'io.kandji.agent', category: 'app_download',
-      process: 'kandji_agent', pid: citrixPid,
+      level: 'info' as const, subsystem: agent.subsystem, category: 'app_download',
+      process: agent.process, pid: citrixPid,
       message: 'Download complete: CitrixWorkspaceApp.dmg — SHA-256 checksum verified OK.',
       eventType: 'kandji' as const,
     },
@@ -254,9 +269,9 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
       eventType: 'network' as const,
     },
     {
-      level: 'info' as const, subsystem: 'io.kandji.agent', category: 'app_install',
-      process: 'kandji_agent', pid: citrixPid,
-      message: 'Library item "Citrix Workspace" — installation COMPLETED. App verified at /Applications/Citrix Workspace.app. Reported to Kandji console.',
+      level: 'info' as const, subsystem: agent.subsystem, category: 'app_install',
+      process: agent.process, pid: citrixPid,
+      message: `Managed item "Citrix Workspace" — installation COMPLETED. App verified at /Applications/Citrix Workspace.app. Reported to ${agent.name} console.`,
       eventType: 'kandji' as const,
     },
   ].forEach((entry, i) => {
@@ -264,7 +279,7 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   })
   offset += 4
 
-  // ── Managed app status verification (Kandji periodic check) ───────────────
+  // ── Managed app status verification (agent periodic check) ────────────────
   const appEvents = [
     { app: 'Google Chrome', version: '124.0.6367.201', pkg: 'com.google.Chrome' },
     { app: 'Zoom',          version: '5.17.11',         pkg: 'us.zoom.xos' },
@@ -274,7 +289,7 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   for (const ae of appEvents) {
     logs.push({
       id: uid(), timestamp: ts(offset), level: 'info',
-      subsystem: 'io.kandji.agent', category: 'app_install', process: 'kandji_agent', pid: rndPid(),
+      subsystem: agent.subsystem, category: 'app_install', process: agent.process, pid: rndPid(),
       message: `Application "${ae.app}" v${ae.version} verified — ${ae.pkg}. Status: Installed`,
       eventType: 'app',
     })
@@ -319,7 +334,7 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
     logs.push({
       id: uid(), timestamp: ts(offset), level: 'info',
       subsystem: 'com.apple.mdm', category: 'profile', process: 'mdmclient', pid: rndPid(),
-      message: `MDM profile installed: "${pf}" — source: Kandji MDM`,
+      message: `MDM profile installed: "${pf}" — source: ${agent.name} MDM`,
       eventType: 'mdm',
     })
     offset += Math.random() * 2 + 0.5
@@ -381,7 +396,7 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   offset += 3
 
   // ── Disk check ───────────────────────────────────────────────────────────
-  const freeGB = device.freeStorage ?? Math.floor(Math.random() * 80 + 20)
+  const freeGB = device.freeStorage ? parseFloat(device.freeStorage) : Math.floor(Math.random() * 80 + 20)
   const lowDisk = freeGB < 10
   logs.push({
     id: uid(), timestamp: ts(offset), level: lowDisk ? 'error' : 'info',
@@ -393,11 +408,11 @@ function generateLogs(device: Device, limit: number): MacLogEntry[] {
   })
   offset += 4
 
-  // ── Kandji compliance report ──────────────────────────────────────────────
+  // ── Compliance report ──────────────────────────────────────────────────────
   logs.push({
     id: uid(), timestamp: ts(offset), level: 'info',
-    subsystem: 'io.kandji.agent', category: 'report', process: 'kandji_agent', pid: rndPid(),
-    message: `Compliance report submitted to Kandji cloud. Serial: ${device.serialNumber ?? 'N/A'}`,
+    subsystem: agent.subsystem, category: 'report', process: agent.process, pid: rndPid(),
+    message: `Compliance report submitted to ${agent.name} cloud. Serial: ${device.serialNumber ?? 'N/A'}`,
     eventType: 'kandji',
   })
 
@@ -416,7 +431,7 @@ router.get('/:deviceId', asyncHandler(async (req, res) => {
   let device: Device | undefined
 
   try {
-    const devices = await getKandjiDevices()
+    const { devices } = await fetchAllDevices()
     device = devices.find(d => d.id === deviceId || d.serialNumber === deviceId || d.deviceName === deviceId)
   } catch {
     // Fall through to mock
@@ -490,6 +505,7 @@ router.post('/:deviceId/analyze', asyncHandler(async (req, res) => {
 
   if (!isOpenAIConfigured()) {
     // Return smart mock analysis based on actual log data
+    const agentName = deviceContext?.['managementSource'] || 'Kandji'
     const errors   = logs.filter(l => l.level === 'error' || l.level === 'fault').length
     const warnings  = logs.filter(l => l.level === 'info' && l.message.toLowerCase().includes('warn')).length
     const mdmFailed = logs.some(l => l.eventType === 'mdm' && l.level === 'error')
@@ -507,13 +523,13 @@ router.post('/:deviceId/analyze', asyncHandler(async (req, res) => {
       severity: 'high',
       title: 'Application Firewall Off',
       description: 'The macOS Application Firewall is disabled, leaving the device exposed to inbound network connections. This violates the corporate security baseline policy.',
-      recommendation: 'Push a Kandji library item or MDM configuration profile to enforce the firewall. Verify the profile installs correctly on next device check-in.',
+      recommendation: `Push a managed configuration profile via ${agentName} to enforce the firewall. Verify the profile installs correctly on next device check-in.`,
     })
     if (mdmFailed) issues.push({
       severity: 'high',
       title: 'MDM Compliance Failure',
       description: 'The device failed its MDM compliance check. Policy requirements were not met at the last check-in cycle.',
-      recommendation: 'Review the applied blueprint policies in Kandji and verify all required library items are installed. Force a device sync from the Kandji admin portal.',
+      recommendation: `Review the applied policies in ${agentName} and verify all required items are installed. Force a device sync from the ${agentName} admin console.`,
     })
 
     res.json({
@@ -522,7 +538,7 @@ router.post('/:deviceId/analyze', asyncHandler(async (req, res) => {
         deviceId,
         executiveSummary: errors > 0
           ? `This device has ${errors} error${errors > 1 ? 's' : ''} and ${warnings} warning${warnings !== 1 ? 's' : ''} in the log. ${issues.length > 0 ? `Key issues: ${issues.map(i => i.title).join(', ')}.` : ''} Immediate attention recommended.`
-          : 'Device logs appear healthy overall. MDM check-in successful, Kandji agent sync completed, and no critical errors detected.',
+          : `Device logs appear healthy overall. MDM check-in successful, ${agentName} agent sync completed, and no critical errors detected.`,
         healthStatus: errors > 2 ? 'critical' : errors > 0 ? 'warning' : 'healthy',
         issues,
         keyEvents: sample.split('\n').filter(l => l.includes('ERROR') || l.includes('FAULT')).slice(0, 5),
@@ -538,7 +554,7 @@ router.post('/:deviceId/analyze', asyncHandler(async (req, res) => {
         recommendations: [
           ...(fvOff ? ['Immediately enable FileVault on this device to protect corporate data.'] : []),
           ...(fwOff ? ['Enable the macOS Application Firewall via MDM policy.'] : []),
-          ...(mdmFailed ? ['Investigate MDM compliance failure — review Kandji blueprint and remediate.'] : []),
+          ...(mdmFailed ? [`Investigate MDM compliance failure — review ${agentName} policy assignment and remediate.`] : []),
           ...(!fvOff && !fwOff && !mdmFailed ? ['Schedule a routine compliance check in 30 days.', 'Ensure OS updates are applied promptly.'] : []),
         ],
         analyzedLogCount: logs.length,

@@ -15,9 +15,10 @@ export interface RuntimeKandjiConfig {
 }
 
 export interface RuntimeManageEngineConfig {
-  apiKey: string
-  serverUrl: string
-  port?: string
+  clientId: string
+  clientSecret: string
+  refreshToken: string
+  apiDomain: string
 }
 
 export interface RuntimeOpenAIConfig {
@@ -144,8 +145,15 @@ export function getKandjiConfig(): RuntimeKandjiConfig | undefined {
 
 export function getManageEngineConfig(): RuntimeManageEngineConfig | undefined {
   if (store.manageengine) return store.manageengine
-  const { MANAGEENGINE_URL: serverUrl, MANAGEENGINE_API_KEY: apiKey } = process.env
-  if (serverUrl && apiKey) return { serverUrl, apiKey }
+  const {
+    MANAGEENGINE_CLIENT_ID: clientId,
+    MANAGEENGINE_CLIENT_SECRET: clientSecret,
+    MANAGEENGINE_REFRESH_TOKEN: refreshToken,
+    MANAGEENGINE_API_DOMAIN: apiDomain,
+  } = process.env
+  if (clientId && clientSecret && refreshToken && apiDomain) {
+    return { clientId, clientSecret, refreshToken, apiDomain }
+  }
   return undefined
 }
 

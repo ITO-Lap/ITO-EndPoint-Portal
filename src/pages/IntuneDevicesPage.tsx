@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Server, RefreshCw, Shield, Lock, ShieldCheck, ShieldAlert,
   Search, X, ArrowLeft, Zap, ToggleLeft, ToggleRight, Play,
@@ -8,19 +8,37 @@ import {
   Users, UserX, Building2, KeyRound, Activity, Info,
   Wifi, ShieldBan, CheckCheck, LogIn, Smartphone,
   Calendar, Package, User, ChevronLeft, ChevronRight,
+  FileSpreadsheet, FileCode2,
 } from 'lucide-react'
 import { api } from '../api'
-import type { ApiDevice } from '../api'
+import type { ApiDevice, EntraGroupReportResult, EntraGroupSuggestion } from '../api'
 import { intelApi } from '../api/intelligence'
 import type { DeviceReportData, DeviceReportDevice } from '../api/intelligence'
+import type { UserToolRole } from '../types'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useToast } from '../components/ui/ToastProvider'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
+import { IntuneScriptsConfigTab } from './IntuneScriptsConfigPage'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'devices' | 'compliance' | 'security' | 'automation' | 'reports' | 'entra'
+type Tab = 'devices' | 'compliance' | 'security' | 'automation' | 'reports' | 'entra' | 'entra_groups' | 'scripts_config'
+
+// Tabs restricted to this smaller set of roles — currently just Scripts &
+// Configs, which reads/exports raw script content and policy JSON and
+// should stay admin-only even though the rest of Intune Devices is open to
+// Helpdesk. Checked both when building the visible tab list and again
+// before rendering tab content, so a stale `tab` value (e.g. from a prior
+// session as a different role) can't render restricted content either.
+const RESTRICTED_TABS: Partial<Record<Tab, UserToolRole[]>> = {
+  scripts_config: ['Global Admin', 'IT Admin'],
+}
+
+function canSeeTab(tab: Tab, viewerRole: UserToolRole): boolean {
+  const allowed = RESTRICTED_TABS[tab]
+  return !allowed || allowed.includes(viewerRole)
+}
 
 interface AutomationRule {
   id: string
@@ -640,7 +658,7 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
             <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-blue-400" />
               <p className="text-xs font-bold text-slate-700">New Enrollments by Month</p>
-              <span className="ml-auto text-[0.65rem] text-slate-400">Last 2 complete months</span>
+              <span className="ml-auto text-[0.65rem] text-slate-400">Current & previous month</span>
             </div>
             <table className="w-full text-xs">
               <thead>
@@ -675,7 +693,7 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
             <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
               <Package className="h-3.5 w-3.5 text-violet-400" />
               <p className="text-xs font-bold text-slate-700">App Activity by Month</p>
-              <span className="ml-auto text-[0.65rem] text-slate-400">Last 2 complete months</span>
+              <span className="ml-auto text-[0.65rem] text-slate-400">Current & previous month</span>
             </div>
             <table className="w-full text-xs">
               <thead>
@@ -1202,9 +1220,256 @@ function EntraIDTab() {
   )
 }
 
+// ── Entra ID Groups (export) Tab ─────────────────────────────────────────────
+
+type OsFilter = 'all' | 'Windows' | 'macOS' | 'iOS' | 'Android' | 'Linux'
+
+function EntraGroupsReportTab() {
+  const { notify } = useToast()
+  const [groupName, setGroupName] = useState('')
+  const [osFilter,  setOsFilter]  = useState<OsFilter>('all')
+  const [data,      setData]      = useState<EntraGroupReportResult | null>(null)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
+  const [exporting, setExporting] = useState<'csv' | 'excel' | null>(null)
+  const [search,    setSearch]    = useState('')
+
+  const [suggestions,      setSuggestions]      = useState<EntraGroupSuggestion[]>([])
+  const [showSuggestions,  setShowSuggestions]  = useState(false)
+  const [searchingGroups,  setSearchingGroups]  = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const q = groupName.trim()
+    if (q.length < 2) return
+    debounceRef.current = setTimeout(() => {
+      setSearchingGroups(true)
+      api.searchEntraGroups(q)
+        .then(res => setSuggestions(res))
+        .catch(() => setSuggestions([]))
+        .finally(() => setSearchingGroups(false))
+    }, 250)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [groupName])
+
+  const runReport = useCallback((name: string, os: OsFilter) => {
+    if (!name.trim()) return
+    setLoading(true)
+    setError(null)
+    api.fetchEntraGroupReport({ name: name.trim(), os })
+      .then(res => setData(res))
+      .catch((e: unknown) => {
+        setData(null)
+        setError(e instanceof Error ? e.message : 'Failed to load group report')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setShowSuggestions(false)
+    runReport(groupName, osFilter)
+  }
+
+  function selectSuggestion(name: string) {
+    setGroupName(name)
+    setSuggestions([])
+    setShowSuggestions(false)
+    runReport(name, osFilter)
+  }
+
+  function handleOsFilterChange(next: OsFilter) {
+    setOsFilter(next)
+    if (data) runReport(groupName, next)
+  }
+
+  async function handleExport(format: 'csv' | 'excel') {
+    if (!groupName.trim()) return
+    setExporting(format)
+    try {
+      await api.exportEntraGroupReport({ name: groupName.trim(), os: osFilter, format })
+    } catch (e: unknown) {
+      notify('error', 'Export failed', e instanceof Error ? e.message : 'Could not export report')
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  const filteredRows = useMemo(() => {
+    if (!data) return []
+    if (!search.trim()) return data.rows
+    const q = search.toLowerCase()
+    return data.rows.filter(r => r.displayName.toLowerCase().includes(q) || r.userPrincipalName.toLowerCase().includes(q))
+  }, [data, search])
+
+  const showTypeColumn = (data?.memberTypes.length ?? 0) > 1
+
+  return (
+    <div className="space-y-4">
+      {/* Search form */}
+      <div className="glass rounded-2xl p-5">
+        <p className="text-sm font-bold text-slate-700 mb-1">Entra ID Group Export</p>
+        <p className="text-[0.68rem] text-slate-400 mb-3">
+          Enter a group&apos;s display name — we&apos;ll resolve its Object ID, detect whether members are users, devices, or both, and export the correct identity columns for each.
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input value={groupName}
+              onChange={e => { setGroupName(e.target.value); setShowSuggestions(true) }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              placeholder="Start typing a group name, e.g. Sales…"
+              autoComplete="off"
+              className="h-9 w-full rounded-xl pl-9 pr-3 text-xs water-input" />
+            {showSuggestions && groupName.trim().length >= 2 && (searchingGroups || suggestions.length > 0) && (
+              <div className="absolute z-10 mt-1 w-full glass-strong rounded-xl border border-slate-200 shadow-lg max-h-56 overflow-y-auto">
+                {searchingGroups && suggestions.length === 0 ? (
+                  <div className="px-3 py-2 text-[0.68rem] text-slate-400 flex items-center gap-1.5">
+                    <RefreshCw className="h-3 w-3 animate-spin" />Searching groups…
+                  </div>
+                ) : suggestions.length === 0 ? (
+                  <div className="px-3 py-2 text-[0.68rem] text-slate-400">No matching groups</div>
+                ) : suggestions.map(s => (
+                  <button key={s.id} type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => selectSuggestion(s.displayName)}
+                    className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50/60 transition-colors border-b border-slate-100/60 last:border-0 truncate">
+                    {s.displayName}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <select value={osFilter} onChange={e => handleOsFilterChange(e.target.value as OsFilter)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="all">All OS</option>
+            <option value="Windows">Windows</option>
+            <option value="macOS">macOS</option>
+            <option value="iOS">iOS</option>
+            <option value="Android">Android</option>
+            <option value="Linux">Linux</option>
+          </select>
+          <button type="submit" disabled={loading || !groupName.trim()}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white water-glow disabled:opacity-50 flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#0078D4,#6366F1)' }}>
+            {loading ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Resolving…</> : <>Load Group</>}
+          </button>
+        </form>
+        <p className="text-[0.62rem] text-slate-400 mt-2">OS filter only narrows device members — user members always stay in the report.</p>
+      </div>
+
+      {/* Error */}
+      {error && !loading && (
+        <div className="glass rounded-2xl p-4 flex items-center gap-2 border border-red-200 bg-red-50/60">
+          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          <p className="text-xs text-red-600">{error}</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {data && !loading && (
+        <>
+          <div className="glass rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-bold text-slate-700">{data.group.displayName}</p>
+              <div className="flex items-center gap-2 flex-wrap mt-1">
+                <span className="text-[0.68rem] text-slate-400">{data.totalMembers} member{data.totalMembers !== 1 ? 's' : ''}</span>
+                {data.memberTypes.map(t => (
+                  <span key={t} className={`rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${t === 'user' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
+                    {t === 'user' ? 'Users' : 'Devices'}
+                  </span>
+                ))}
+                {data.flaggedCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[0.6rem] font-bold text-amber-700">
+                    <AlertCircle className="h-2.5 w-2.5" />{data.flaggedCount} flagged — no owner UPN
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button type="button" onClick={() => handleExport('csv')} disabled={exporting !== null}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-white water-glow disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg,#10B981,#0EA5E9)' }}>
+                {exporting === 'csv' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}CSV
+              </button>
+              <button type="button" onClick={() => handleExport('excel')} disabled={exporting !== null}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-white water-glow disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg,#F46C00,#FB471F)' }}>
+                {exporting === 'excel' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}Excel
+              </button>
+            </div>
+          </div>
+
+          <div className="relative max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter results…"
+              className="h-9 w-full rounded-xl pl-9 pr-3 text-xs water-input" />
+            {search && <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2"><X className="h-3.5 w-3.5 text-slate-400" /></button>}
+          </div>
+
+          <div className="glass rounded-2xl overflow-hidden">
+            <div className="h-[2px]" style={{ background: 'linear-gradient(90deg,#0078D4,#6366F1)' }} />
+            {filteredRows.length === 0 ? (
+              <div className="p-10 text-center">
+                <Building2 className="mx-auto h-8 w-8 text-slate-300 mb-3" />
+                <p className="text-sm text-slate-400">No members match your filters</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50/80 border-b border-slate-100/50">
+                    <tr>
+                      {showTypeColumn && <th className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">Member Type</th>}
+                      {['Display Name', 'UPN', 'OS', 'Status'].map(h => (
+                        <th key={h} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((r, i) => (
+                      <tr key={`${r.memberType}-${r.displayName}-${i}`} className={`border-b border-slate-100/50 last:border-0 ${r.flagged ? 'bg-amber-50/40' : i % 2 ? 'bg-slate-50/30' : ''}`}>
+                        {showTypeColumn && (
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${r.memberType === 'user' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
+                              {r.memberType === 'user' ? <Users className="h-2.5 w-2.5" /> : <Monitor className="h-2.5 w-2.5" />}
+                              {r.memberType === 'user' ? 'User' : 'Device'}
+                            </span>
+                          </td>
+                        )}
+                        <td className="px-4 py-2.5 font-semibold text-slate-700">{r.displayName}</td>
+                        <td className="px-4 py-2.5 text-slate-500">{r.userPrincipalName || '—'}</td>
+                        <td className="px-4 py-2.5 text-slate-500">{r.operatingSystem || '—'}</td>
+                        <td className="px-4 py-2.5">
+                          {r.flagged
+                            ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[0.6rem] font-bold text-amber-700"><AlertCircle className="h-2.5 w-2.5" />Needs review</span>
+                            : <span className="text-emerald-600 text-[0.65rem] font-semibold">OK</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Idle state */}
+      {!data && !loading && !error && (
+        <div className="glass rounded-2xl p-10 text-center">
+          <FileSpreadsheet className="mx-auto h-8 w-8 text-slate-300 mb-3" />
+          <p className="text-sm text-slate-400">Enter a group name above to generate its member export</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-interface Props { onBack: () => void }
+interface Props { viewerRole: UserToolRole; userEmail?: string; onBack: () => void }
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'devices',    label: 'Devices',    icon: <Monitor    className="h-3.5 w-3.5" /> },
@@ -1213,9 +1478,11 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'automation', label: 'Automation', icon: <Zap        className="h-3.5 w-3.5" /> },
   { id: 'reports',    label: 'Reports',    icon: <BarChart2  className="h-3.5 w-3.5" /> },
   { id: 'entra',      label: 'Entra ID',   icon: <KeyRound   className="h-3.5 w-3.5 text-[#0078D4]" /> },
+  { id: 'entra_groups', label: 'Entra ID Groups', icon: <FileSpreadsheet className="h-3.5 w-3.5 text-[#6366F1]" /> },
+  { id: 'scripts_config', label: 'Scripts & Configs', icon: <FileCode2 className="h-3.5 w-3.5 text-[#0078D4]" /> },
 ]
 
-export function IntuneDevicesPage({ onBack }: Props) {
+export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
   const [tab, setTab]         = useState<Tab>('devices')
   const [devices, setDevices] = useState<ApiDevice[]>([])
   const [loading, setLoading] = useState(true)
@@ -1346,7 +1613,7 @@ export function IntuneDevicesPage({ onBack }: Props) {
 
       {/* Tab bar */}
       <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
-        {TABS.map(t => (
+        {TABS.filter(t => canSeeTab(t.id, viewerRole)).map(t => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
               tab === t.id ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -1374,6 +1641,10 @@ export function IntuneDevicesPage({ onBack }: Props) {
       {tab === 'automation' && <AutomationTab />}
       {tab === 'reports'    && <ReportsTab    devices={devices} />}
       {tab === 'entra'      && <EntraIDTab />}
+      {tab === 'entra_groups' && <EntraGroupsReportTab />}
+      {tab === 'scripts_config' && canSeeTab('scripts_config', viewerRole) && (
+        <IntuneScriptsConfigTab viewerRole={viewerRole} userEmail={userEmail} />
+      )}
 
       {/* Device panel */}
       {panelDevice && (

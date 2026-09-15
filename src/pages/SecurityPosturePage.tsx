@@ -5,6 +5,7 @@ import {
   Clock, Target, Globe, Monitor, Apple, Server,
   X, Info, Wrench, ChevronDown,
 } from 'lucide-react'
+import { EndpointProtectionCoverage } from '../components/security/EndpointProtectionCoverage'
 
 // ─── Remediation step library ──────────────────────────────────────────────────
 
@@ -598,6 +599,9 @@ export function SecurityPosturePage() {
           <span className="font-bold">Baseline estimates</span> — scores are derived from your fleet configuration. Kandji and Entra ID are connected for live data; Intune and ManageEngine figures are estimated from mock device data. Connect all integrations in Settings for fully live posture tracking.
         </p>
       </div>
+
+      {/* ── Endpoint Protection Coverage (live — Falcon/Zscaler on physical Windows & macOS devices) ── */}
+      <EndpointProtectionCoverage />
 
       {/* ── MDM Source Tabs ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">

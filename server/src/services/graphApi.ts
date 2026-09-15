@@ -4,8 +4,19 @@
 //   DeviceManagementManagedDevices.Read.All  — managed devices
 //   DeviceManagementApps.Read.All            — mobile apps + install statuses
 //   DeviceManagementConfiguration.Read.All  — config profiles, compliance policies, baselines
+//   DeviceManagementScripts.Read.All         — PowerShell/shell scripts, remediations (see
+//                                              Intune Scripts & Configurations feature —
+//                                              Microsoft moved scripts off
+//                                              DeviceManagementConfiguration.Read.All onto
+//                                              this dedicated permission in 2025)
 //   DeviceManagementRBAC.Read.All            — role assignments
+//   DeviceManagementServiceConfig.Read.All   — Windows Autopilot deployment profiles (see
+//                                              Intune Scripts & Configurations feature —
+//                                              a DIFFERENT permission from every other
+//                                              scope above; Autopilot is not covered by
+//                                              DeviceManagementConfiguration.Read.All)
 //   Directory.Read.All                       — tenant directory info
+//   Group.Read.All                           — resolve assignment target group ids to names
 //   User.Read.All                            — users + sign-in activity
 //   Reports.Read.All                         — usage / sign-in reports
 
@@ -22,12 +33,17 @@ interface TokenCacheEntry {
 
 // Per-tenant token cache (client_credentials flow)
 const tokenCache = new Map<string, TokenCacheEntry>()
-const GRAPH = 'https://graph.microsoft.com/v1.0'
+// De-dupes concurrent token acquisitions for the same tenant — without
+// this, N parallel graphGetAll* calls (e.g. Intune Scripts & Configurations'
+// listAllItems fanning out to 7+ collections via Promise.allSettled) would
+// each see a cache miss before any of them finishes writing the cache, and
+// each fire its own OAuth request instead of sharing one.
+const inflightTokenRequests = new Map<string, Promise<string>>()
+export const GRAPH = 'https://graph.microsoft.com/v1.0'
+export const GRAPH_BETA = 'https://graph.microsoft.com/beta'
+export type GraphBase = typeof GRAPH | typeof GRAPH_BETA
 
-async function getToken(creds: TenantCredentials): Promise<string> {
-  const cached = tokenCache.get(creds.tenantId)
-  if (cached && Date.now() < cached.expiresAt - 60_000) return cached.token
-
+async function requestNewToken(creds: TenantCredentials): Promise<string> {
   const url = `https://login.microsoftonline.com/${creds.tenantId}/oauth2/v2.0/token`
   const body = new URLSearchParams({
     client_id:     creds.clientId,
@@ -49,6 +65,20 @@ async function getToken(creds: TenantCredentials): Promise<string> {
   }
   tokenCache.set(creds.tenantId, entry)
   return entry.token
+}
+
+async function getToken(creds: TenantCredentials): Promise<string> {
+  const cached = tokenCache.get(creds.tenantId)
+  if (cached && Date.now() < cached.expiresAt - 60_000) return cached.token
+
+  const inflight = inflightTokenRequests.get(creds.tenantId)
+  if (inflight) return inflight
+
+  const request = requestNewToken(creds).finally(() => {
+    inflightTokenRequests.delete(creds.tenantId)
+  })
+  inflightTokenRequests.set(creds.tenantId, request)
+  return request
 }
 
 async function graphGet<T>(
@@ -96,6 +126,171 @@ async function graphGetAll<T>(
   }
 
   return results
+}
+
+// ─── Retry-capable, version-selectable requests ──────────────────────────────
+// Used by callers that need /beta support and resilience against throttling
+// (e.g. Intune Scripts & Configurations) without changing graphGet/graphGetAll
+// above, which existing callers (intelligence.ts) already depend on as-is.
+// Retry/backoff logic mirrors intuneAuditGraph.ts's fetchAuditEventsPage —
+// copied rather than imported, matching this repo's convention of small
+// per-file utilities over a shared lib.
+
+export class FatalGraphError extends Error {
+  constructor(message: string, public status: number) {
+    super(message)
+  }
+}
+export class TransientGraphError extends Error {}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function backoffWithJitter(attempt: number): number {
+  const base = Math.min(30_000, 500 * 2 ** attempt)
+  return base / 2 + Math.random() * (base / 2)
+}
+
+// Strips anything that could contain a token/secret before logging/returning.
+function sanitizeGraphError(body: string, status: number): string {
+  const trimmed = body.slice(0, 500)
+  const withoutBearer = trimmed.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]')
+  return `Microsoft Graph returned ${status}: ${withoutBearer || 'no error body'}`
+}
+
+interface RetryOptions {
+  timeoutMs?: number
+  maxRetries?: number
+  fetchImpl?: typeof fetch
+  sleepImpl?: (ms: number) => Promise<void>
+}
+
+async function fetchWithRetry(url: string, token: string, opts: RetryOptions = {}): Promise<Response> {
+  const timeoutMs = opts.timeoutMs ?? 30_000
+  const maxRetries = opts.maxRetries ?? 5
+  const doFetch = opts.fetchImpl ?? fetch
+  const sleep = opts.sleepImpl ?? defaultSleep
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const res = await doFetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+      clearTimeout(timer)
+
+      if (res.status === 429) {
+        const retryAfterHeader = res.headers.get('Retry-After')
+        const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : backoffWithJitter(attempt)
+        if (attempt >= maxRetries) throw new TransientGraphError('Graph API rate-limited (429) and retries exhausted')
+        await sleep(Number.isFinite(retryAfterMs) ? retryAfterMs : backoffWithJitter(attempt))
+        continue
+      }
+
+      if (res.status >= 500) {
+        if (attempt >= maxRetries) throw new TransientGraphError(`Graph API ${res.status} and retries exhausted`)
+        await sleep(backoffWithJitter(attempt))
+        continue
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        throw new FatalGraphError(sanitizeGraphError(body, res.status), res.status)
+      }
+
+      return res
+    } catch (err) {
+      clearTimeout(timer)
+      if (err instanceof FatalGraphError) throw err
+      if (err instanceof TransientGraphError) throw err
+      const isAbort = err instanceof Error && err.name === 'AbortError'
+      if (attempt >= maxRetries) {
+        const msg = err instanceof Error ? err.message : String(err)
+        throw new TransientGraphError(`Graph request failed after ${maxRetries} retries: ${isAbort ? 'timeout' : msg}`)
+      }
+      await sleep(backoffWithJitter(attempt))
+    }
+  }
+
+  throw new TransientGraphError('Graph request failed for an unknown reason')
+}
+
+/** Single-item GET against a chosen API version (v1.0 or beta), with 429/5xx
+ *  retry and Retry-After honoring. */
+export async function graphGetV<T>(
+  creds: TenantCredentials,
+  base: GraphBase,
+  path: string,
+  params?: Record<string, string>,
+  opts?: RetryOptions
+): Promise<T> {
+  const token = await getToken(creds)
+  const url = new URL(`${base}${path}`)
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+  const res = await fetchWithRetry(url.toString(), token, opts)
+  return res.json() as Promise<T>
+}
+
+/** Follows @odata.nextLink against a chosen API version, with 429/5xx retry
+ *  and Retry-After honoring on every page. */
+export async function graphGetAllV<T>(
+  creds: TenantCredentials,
+  base: GraphBase,
+  path: string,
+  params?: Record<string, string>,
+  opts?: RetryOptions
+): Promise<T[]> {
+  const token = await getToken(creds)
+  const results: T[] = []
+  let nextUrl: string | null = (() => {
+    const u = new URL(`${base}${path}`)
+    if (params) Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v))
+    return u.toString()
+  })()
+
+  while (nextUrl) {
+    const res = await fetchWithRetry(nextUrl, token, opts)
+    const data = await res.json() as { value: T[]; '@odata.nextLink'?: string }
+    results.push(...data.value)
+    nextUrl = data['@odata.nextLink'] ?? null
+  }
+
+  return results
+}
+
+// ─── Groups (resolve assignment target group ids to display names) ──────────
+// Permission: Group.Read.All
+export interface GraphGroupSummary {
+  id: string
+  displayName: string
+}
+
+/** Resolves a list of group ids to display names, chunked to keep each
+ *  $filter "id in (...)" clause reasonably sized. Returns a Map so callers
+ *  can look up by id; ids Graph doesn't return (e.g. deleted groups) are
+ *  simply absent from the map rather than causing a failure. */
+export async function getGroupDisplayNames(
+  creds: TenantCredentials,
+  groupIds: string[]
+): Promise<Map<string, string>> {
+  // Only well-formed GUIDs are interpolated into the $filter clause below —
+  // guards against OData filter injection from an unexpected upstream value.
+  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const unique = Array.from(new Set(groupIds)).filter(id => GUID_RE.test(id))
+  const map = new Map<string, string>()
+  const CHUNK_SIZE = 15
+
+  for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+    const chunk = unique.slice(i, i + CHUNK_SIZE)
+    const filter = `id in (${chunk.map(id => `'${id}'`).join(',')})`
+    const groups = await graphGetAllV<GraphGroupSummary>(creds, GRAPH, '/groups', {
+      '$filter': filter,
+      '$select': 'id,displayName',
+    })
+    for (const g of groups) map.set(g.id, g.displayName)
+  }
+
+  return map
 }
 
 // ─── Managed Devices ─────────────────────────────────────────────────────────

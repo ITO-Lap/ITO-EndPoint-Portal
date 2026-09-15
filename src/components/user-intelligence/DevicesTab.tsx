@@ -46,7 +46,7 @@ export function DevicesTab({
         const stateColor = d.complianceState === 'Compliant' ? 'border-emerald-200 bg-emerald-50'
           : d.complianceState === 'Warning' ? 'border-amber-200 bg-amber-50'
           : 'border-red-200 bg-red-50'
-        const isOff = d.encryptionStatus.toLowerCase().includes('off') || d.encryptionStatus.toLowerCase().includes('pending')
+        const isOff = !(/encrypt|on|luks|enabled/i.test(d.encryptionStatus) && !/off|pending|not /i.test(d.encryptionStatus))
         return (
           <div key={d.deviceName} className={`rounded-2xl border p-4 ${stateColor}`}>
             <div className="flex items-start justify-between gap-2 flex-wrap">

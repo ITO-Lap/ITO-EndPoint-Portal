@@ -4,7 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler.js'
 import {
   getEntraOverview, getEntraDevices, getEntraUsers, getEntraGroups,
   getEntraRelationships, getEntraSecurity, syncDevice, diagnoseDevice,
+  getEntraGroupMemberReport, searchEntraGroups,
 } from '../services/entraIntelligence.js'
+import { exportToCSV, exportToExcel } from '../services/reportExporter.js'
 
 const router = Router()
 
@@ -42,6 +44,69 @@ router.get('/users', asyncHandler(async (req, res) => {
 router.get('/groups', asyncHandler(async (_req, res) => {
   const data = await getEntraGroups()
   res.json({ success: true, data })
+}))
+
+// GET /api/entra/groups/search?q=
+router.get('/groups/search', asyncHandler(async (req, res) => {
+  const schema = z.object({ q: z.string().optional().default('') })
+  const params = schema.parse(req.query)
+  const data = await searchEntraGroups(params.q)
+  res.json({ success: true, data })
+}))
+
+// GET /api/entra/groups/report?name=&os=
+router.get('/groups/report', asyncHandler(async (req, res) => {
+  const schema = z.object({ name: z.string().min(1), os: z.string().optional() })
+  const params = schema.parse(req.query)
+  const data = await getEntraGroupMemberReport(params.name, params.os)
+  res.json({ success: true, data })
+}))
+
+// GET /api/entra/groups/report/export?name=&os=&format=csv|excel
+router.get('/groups/report/export', asyncHandler(async (req, res) => {
+  const schema = z.object({
+    name:   z.string().min(1),
+    os:     z.string().optional(),
+    format: z.enum(['csv', 'excel']).optional().default('csv'),
+  })
+  const params = schema.parse(req.query)
+  const data = await getEntraGroupMemberReport(params.name, params.os)
+
+  const columns = [
+    { key: 'memberType',        label: 'Member Type',  width: 14 },
+    { key: 'displayName',       label: 'Display Name', width: 28 },
+    { key: 'userPrincipalName', label: 'UPN',           width: 34 },
+    { key: 'operatingSystem',   label: 'OS',            width: 12 },
+    { key: 'flagged',           label: 'Needs Review', width: 30 },
+  ]
+  const rows = data.rows.map(r => ({
+    memberType:        r.memberType === 'user' ? 'User' : 'Device',
+    displayName:       r.displayName,
+    userPrincipalName: r.userPrincipalName,
+    operatingSystem:   r.operatingSystem ?? '',
+    flagged:           r.flagged ? `Yes — ${r.flagReason}` : '',
+  }))
+
+  const safeName  = data.group.displayName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
+  const filename  = `entra-group-${safeName}-${Date.now()}`
+
+  if (params.format === 'excel') {
+    const buf = await exportToExcel(rows, columns, {
+      title:       `Entra ID Group Report — ${data.group.displayName}`,
+      subtitle:    `${data.rows.length} of ${data.totalMembers} members · ${data.flaggedCount} flagged`,
+      generatedAt: new Date().toISOString(),
+      recordCount: rows.length,
+    })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
+    res.send(buf)
+    return
+  }
+
+  const csv = exportToCSV(rows, columns)
+  res.setHeader('Content-Type', 'text/csv')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`)
+  res.send(csv)
 }))
 
 // GET /api/entra/relationships?userId=

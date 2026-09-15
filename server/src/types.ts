@@ -37,6 +37,8 @@ export interface Device {
   ownership?: 'Corporate' | 'Personal'
   isAadRegistered?: boolean
   department?: string
+  azureAdDeviceId?: string
+  deviceCategory?: string
 
   // OS Details
   osBuildNumber?: string

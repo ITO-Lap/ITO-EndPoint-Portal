@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies } from '../services/intune.js'
 import { getKandjiDevices, getKandjiDeviceApps, isKandjiConfigured } from '../services/kandji.js'
-import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
+import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
 import type { Device, DashboardStats } from '../types.js'
 
@@ -171,6 +171,13 @@ router.get('/:id/apps', asyncHandler(async (req, res) => {
     return
   }
 
+  // For live ManageEngine devices, lazy-fetch installed-app inventory
+  if (isManageEngineConfigured() && device?.managementSource === 'ManageEngine') {
+    const apps = await getManageEngineDeviceApps(deviceId)
+    res.json({ success: true, data: apps })
+    return
+  }
+
   res.json({ success: true, data: [] })
 }))
 
@@ -189,6 +196,12 @@ router.get('/:id/policies', asyncHandler(async (req, res) => {
 
   if (isIntuneConfigured() && device?.managementSource === 'Microsoft Intune') {
     const policies = await getIntuneDevicePolicies(deviceId)
+    res.json({ success: true, data: policies })
+    return
+  }
+
+  if (isManageEngineConfigured() && device?.managementSource === 'ManageEngine') {
+    const policies = await getManageEngineDevicePolicies(deviceId)
     res.json({ success: true, data: policies })
     return
   }

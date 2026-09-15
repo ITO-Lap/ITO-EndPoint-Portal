@@ -38,6 +38,7 @@ docs/
 - [Local Setup](06-development/SETUP.md) — install, run, mock data mode
 - [Environment Variables](06-development/README.md) — all env vars explained
 - [Quick Modifications Cookbook](06-development/QUICK-MODS.md) — common change recipes
+- [IIS Deployment Guide](06-development/IIS-DEPLOYMENT.md) — step-by-step, no prior IIS experience needed ← **New**
 
 ### Build or modify something
 - [Frontend Components](02-frontend/COMPONENTS.md) — every component, props, location
@@ -46,6 +47,9 @@ docs/
 
 ### Connect a real data source
 - [Microsoft Intune](04-integrations/INTUNE.md)
+- [Intune Audit Logs](04-integrations/INTUNE-AUDIT-LOGS.md)
+- [Intune Scripts & Configurations](04-integrations/INTUNE-SCRIPTS-CONFIGURATIONS.md)
+- [Security Policies](04-integrations/SECURITY-POLICIES.md) ← **New**
 - [Kandji (macOS MDM)](04-integrations/KANDJI.md)
 - [ManageEngine](04-integrations/MANAGEENGINE.md)
 - [Microsoft Entra ID](04-integrations/ENTRA.md)
@@ -197,10 +201,10 @@ docs/
 - "Reconnect Now" button in Settings when connection drops
 - `POST /api/slack/reconnect` endpoint
 
-### OpenAI Removed
-- All OpenAI/GPT references removed from UI and navigation
-- `useAiAnalysis` hook is now a no-op stub
-- Rule-based runbook engine provides equivalent output without API calls
+### OpenAI Integration Status
+- OpenAI (GPT-4o-mini) is **still live** — configured via `OPENAI_API_KEY` in Settings → Integrations, used by `server/src/services/openai.ts`, `riskScoring.ts`, and the `intelligence`/`macLogs`/`automations` routes for device analysis, chat, risk scoring, and root-cause summaries
+- Runbooks fall back to the rule-based engine when OpenAI isn't configured, but do **not** replace it — both paths coexist
+- The now-removed `useAiAnalysis` hook (a dead no-op stub) and the unmounted `server/src/routes/ai.ts` route were cleaned up as unused leftovers, not evidence of OpenAI removal
 
 ---
 

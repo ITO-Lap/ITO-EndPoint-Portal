@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export interface AuthUser { role: string; displayName: string; email: string }
 
@@ -33,6 +33,26 @@ export interface ApiStats {
   sources: { intune: number; kandji: number; manageEngine: number }
   issueCategories: Array<{ label: string; value: number }>
   mock: boolean
+}
+
+export interface EntraGroupSuggestion { id: string; displayName: string }
+
+// Mirror of server/src/services/entraIntelligence.ts EntraGroupReportRow/Result
+export interface EntraGroupReportRow {
+  memberType: 'user' | 'device'
+  displayName: string
+  userPrincipalName: string
+  operatingSystem?: string
+  flagged?: boolean
+  flagReason?: string
+}
+
+export interface EntraGroupReportResult {
+  group: { id: string; displayName: string }
+  memberTypes: ('user' | 'device')[]
+  rows: EntraGroupReportRow[]
+  totalMembers: number
+  flaggedCount: number
 }
 
 // Kept for type-compat with RunbookCard — no longer populated at runtime
@@ -84,6 +104,8 @@ export interface ApiDevice {
   ownership?: 'Corporate' | 'Personal'
   isAadRegistered?: boolean
   department?: string
+  azureAdDeviceId?: string
+  deviceCategory?: string
 
   // OS Details
   osBuildNumber?: string
@@ -150,6 +172,26 @@ export interface LibraryApp {
   enforcement: string
   blueprint?: string    // Kandji Blueprint this app belongs to
   groupId?: string      // Kandji Group ID associated with this app
+}
+
+export interface ManageEngineAppLogEntry {
+  deviceId: string
+  deviceName: string
+  version: string
+  status: 'Installed' | 'Update Available' | 'Unknown'
+  lastSeen: string
+  errorDetails: string | null
+}
+
+export interface ManageEngineAppEntry {
+  appId: string
+  name: string
+  platform: 'Windows' | 'macOS'
+  installedVersions: string[]
+  latestVersion: string
+  deviceCount: number
+  updateStatus: 'Up to date' | 'Update Available' | 'Unknown'
+  logs: ManageEngineAppLogEntry[]
 }
 
 export interface IntegrationStatusItem {
@@ -325,6 +367,39 @@ export interface CreateScriptInput {
   minRole: 'Helpdesk' | 'IT Admin' | 'Global Admin'
   parameters: ScriptParameter[]
   timeoutSeconds: number
+}
+
+// Mirror of server/src/security-agents/types.ts — kept in sync manually.
+// Endpoint Protection Coverage: physical Windows/macOS Falcon + Zscaler
+// coverage for the Security Posture page card (no full device inventory —
+// that page was removed in favor of this compact executive summary).
+export type CoverageHealth = 'Healthy' | 'Warning' | 'Critical'
+
+export interface PlatformCoverage {
+  platform: 'Windows' | 'macOS'
+  totalDevices: number
+  falconInstalled: number
+  zscalerInstalled: number
+  falconMissing: number
+  zscalerMissing: number
+  falconCoveragePct: number
+  zscalerCoveragePct: number
+  health: CoverageHealth
+}
+
+export interface EndpointProtectionCoverageResult {
+  windows: PlatformCoverage
+  macos: PlatformCoverage
+  scanTime: string
+  scanDurationMs: number
+}
+
+export interface MissingAgentDevice {
+  deviceId: string
+  deviceName: string
+  primaryUser: string
+  connector: 'Microsoft Intune' | 'Kandji' | 'ManageEngine'
+  lastSync: string
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -572,6 +647,16 @@ export const api = {
   fetchKandjiApps: () =>
     get<LibraryApp[]>('/api/integrations/kandji/apps'),
 
+  fetchManageEngineAppsInventory: () =>
+    get<{ windows: ManageEngineAppEntry[]; macos: ManageEngineAppEntry[] }>('/api/integrations/manageengine/apps'),
+
+  fetchEndpointProtectionCoverage: () =>
+    get<EndpointProtectionCoverageResult>('/api/security-inventory/coverage'),
+  refreshEndpointProtectionCoverage: () =>
+    post<EndpointProtectionCoverageResult>('/api/security-inventory/scan', {}),
+  fetchDevicesMissingAgent: (platform: 'Windows' | 'macOS', agent: 'zscaler' | 'crowdstrike') =>
+    get<MissingAgentDevice[]>(`/api/security-inventory/missing?platform=${platform}&agent=${agent}`),
+
   fetchKandjiSelfServiceCategories: () =>
     get<{ id: string; name: string }[]>('/api/integrations/kandji/self-service/categories'),
 
@@ -724,6 +809,35 @@ export const api = {
 
   fetchEntraGroups: () =>
     get<unknown[]>('/api/entra/groups'),
+
+  searchEntraGroups: (q: string) =>
+    get<EntraGroupSuggestion[]>(`/api/entra/groups/search?q=${encodeURIComponent(q)}`),
+
+  fetchEntraGroupReport: (params: { name: string; os?: string }) => {
+    const qs = new URLSearchParams({ name: params.name })
+    if (params.os && params.os !== 'all') qs.set('os', params.os)
+    return get<EntraGroupReportResult>(`/api/entra/groups/report?${qs.toString()}`)
+  },
+
+  async exportEntraGroupReport(params: { name: string; os?: string; format?: 'csv' | 'excel' }): Promise<void> {
+    const qs = new URLSearchParams({ name: params.name, format: params.format ?? 'csv' })
+    if (params.os && params.os !== 'all') qs.set('os', params.os)
+    const res = await fetch(`${BASE_URL}/api/entra/groups/report/export?${qs.toString()}`)
+    if (!res.ok) {
+      const body = await res.json().catch(() => null) as { error?: string } | null
+      throw new Error(body?.error ?? 'Export failed')
+    }
+    const blob = await res.blob()
+    const url  = URL.createObjectURL(blob)
+    const ext  = params.format === 'excel' ? 'xlsx' : 'csv'
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `entra-group-report-${Date.now()}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  },
 
   fetchEntraRelationships: (userId?: string) =>
     get<unknown[]>(`/api/entra/relationships${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),

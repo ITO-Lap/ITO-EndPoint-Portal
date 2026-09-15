@@ -64,7 +64,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 function EncryptionBadge({ status }: { status: string }) {
-  const isOff = status.toLowerCase().includes('off') || status.toLowerCase().includes('pending')
+  const isOff = !(/encrypt|on|luks|enabled/i.test(status) && !/off|pending|not /i.test(status))
   const Icon = isOff ? Unlock : Lock
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.68rem] font-medium ${
@@ -489,7 +489,8 @@ function deriveRecentFailures(device: DeviceData): { event: string; time: string
   if (device.primaryIssue && device.primaryIssue !== '—') {
     failures.push({ event: `Compliance issue detected: ${device.primaryIssue}`, time: device.firstDetected || 'Detected earlier', severity: device.severity })
   }
-  if (device.encryptionStatus?.toLowerCase().includes('off') || device.encryptionStatus?.toLowerCase().includes('pending')) {
+  const encryptionOk = !!device.encryptionStatus && /encrypt|on|luks|enabled/i.test(device.encryptionStatus) && !/off|pending|not /i.test(device.encryptionStatus)
+  if (!encryptionOk) {
     failures.push({ event: 'Encryption not enabled — disk is unprotected', time: 'Ongoing', severity: 'High' })
   }
   return failures

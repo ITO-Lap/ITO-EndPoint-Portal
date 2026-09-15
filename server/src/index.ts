@@ -28,6 +28,8 @@ import auditLogRouter from './routes/auditLog.js'
 import scheduledReportsRouter from './routes/scheduledReports.js'
 import securityInventoryRouter from './routes/securityInventory.js'
 import roleActivityRouter from './routes/roleActivity.js'
+import intuneScriptsConfigRouter from './routes/intuneScriptsConfig.js'
+import securityPoliciesRouter from './routes/securityPolicies.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 import { isConfigured } from './store/integrationStore.js'
 import path from 'node:path'
@@ -40,6 +42,11 @@ dotenv.config()
 
 const app = express()
 const port = process.env.PORT ?? 4000
+
+// Behind a reverse proxy (Heroku router, IIS/ARR, etc.) req.ip is otherwise
+// always the proxy's own address, which would bucket every user under one
+// rate-limit key.
+app.set('trust proxy', 1)
 
 const isDev = process.env.NODE_ENV !== 'production'
 
@@ -95,6 +102,8 @@ app.use('/api/audit',              apiLimiter, auditLogRouter)
 app.use('/api/scheduled-reports',  apiLimiter, scheduledReportsRouter)
 app.use('/api/security-inventory', apiLimiter, securityInventoryRouter)
 app.use('/api/role-activity',      apiLimiter, roleActivityRouter)
+app.use('/api/intune-scripts-config', apiLimiter, intuneScriptsConfigRouter)
+app.use('/api/security-policies',  apiLimiter, securityPoliciesRouter)
 
 // ── Serve the built frontend (single-process deployment) ───────────────────────
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,

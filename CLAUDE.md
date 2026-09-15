@@ -62,9 +62,9 @@ src/                        Frontend (React + TypeScript)
 server/src/                 Backend (Express + TypeScript)
 ├── index.ts                Entry point, route mounting
 ├── types.ts                Shared server types
-├── routes/                 ai, activity, devices, integrations, notifications, runbooks
-├── services/               intune, kandji, manageEngine, openai
-├── middleware/             errorHandler, requestLogger
+├── routes/                 ai, activity, devices, integrations, notifications, runbooks, intuneAuditLogs
+├── services/               intune, kandji, manageEngine, openai, intuneAuditGraph/Export/Scheduler
+├── middleware/             errorHandler, requestLogger, requireRole
 ├── data/                   Mock data (devices, runbooks, activity, notifications)
 └── store/integrationStore  Runtime credential + fetch-result cache
 
@@ -89,6 +89,8 @@ docs/                       All project documentation (start here)
 | `INTUNE_TENANT_ID` + `INTUNE_CLIENT_ID` + `INTUNE_CLIENT_SECRET` | Live Intune data |
 | `KANDJI_API_URL` + `KANDJI_API_TOKEN` | Live Kandji data |
 | `MANAGEENGINE_URL` + `MANAGEENGINE_API_KEY` | Live ManageEngine data |
+| `DATABASE_URL` | PostgreSQL — multi-tenant, app audit log, scheduled reports, Intune Audit Logs exports/schedules |
+| `INTUNE_AUDIT_*` | Intune Audit Logs module (auth mode, storage, email, scheduler) — see [`docs/04-integrations/INTUNE-AUDIT-LOGS.md`](docs/04-integrations/INTUNE-AUDIT-LOGS.md) |
 | `PORT` | Server port (default: 4000) |
 
 ---

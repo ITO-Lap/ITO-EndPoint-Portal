@@ -1,7 +1,7 @@
 // Intelligence Platform — frontend HTTP client.
 // All functions call the /api/intelligence/* routes on the Express server.
 
-const SERVER = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+const SERVER = import.meta.env.VITE_API_URL ?? ''
 const BASE = `${SERVER}/api/intelligence`
 const TENANTS = `${SERVER}/api/tenants`
 const AUDIT = `${SERVER}/api/audit`

@@ -202,4 +202,18 @@ A: The Settings page is hidden from the sidebar and inaccessible. If they naviga
 
 ---
 
+## Module-specific roles: Intune Audit Logs
+
+The Intune Audit Logs module (`docs/04-integrations/INTUNE-AUDIT-LOGS.md`) defines three finer-grained roles on top of the three tiers above, enforced server-side by every `/api/intune/*` route:
+
+| Module role | Can do | Mapped from |
+|---|---|---|
+| **Audit Reader** | View and filter audit events, view export/schedule status | Global Admin, IT Admin, Helpdesk |
+| **Audit Exporter** | Everything Reader can, plus create/cancel/download/email exports | Global Admin, IT Admin |
+| **Audit Administrator** | Everything Exporter can, plus create/edit/disable/delete recurring schedules | Global Admin, IT Admin |
+
+Helpdesk therefore has read-only access to this module — the same tier that has read-only access everywhere else in the app. See `server/src/middleware/requireRole.ts` for the enforcement code and its documented limitation (role is read from a request header sent by the frontend, not a verified session — this app has no per-user login today).
+
+---
+
 *For questions about this documentation, contact: it-support@zinnia.com*

@@ -162,7 +162,7 @@ export function DeviceSummary({ device, onSyncNow, syncLoading = false, onCopy }
               <span className="text-[0.68rem] text-slate-500">Encryption</span>
               <Badge
                 label={device.encryptionStatus}
-                variant={device.encryptionStatus.toLowerCase().includes('off') || device.encryptionStatus.toLowerCase().includes('pending') ? 'red' : 'green'}
+                variant={/encrypt|on|luks|enabled/i.test(device.encryptionStatus) && !/off|pending|not /i.test(device.encryptionStatus) ? 'green' : 'red'}
                 className="text-[0.60rem] px-1.5 py-0.5"
               />
             </div>

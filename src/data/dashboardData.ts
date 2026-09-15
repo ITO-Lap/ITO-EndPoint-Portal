@@ -18,7 +18,6 @@ import {
   Monitor,
   GitBranch,
   Layers,
-  Laptop2,
   Radar,
   Stethoscope,
   Brain,
@@ -46,8 +45,6 @@ export const navItems: NavItem[] = [
   { id: 'device_lookup',        title: 'Device Lookup',           icon: Search,        group: 'Endpoint Management' },
   { id: 'mac_devices',          title: 'Mac Devices',             icon: Monitor,       group: 'Endpoint Management' },
   { id: 'intune_devices',       title: 'Intune Devices',          icon: Server,        group: 'Endpoint Management' },
-  { id: 'intune_device_report', title: 'Intune Device Report',    icon: FileText,      group: 'Endpoint Management' },
-  { id: 'windows_devices',      title: 'Windows Devices',         icon: Laptop2,       group: 'Endpoint Management' },
   { id: 'manageengine_devices', title: 'ManageEngine Devices',    icon: Layers,        group: 'Endpoint Management' },
   { id: 'open_issues',          title: 'Open Issues',             icon: AlertTriangle, group: 'Endpoint Management' },
   { id: 'smart_diagnostics',    title: 'Diagnostics',             icon: Stethoscope,   group: 'Endpoint Management' },
@@ -56,6 +53,8 @@ export const navItems: NavItem[] = [
   { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security & Compliance' },
   { id: 'vulnerabilities',      title: 'Vulnerabilities',     icon: ShieldAlert,   group: 'Security & Compliance' },
   { id: 'edr',                  title: 'EDR',                 icon: Radar,         group: 'Security & Compliance' },
+  { id: 'role_activity_audit',  title: 'Role Activity Audit', icon: ShieldCheck,   group: 'Security & Compliance' },
+  { id: 'security_policies',    title: 'Security Policies',   icon: ShieldCheck,   group: 'Security & Compliance' },
 
   // ── USERS & IDENTITY ──────────────────────────────────────────────────────────
   { id: 'users',                title: 'Users',               icon: Users,         group: 'Users & Identity' },
