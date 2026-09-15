@@ -4,18 +4,16 @@ import type { ReportMeta, ReportResult, ReportColumn, ReportSummaryCard, Integra
 
 // ── Source tab config ──────────────────────────────────────────────────────────
 
-type SourceKey = 'all' | 'intune' | 'manageengine' | 'graph' | 'slack'
+type SourceKey = 'all' | 'intune' | 'manageengine' | 'graph'
 
 const SOURCE_TABS: { key: SourceKey; label: string; logo: string; badge?: string }[] = [
   { key: 'all',         label: 'All Sources',    logo: 'M4 6h16M4 12h16M4 18h16' },
   { key: 'intune',      label: 'Intune',         logo: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
   { key: 'manageengine',label: 'ManageEngine',   logo: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
   { key: 'graph',       label: 'Microsoft Graph',logo: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z', badge: 'API' },
-  { key: 'slack',       label: 'Slack Audit',    logo: 'M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zm-5 0c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zM14.5 21c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zm-5 0c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zM4.5 14c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5S10.33 14 9.5 14h-5zm10 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5S20.33 14 19.5 14h-5z', badge: 'Logs' },
 ]
 
 const GRAPH_CATEGORIES = new Set(['endpoint', 'threat', 'identity', 'audit'])
-const SLACK_CATEGORIES = new Set(['slack-access', 'slack-channel', 'slack-users', 'slack-files', 'slack-compliance'])
 
 // ── Graph domain definitions ───────────────────────────────────────────────────
 
@@ -86,81 +84,6 @@ const GRAPH_DOMAINS = [
   },
 ] as const
 
-// ── Slack domain definitions ───────────────────────────────────────────────────
-
-const SLACK_DOMAINS = [
-  {
-    category:    'slack-access',
-    label:       'Access & Auth',
-    description: 'Login events, SSO/SAML flows, failed authentications, and two-factor authentication enrollment status across all workspace members.',
-    source:      'Slack Audit Logs',
-    iconPath:    'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z',
-    bg:      'bg-lime-500',
-    light:   'bg-lime-50',
-    text:    'text-lime-700',
-    border:  'border-lime-500',
-    pill:    'bg-lime-100 text-lime-700',
-    selBorder:'border-lime-500',
-    selRing: 'ring-2 ring-lime-200',
-  },
-  {
-    category:    'slack-channel',
-    label:       'Messages & Channels',
-    description: 'Channel activity metrics, message retention exceptions, and external Slack Connect shared channels with partner workspaces.',
-    source:      'Slack Audit Logs',
-    iconPath:    'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
-    bg:      'bg-lime-500',
-    light:   'bg-lime-50',
-    text:    'text-lime-700',
-    border:  'border-lime-500',
-    pill:    'bg-lime-100 text-lime-700',
-    selBorder:'border-lime-500',
-    selRing: 'ring-2 ring-lime-200',
-  },
-  {
-    category:    'slack-users',
-    label:       'User Management',
-    description: 'User provisioning lifecycle, guest and external collaborator access, and workspace role and permission change audit trail.',
-    source:      'Slack Audit Logs',
-    iconPath:    'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
-    bg:      'bg-lime-500',
-    light:   'bg-lime-50',
-    text:    'text-lime-700',
-    border:  'border-lime-500',
-    pill:    'bg-lime-100 text-lime-700',
-    selBorder:'border-lime-500',
-    selRing: 'ring-2 ring-lime-200',
-  },
-  {
-    category:    'slack-files',
-    label:       'Files & Apps',
-    description: 'File sharing audit, public link creation and revocation, OAuth app installations with scope analysis, and DLP-flagged file events.',
-    source:      'Slack Audit Logs',
-    iconPath:    'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
-    bg:      'bg-teal-500',
-    light:   'bg-teal-50',
-    text:    'text-teal-700',
-    border:  'border-teal-500',
-    pill:    'bg-teal-100 text-teal-700',
-    selBorder:'border-teal-500',
-    selRing: 'ring-2 ring-teal-200',
-  },
-  {
-    category:    'slack-compliance',
-    label:       'Compliance & Retention',
-    description: 'DLP policy violation alerts, eDiscovery export request log, and data retention policy configuration compliance across all channels.',
-    source:      'Slack Audit Logs',
-    iconPath:    'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-    bg:      'bg-rose-500',
-    light:   'bg-rose-50',
-    text:    'text-rose-700',
-    border:  'border-rose-500',
-    pill:    'bg-rose-100 text-rose-700',
-    selBorder:'border-rose-500',
-    selRing: 'ring-2 ring-rose-200',
-  },
-] as const
-
 // ── Category metadata ──────────────────────────────────────────────────────────
 
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
@@ -174,11 +97,6 @@ const CATEGORY_META: Record<string, { label: string; color: string }> = {
   threat:             { label: 'Security & Threat',  color: 'bg-red-50 text-red-800 border-red-300' },
   identity:           { label: 'Identity & Users',   color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   audit:              { label: 'Compliance & Audit', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  'slack-access':     { label: 'Access & Auth',      color: 'bg-lime-50 text-lime-700 border-lime-200' },
-  'slack-channel':    { label: 'Messages & Channels',color: 'bg-lime-50 text-lime-700 border-lime-200' },
-  'slack-users':      { label: 'User Management',    color: 'bg-lime-50 text-lime-700 border-lime-200' },
-  'slack-files':      { label: 'Files & Apps',       color: 'bg-teal-50 text-teal-700 border-teal-200' },
-  'slack-compliance': { label: 'Compliance & Retention', color: 'bg-rose-50 text-rose-700 border-rose-200' },
 }
 
 const SUMMARY_COLORS: Record<ReportSummaryCard['color'], string> = {
@@ -205,7 +123,6 @@ function getRelativeTime(date: Date): string {
 function reportMatchesSource(report: ReportMeta, source: SourceKey): boolean {
   if (source === 'all') return true
   if (source === 'graph') return GRAPH_CATEGORIES.has(report.category)
-  if (source === 'slack') return SLACK_CATEGORIES.has(report.category)
   return report.sources.includes(source)
 }
 
@@ -325,11 +242,10 @@ function SourceTabs({
   function countFor(key: SourceKey) {
     if (key === 'all') return reports.length
     if (key === 'graph') return reports.filter(r => GRAPH_CATEGORIES.has(r.category)).length
-    if (key === 'slack') return reports.filter(r => SLACK_CATEGORIES.has(r.category)).length
     return reports.filter(r => r.sources.includes(key)).length
   }
   function statusFor(key: SourceKey): 'connected' | 'disconnected' | null {
-    if (key === 'all' || key === 'graph' || key === 'slack') return null
+    if (key === 'all' || key === 'graph') return null
     const item = integrations.find(i => i.id === key)
     if (!item) return null
     return item.configured && item.healthy !== false ? 'connected' : 'disconnected'
@@ -806,230 +722,6 @@ function GraphDomainView({
   )
 }
 
-// ── Slack domain view ──────────────────────────────────────────────────────────
-
-function SlackDomainView({
-  reports, loadingMeta,
-  selectedCategory, onSelectCategory,
-  selectedReport, onSelectReport,
-  result, running, error,
-  sortBy, sortDir, offset,
-  onSort, onPage, onExport, onRefresh,
-}: {
-  reports: ReportMeta[]
-  loadingMeta: boolean
-  selectedCategory: string
-  onSelectCategory: (cat: string) => void
-  selectedReport: ReportMeta | null
-  onSelectReport: (r: ReportMeta) => void
-  result: ReportResult | null
-  running: boolean
-  error: string | null
-  sortBy?: string
-  sortDir: 'asc' | 'desc'
-  offset: number
-  onSort: (f: string) => void
-  onPage: (o: number) => void
-  onExport: () => void
-  onRefresh: () => void
-}) {
-  const byCategory = Object.fromEntries(
-    SLACK_DOMAINS.map(d => [d.category, reports.filter(r => r.category === d.category)])
-  )
-  const activeDomain = SLACK_DOMAINS.find(d => d.category === selectedCategory) ?? null
-  const domainReports = activeDomain ? (byCategory[activeDomain.category] ?? []) : []
-  const totalSlack = reports.filter(r => SLACK_CATEGORIES.has(r.category)).length
-
-  return (
-    <div className="space-y-5">
-      {/* ── Header banner ── */}
-      <div className="rounded-2xl p-5 flex items-center justify-between gap-4"
-        style={{ background: 'linear-gradient(135deg, #4A154B 0%, #611f69 60%, #7c3085 100%)' }}>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <svg className="h-5 w-5 text-lime-200 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zm-5 0c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zM14.5 21c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zm-5 0c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zM4.5 14c-.83 0-1.5-.67-1.5-1.5S3.67 11 4.5 11h5c.83 0 1.5.67 1.5 1.5S10.33 14 9.5 14h-5zm10 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5S20.33 14 19.5 14h-5z"/>
-            </svg>
-            <h2 className="text-base font-semibold text-white">Slack Audit Log Reports</h2>
-            <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wider bg-white/20 text-lime-100">{totalSlack} REPORTS</span>
-          </div>
-          <p className="text-sm text-lime-200">
-            Select a domain below to explore Slack Audit Logs — access, channels, users, files, and compliance across your workspace.
-          </p>
-        </div>
-        <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
-          {SLACK_DOMAINS.map(d => (
-            <span key={d.category} className="rounded-full px-2.5 py-1 text-xs font-medium bg-white/15 text-lime-100">
-              {d.label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 5 Domain cards in one row ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {loadingMeta
-          ? [...Array(5)].map((_, i) => <div key={i} className="h-48 rounded-2xl bg-slate-100 animate-pulse" />)
-          : SLACK_DOMAINS.map(domain => {
-              const isSelected = selectedCategory === domain.category
-              const count = byCategory[domain.category]?.length ?? 0
-              const domainRpts = byCategory[domain.category] ?? []
-              return (
-                <button
-                  key={domain.category}
-                  onClick={() => onSelectCategory(isSelected ? 'all' : domain.category)}
-                  className={`group relative text-left rounded-2xl border-2 bg-white transition-all duration-200 overflow-hidden
-                    ${isSelected
-                      ? `${domain.selBorder} ${domain.selRing} shadow-md -translate-y-0.5`
-                      : 'border-slate-200 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5'
-                    }`}
-                >
-                  <div className={`h-1.5 w-full ${domain.bg}`} />
-                  <div className="p-4">
-                    <div className="flex items-start gap-2.5 mb-3">
-                      <div className={`h-9 w-9 flex-shrink-0 rounded-xl ${domain.light} flex items-center justify-center`}>
-                        <svg className={`h-4.5 w-4.5 ${domain.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d={domain.iconPath} />
-                        </svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 leading-snug">{domain.label}</p>
-                        <p className={`text-[10px] font-medium mt-0.5 ${domain.text}`}>{domain.source}</p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-relaxed mb-3 line-clamp-3">{domain.description}</p>
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {domainRpts.slice(0, 2).map(r => (
-                        <span key={r.id} className={`rounded-full px-2 py-0.5 text-[9px] font-medium truncate max-w-full ${domain.pill}`}>
-                          {r.name}
-                        </span>
-                      ))}
-                      {count > 2 && (
-                        <span className="rounded-full px-2 py-0.5 text-[9px] font-medium bg-slate-100 text-slate-500">
-                          +{count - 2} more
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400">
-                        <span className="font-semibold text-slate-700">{count}</span> report{count !== 1 ? 's' : ''}
-                      </span>
-                      <span className={`text-[10px] font-semibold transition-all ${
-                        isSelected ? domain.text : 'text-slate-400 group-hover:text-slate-600'
-                      }`}>
-                        {isSelected ? 'Hide ↑' : 'Explore →'}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              )
-            })
-        }
-      </div>
-
-      {/* ── Report cards for selected domain ── */}
-      {activeDomain && (
-        <div className="space-y-4">
-          <div className={`flex items-center gap-3 rounded-xl border-l-4 ${activeDomain.selBorder} bg-white border border-slate-200 shadow-sm px-5 py-3`}>
-            <div className={`h-8 w-8 flex-shrink-0 rounded-lg ${activeDomain.light} flex items-center justify-center`}>
-              <svg className={`h-4 w-4 ${activeDomain.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={activeDomain.iconPath} />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900">{activeDomain.label} Reports</p>
-              <p className="text-xs text-slate-500">{activeDomain.source} · {domainReports.length} reports available</p>
-            </div>
-            {selectedReport && SLACK_CATEGORIES.has(selectedReport.category) && selectedReport.category === activeDomain.category && (
-              <span className={`text-xs font-medium rounded-full px-2.5 py-1 ${activeDomain.pill}`}>
-                Viewing: {selectedReport.name}
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {domainReports.map(report => {
-              const isSelected = selectedReport?.id === report.id
-              return (
-                <button
-                  key={report.id}
-                  onClick={() => onSelectReport(report)}
-                  className={`group text-left rounded-xl border-2 bg-white p-4 transition-all duration-150 hover:-translate-y-0.5
-                    ${isSelected
-                      ? `${activeDomain.selBorder} ${activeDomain.selRing} shadow-md`
-                      : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
-                    }`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className={`text-sm font-semibold leading-snug ${isSelected ? 'text-slate-900' : 'text-slate-800'}`}>
-                      {report.name}
-                    </p>
-                    {isSelected && (
-                      <span className={`flex-shrink-0 h-4 w-4 rounded-full ${activeDomain.bg} flex items-center justify-center`}>
-                        <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-                        </svg>
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-3 line-clamp-2">{report.description}</p>
-                  {report.apiEndpoint && (
-                    <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
-                      <svg className="h-3 w-3 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                      </svg>
-                      <code className="text-[10px] font-mono text-slate-500 truncate">{report.apiEndpoint}</code>
-                    </div>
-                  )}
-                  <div className={`mt-3 text-xs font-semibold flex items-center gap-1 transition-colors ${
-                    isSelected ? activeDomain.text : 'text-slate-400 group-hover:text-slate-600'
-                  }`}>
-                    {isSelected ? (
-                      <><svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6"/></svg>Report loaded below</>
-                    ) : (
-                      <><svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Run Report</>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Report runner ── */}
-      {selectedReport && activeDomain && selectedReport.category === activeDomain.category && (
-        <ReportRunner
-          report={selectedReport}
-          result={result}
-          running={running}
-          error={error}
-          sortBy={sortBy}
-          sortDir={sortDir}
-          offset={offset}
-          onSort={onSort}
-          onPage={onPage}
-          onExport={onExport}
-          onRefresh={onRefresh}
-          sourceLabel="Slack Audit Logs"
-        />
-      )}
-
-      {!activeDomain && !loadingMeta && (
-        <div className="flex items-center justify-center py-10 rounded-2xl border border-dashed border-slate-300 bg-white text-slate-400">
-          <div className="text-center px-6">
-            <svg className="h-10 w-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zm-5 0c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zM14.5 21c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5zm-5 0c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/>
-            </svg>
-            <p className="text-sm font-medium text-slate-500">Select a domain above</p>
-            <p className="text-xs mt-1">Click any of the 5 cards to explore Slack audit reports</p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 100
@@ -1153,25 +845,6 @@ export function ReportsPage() {
       {/* Microsoft Graph: domain-card layout */}
       {activeSource === 'graph' ? (
         <GraphDomainView
-          reports={reports}
-          loadingMeta={loadingMeta}
-          selectedCategory={selectedCategory}
-          onSelectCategory={handleSelectCategory}
-          selectedReport={selectedReport}
-          onSelectReport={handleSelectReport}
-          result={result}
-          running={running}
-          error={error}
-          sortBy={sortBy}
-          sortDir={sortDir}
-          offset={offset}
-          onSort={handleSort}
-          onPage={handlePage}
-          onExport={handleExport}
-          onRefresh={() => selectedReport && runSelected(selectedReport, 0, sortBy, sortDir)}
-        />
-      ) : activeSource === 'slack' ? (
-        <SlackDomainView
           reports={reports}
           loadingMeta={loadingMeta}
           selectedCategory={selectedCategory}

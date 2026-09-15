@@ -15,12 +15,6 @@ export type ReportCategory =
   | 'threat'     // Security & threat intelligence (Defender)
   | 'identity'   // Identity & user (Entra ID / AAD)
   | 'audit'      // Compliance & audit (Purview / AAD)
-  // Slack Audit Logs API report categories
-  | 'slack-access'      // Login, SSO & authentication events
-  | 'slack-channel'     // Message & channel activity
-  | 'slack-users'       // User & workspace management
-  | 'slack-files'       // File & app activity
-  | 'slack-compliance'  // Data retention, DLP & eDiscovery
 
 export interface ReportColumn {
   key:    string

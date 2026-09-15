@@ -97,11 +97,14 @@ Top navigation bar with search, notifications, and user menu.
   notifications={NotificationItem[]}
   onNotificationToggle={() => ...}
   onMarkAllNotificationsRead={() => ...}
-  onProfileNav={(page) => ...}      // navigates to 'Profile' page
-  onSignOut={() => ...}
+  onProfileNav={(page) => ...}      // e.g. navigates to 'Documentation' from the profile menu
   viewerRole={string}
+  copilotOpen={boolean}
+  onToggleCopilot={() => ...}       // opens/closes the Endpoint Operations Copilot panel
 />
 ```
+
+There is no sign-out action — see the "Auth" note below.
 
 **To add a header action:** add to the right-side icon cluster in `Header.tsx`.
 
@@ -179,18 +182,6 @@ Each category: `{ label, value, color }`
 
 ---
 
-### `RecentActivity.tsx`
-Feed of recent device events. Shows last N items with status badge.
-
-**Props:** `items: ActivityItem[]`, `onViewAll: () => void`
-
----
-
-### `ActivityListModal.tsx`
-Modal that shows the full activity list when user clicks "View All".
-
----
-
 ### `LiveDataBar.tsx`
 Bar above dashboard showing data freshness (countdown to next refresh, last updated time, source counts, mock badge).
 
@@ -205,15 +196,6 @@ Modal showing full policy detail for a compliance issue.
 
 ## Devices (`src/components/devices/`)
 
-### `DeviceLookupPage.tsx`
-Full Device Lookup page with search, filters, results table, and detail panel.
-
-**Props:** `onViewInDashboard: (deviceName: string) => Promise<void>`
-
-**To modify search filters:** edit the filter state and `<select>` dropdowns inside this component.
-
----
-
 ### `DeviceSummary.tsx`
 Device summary panel displayed on the Dashboard. Shows the currently selected device's identity, issue, and quick stats.
 
@@ -222,7 +204,7 @@ Device summary panel displayed on the Dashboard. Shows the currently selected de
 ---
 
 ### `DeviceDetailPanel.tsx`
-Detailed side panel shown in Device Lookup. Shows hardware, network, security, apps, and LAPS info.
+Detailed side panel shown from device tables (e.g. Intune Devices, Mac Devices). Shows hardware, network, security, apps, and LAPS info.
 
 **Props:** `device: ApiDevice`, `onViewInDashboard: (name: string) => void`
 
@@ -277,26 +259,25 @@ Modal for configuring notification quiet hours (start/end time, days of week).
 
 ---
 
-## Auth (`src/components/auth/`)
+## Auth
 
-### `SignInPage.tsx`
-Sign-in page with demo role selector. In production, replace the form with your SSO provider (Microsoft Entra ID).
-
-**Props:** `onSignIn: (role: string) => void`, `justSignedOut: boolean`
-
-**To add SSO:** replace the form in `SignInPage.tsx` with an OAuth redirect. The `onSignIn` callback must still be called with the user's role string after auth completes.
+There is no sign-in screen — it was deliberately removed. The app always runs as Global Admin with
+no auth gate (`src/App.tsx` mounts the dashboard directly); do not re-add a `SignInPage` as a "fix."
 
 ---
 
 ## Pages (`src/pages/`)
 
+> This is not the full list of page components — see `src/pages/` for the current set (Intune
+> Devices, Mac Devices, Mac Fleet Reports, ManageEngine App Inventory, Users, User Intelligence,
+> Security Posture, Security Policies, Role Activity Audit, Automation, Compliance Intelligence,
+> Policy Conflicts, Risk Scoring, Report Builder, Scheduled Reports, Audit Log, Intelligence
+> Dashboard, Docs). Only the longest-standing ones are documented individually below.
+
 ### `UsersPage.tsx`
 Users management page with list view, search, role filter, and user detail drawer.
 
 **Props:** `viewerRole: UserToolRole`
-
-### `ProfilePage.tsx`
-Current user's profile page with account info, notification preferences, and MFA status.
 
 ### `DocsPage.tsx`
 In-app documentation viewer. Renders the project documentation inside the dashboard.

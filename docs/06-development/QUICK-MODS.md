@@ -91,7 +91,8 @@ For stat card colors, edit the `accent`, `iconBg`, `iconText` fields in `statCar
 }
 ```
 
-Also add to the **server mock** at `server/src/data/mockDevices.ts` to make it appear via the API.
+There is no server-side mock device list anymore — `/api/devices` returns real MDM data only, or an
+empty list if nothing is configured (no `server/src/data/mockDevices.ts` to update).
 
 ---
 
@@ -106,7 +107,7 @@ Also add to the **server mock** at `server/src/data/mockDevices.ts` to make it a
 
 ### Add a runbook
 
-**`server/src/data/mockRunbooks.ts`** → add a new runbook object.
+**`src/data/dashboardData.ts`** → add a new `RunbookData` object and reference it from `getRunbookForDevice()`. (There is no separate server-side runbook library/route anymore.)
 
 ---
 
@@ -158,44 +159,26 @@ Or edit the `system` string inside `chatWithAI()` for the assistant persona.
 
 ### Add a new user role
 
-1. **`src/types.ts`** → add to `UserToolRole`:
-   ```ts
-   export type UserToolRole = 'Global Admin' | 'IT Admin' | 'Helpdesk' | 'End User' | 'Read Only'
-   ```
+1. **`src/types.ts`** → add to `UserToolRole` (currently `'Global Admin' | 'IT Admin' | 'Helpdesk' | 'End User'`)
 
-2. **`src/components/auth/SignInPage.tsx`** → add the role to the demo selector
+2. **`src/components/layout/Sidebar.tsx`** → add role-based nav filtering if needed
 
-3. **`src/components/layout/Sidebar.tsx`** → add role-based nav filtering if needed
+3. **`docs/ROLES.md`** → update the permissions matrix
 
-4. **`docs/ROLES.md`** → update the permissions matrix
-
----
-
-### Replace the demo sign-in with SSO
-
-**`src/components/auth/SignInPage.tsx`** — replace the form with an OAuth redirect:
-```tsx
-const handleSSO = () => {
-  window.location.href = 'https://login.microsoftonline.com/.../oauth2/v2.0/authorize?...'
-}
-```
-
-After redirect callback, call `onSignIn(role)` with the role from the JWT claim.
+There is no sign-in screen to update a role selector on — the app has no auth gate and always runs
+as Global Admin (`viewerRole` defaults in `Header.tsx`/`App.tsx`). Don't re-add a `SignInPage`.
 
 ---
 
 ## Notifications
 
-### Add a new default notification
+### Add a notification
 
-**`src/App.tsx`** → add to `DEFAULT_NOTIFICATIONS`:
-```ts
-{ id: '4', message: 'Your new notification message', read: false }
-```
+Notifications are fetched from the server (`GET /api/notifications`, `server/src/routes/notifications.ts`) — there's no client-side default list in `App.tsx` to edit. Add/trigger the notification on the server side instead.
 
-### Change notification polling interval
+### Notification fetch behavior
 
-**`src/hooks/useNotifications.ts`** → modify the `setInterval` delay.
+**`src/hooks/useNotifications.ts`** fetches once on mount (`api.fetchNotifications()`) — it does not currently poll on an interval.
 
 ---
 
@@ -219,4 +202,4 @@ After redirect callback, call `onSignIn(role)` with the role from the JWT claim.
 1. **`src/types.ts`** → add field to `DeviceData`
 2. **`server/src/types.ts`** → add field to server `Device` type (keep in sync)
 3. **`src/api/index.ts`** → add field to `ApiDevice` and to `apiDeviceToDeviceData()`
-4. Update mock data in both `src/data/dashboardData.ts` and `server/src/data/mockDevices.ts`
+4. Update mock/demo data in `src/data/dashboardData.ts` (there is no server-side mock device list — see [Architecture](../01-overview/ARCHITECTURE.md))

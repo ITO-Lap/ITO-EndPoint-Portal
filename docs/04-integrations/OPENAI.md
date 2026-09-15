@@ -36,52 +36,63 @@ Settings → Integrations → OpenAI → fill in API Key (and optionally Org ID 
 
 ## What the AI does
 
-### Device Analysis (`POST /api/ai/analyze`)
+There is no standalone `/api/ai/*` route anymore (the old `analyzeDevice()`/`chatWithAI()` REST
+endpoints and their frontend caller were removed as unused leftovers). OpenAI is called from three
+separate places, each instantiating its own client from `OPENAI_API_KEY` / the Settings-pushed
+config:
 
-Sends a structured prompt to GPT-4o-mini with device details. The model returns:
+### Risk Scoring narrative (`server/src/routes/intelligence.ts` → `GET /api/intelligence/risk-scores`)
 
-```json
-{
-  "summary": "One-sentence compliance status",
-  "rootCause": "Why the issue occurred",
-  "recommendation": "What to do about it",
-  "suggestedRunbook": "Name of runbook to run",
-  "riskLevel": "High",
-  "steps": ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"]
-}
-```
+`batchComputeRiskScores()` uses OpenAI (when configured) to generate the per-device AI narrative and
+action items shown on the Risk Scoring page; falls back to a non-AI scoring path when unconfigured.
 
-**Model used:** `gpt-4o-mini`  
-**Temperature:** `0.2` (deterministic, factual)  
-**Max tokens:** `600`  
-**Response format:** `json_object` (structured JSON, no prose)
+### Compliance Intelligence executive summary (`POST /api/intelligence/summary`)
 
-### IT Assistant Chat (`POST /api/ai/chat`)
+Builds a prompt from live tenant stats (device counts, compliance %, stale devices, policy
+conflicts) and returns a 3–4 sentence executive summary. Returns `{ success: false, error: 'OpenAI
+not configured — set OPENAI_API_KEY' }` (HTTP 200, not 503) rather than throwing, when unconfigured.
 
-Freeform Q&A with a system prompt specialised in Intune and ManageEngine. When a device is in context, its details are included in the prompt.
+### Issue explanation (`POST /api/intelligence/explain`)
 
-**Model used:** `gpt-4o-mini`  
-**Temperature:** `0.3`  
-**Max tokens:** `500`
+Given a device name + issue description, returns a plain-English explanation, root cause, and
+step-by-step remediation. Same not-configured behavior as `/summary`.
+
+**Model used (all of the above):** `gpt-4o-mini`, `max_tokens: 400–500`
+
+### Endpoint Operations Copilot (`server/src/services/copilotEngine.ts`, mounted at `/api/copilot`)
+
+Runs a tool-calling loop against `gpt-4o-mini` (`server/src/services/copilotTools.ts` defines the
+tools). Read tools execute immediately; write tools (e.g. `create_jira_ticket`,
+`trigger_automation_rule`) return a pending action that only executes after the user confirms via
+`POST /api/copilot/actions/:id/confirm`. If OpenAI isn't configured, the Copilot replies with a
+plain "currently unavailable" message instead of erroring.
+
+### Automation Rules — AI-generated content
+
+`server/src/services/openai.ts` still exports `analyzeDevice()`, `buildAutomationRule()`, and
+`generateRemediationScript()`, used by `server/src/services/automationEngine.ts` for AI-backed
+automation actions (e.g. an automation rule step that asks the model to analyze a device or draft a
+remediation script). `chatWithAI()` in the same file is currently unused dead code — nothing calls
+it.
 
 ---
 
 ## Modifying the AI behaviour
 
-**To change the analysis prompt:** edit `analyzeDevice()` in `server/src/services/openai.ts`
+**To change the Risk Scoring / automation-rule analysis prompt:** edit `analyzeDevice()` in `server/src/services/openai.ts`
 
-**To change the chat system prompt:** edit the `system` constant in `chatWithAI()` in the same file
+**To change the Compliance Intelligence summary/explain prompts:** edit the prompt strings directly in `server/src/routes/intelligence.ts`
 
-**To use a different model:** change the `model` field in the `chat.completions.create()` calls, or pass it through `setOpenAIConfig({ model: 'gpt-4o' })` at runtime.
+**To change the Copilot's system prompt or tool list:** edit `server/src/services/copilotEngine.ts` / `copilotTools.ts`
 
-**To add response caching:** wrap `analyzeDevice()` with a device-ID keyed cache (e.g., using a Map with TTL) to avoid redundant API calls for the same device.
+**To use a different model:** each call site hardcodes `model: 'gpt-4o-mini'` in its own `chat.completions.create()` call — there is no single shared model config to change (aside from `setOpenAIConfig({ model })` for the parts of `services/openai.ts` that read it back via `getOpenAIConfig()`).
 
 ---
 
 ## Costs
 
-GPT-4o-mini is very inexpensive. A typical device analysis costs:
-- ~400 prompt tokens + ~200 completion tokens ≈ **< $0.001 per analysis**
+GPT-4o-mini is very inexpensive. A typical request (summary, explain, single-device analysis) costs:
+- ~400 prompt tokens + ~200–500 completion tokens ≈ **< $0.001 per request**
 
 For a fleet of 500 devices analyzed daily: **< $0.50/day**.
 
@@ -89,11 +100,12 @@ For a fleet of 500 devices analyzed daily: **< $0.50/day**.
 
 ## When OpenAI is not configured
 
-- `GET /api/ai/status` returns `{ "openai": false }`
-- `POST /api/ai/analyze` returns `503 Service Unavailable`
-- `POST /api/ai/chat` returns `503 Service Unavailable`
+- `getOpenAI()` / `isOpenAIConfigured()` / `isOpenAIAvailable()` (one per call site) all return falsy
+- `POST /api/intelligence/summary` and `/explain` return `{ success: false, error: '...' }` with HTTP 200, not a 503
+- Risk Scoring falls back to non-AI scoring rather than erroring
+- The Endpoint Operations Copilot responds with a plain-text "currently unavailable" message
 - The Settings UI shows OpenAI as "Not Configured"
-- All dashboard features work normally — only AI features are disabled
+- All non-AI dashboard features work normally
 
 ---
 
@@ -101,7 +113,7 @@ For a fleet of 500 devices analyzed daily: **< $0.50/day**.
 
 | Error | Cause | Fix |
 |---|---|---|
-| `OpenAI is not configured. Set OPENAI_API_KEY` | No API key | Add to `server/.env` or Settings UI |
+| `OpenAI not configured — set OPENAI_API_KEY` | No API key | Add to `server/.env` or Settings UI |
 | `401 Incorrect API key` | Invalid or expired key | Regenerate at platform.openai.com |
 | `429 Rate limit exceeded` | Too many requests | Add request throttling; upgrade tier |
 | `Model not found` | Wrong model name | Check model name at platform.openai.com/models |

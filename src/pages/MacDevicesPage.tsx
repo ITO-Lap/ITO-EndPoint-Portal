@@ -4,9 +4,8 @@ import {
   Apple, ArrowLeft, RefreshCw, Shield, Lock, ShieldCheck, ShieldAlert,
   AlertTriangle, CheckCircle, XCircle, Search, X,
   Flame, ClipboardList, Info,
-  Plus, BarChart2,
+  BarChart2,
   Clock, Download, FileText, Filter,
-  Zap, ToggleRight, ToggleLeft, Play, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { api } from '../api'
 import type { ApiDevice } from '../api'
@@ -15,7 +14,6 @@ import { useColumnResize } from '../hooks/useColumnResize'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
 import { MacFleetReportsPage }       from './MacFleetReportsPage'
-import { useToast } from '../components/ui/ToastProvider'
 
 const PAGE_SIZE  = 50
 
@@ -50,7 +48,7 @@ type SColKey = typeof SECURITY_COLS[number]['key']
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'devices' | 'security' | 'automation' | 'reports'
+type Tab = 'devices' | 'security' | 'reports'
 
 interface Props {
   onBack: () => void
@@ -1135,138 +1133,6 @@ function SecurityTab({
   )
 }
 
-// ─── Mac Automation Tab ────────────────────────────────────────────────────────
-
-const MAC_AUTOMATION_RULES = [
-  { id: 'ma-001', name: 'FileVault Auto-Remediation', description: 'Trigger the FileVault enforcement runbook automatically when a Mac reports disk encryption as disabled.', category: 'security', enabled: true, trigger: 'FileVault turns Off', actions: ['Execute FileVault runbook', 'Send in-app notification'], lastTriggered: new Date(Date.now() - 2_700_000).toISOString(), triggerCount: 11 },
-  { id: 'ma-002', name: 'Stale Mac Alert (7 days)', description: 'Alert the IT team and create a Jira task when a Mac has not checked into ManageEngine for 7+ days.', category: 'compliance', enabled: true, trigger: 'Device offline > 7 days', actions: ['Create Jira task', 'Slack alert'], lastTriggered: new Date(Date.now() - 24 * 3_600_000).toISOString(), triggerCount: 5 },
-  { id: 'ma-003', name: 'macOS Version Enforcement', description: 'Nudge users on End-of-Life or severely outdated macOS versions with an in-app alert and Slack DM.', category: 'patching', enabled: true, trigger: 'macOS version = EOL or N-2+', actions: ['Send notification', 'Slack DM to user'], lastTriggered: new Date(Date.now() - 3 * 3_600_000).toISOString(), triggerCount: 19 },
-  { id: 'ma-004', name: 'CrowdStrike Health Monitor', description: 'Create a Jira security incident if the CrowdStrike EDR agent becomes inactive on any managed Mac.', category: 'security', enabled: true, trigger: 'CrowdStrike status → Inactive', actions: ['Create Jira incident', 'Slack urgent alert'], lastTriggered: new Date(Date.now() - 48 * 3_600_000).toISOString(), triggerCount: 2 },
-  { id: 'ma-005', name: 'New Mac Onboarding', description: 'Automatically run onboarding scripts and push the welcome configuration profile when a new Mac enrolls in ManageEngine.', category: 'compliance', enabled: false, trigger: 'New device enrollment', actions: ['Run onboarding script', 'Assign configuration profile'], triggerCount: 0 },
-]
-
-const MAC_CATEGORY_BADGE: Record<string, string> = {
-  security:   'bg-red-50 text-red-700 border-red-200',
-  compliance: 'bg-blue-50 text-blue-700 border-blue-200',
-  patching:   'bg-orange-50 text-orange-700 border-orange-200',
-}
-
-function macRelTime(iso?: string) {
-  if (!iso) return 'Never'
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 2)  return 'Just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24)  return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-function MacAutomationTab() {
-  const { notify }  = useToast()
-  const [rules, setRules]   = useState(MAC_AUTOMATION_RULES)
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const toggle = (id: string) => {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r))
-    const rule = rules.find(r => r.id === id)
-    if (rule) notify('success', 'Rule Updated', `"${rule.name}" ${rule.enabled ? 'disabled' : 'enabled'}`)
-  }
-
-  const runTest = (id: string) => {
-    const rule = rules.find(r => r.id === id)
-    if (!rule) return
-    notify('info', 'Test Triggered', `Running test for "${rule.name}"…`)
-    setTimeout(() => notify('success', 'Test Complete', `"${rule.name}" — all actions passed`), 1800)
-  }
-
-  const active = rules.filter(r => r.enabled).length
-
-  return (
-    <div className="space-y-4">
-      {/* KPI row */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Total Rules', value: rules.length, color: '#F46C00' },
-          { label: 'Active',      value: active,       color: '#10B981' },
-          { label: 'Inactive',    value: rules.length - active, color: '#94A3B8' },
-        ].map(s => (
-          <div key={s.label} className="glass rounded-2xl overflow-hidden relative p-4">
-            <div className="h-[2px] absolute top-0 left-0 right-0" style={{ background: s.color }} />
-            <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400">{s.label}</p>
-            <p className="text-2xl font-black mt-1" style={{ color: s.color }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Rules */}
-      <div className="space-y-3">
-        {rules.map(rule => (
-          <div key={rule.id} className="glass rounded-2xl overflow-hidden">
-            <div className="h-[2px]" style={{ background: rule.enabled ? 'linear-gradient(90deg,#F46C00,#FB471F)' : '#E2E8F0' }} />
-            <div className="px-5 py-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full" style={{ background: rule.enabled ? '#10B981' : '#CBD5E1' }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <p className="text-sm font-bold text-slate-700">{rule.name}</p>
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.6rem] font-bold capitalize ${MAC_CATEGORY_BADGE[rule.category] ?? 'bg-slate-50 text-slate-500 border-slate-200'}`}>{rule.category}</span>
-                  </div>
-                  <p className="text-[0.72rem] text-slate-500 leading-relaxed">{rule.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[0.62rem] font-semibold text-slate-600">
-                      <Clock className="h-2.5 w-2.5 text-slate-400" />{rule.trigger}
-                    </span>
-                    {rule.actions.map(a => (
-                      <span key={a} className="inline-flex rounded-full bg-[#F46C00]/8 border border-[#F46C00]/20 px-2.5 py-1 text-[0.62rem] font-semibold text-[#F46C00]">{a}</span>
-                    ))}
-                  </div>
-                </div>
-                <button type="button" onClick={() => toggle(rule.id)} className="flex-shrink-0">
-                  {rule.enabled ? <ToggleRight className="h-8 w-8 text-emerald-500" /> : <ToggleLeft className="h-8 w-8 text-slate-300" />}
-                </button>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex gap-4 text-[0.62rem] text-slate-400">
-                  <span>Last triggered: <strong className="text-slate-600">{macRelTime(rule.lastTriggered)}</strong></span>
-                  <span>Total runs: <strong className="text-slate-600">{rule.triggerCount}</strong></span>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setExpanded(e => e === rule.id ? null : rule.id)}
-                    className="flex items-center gap-1 rounded-full border border-slate-200 glass px-3 py-1 text-[0.62rem] font-semibold text-slate-500 water-glow-sm">
-                    {expanded === rule.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    {expanded === rule.id ? 'Less' : 'Details'}
-                  </button>
-                  <button type="button" onClick={() => runTest(rule.id)} disabled={!rule.enabled}
-                    className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[0.62rem] font-bold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-40 water-glow-sm">
-                    <Play className="h-2.5 w-2.5" />Test Run
-                  </button>
-                </div>
-              </div>
-              {expanded === rule.id && (
-                <div className="mt-3 border-t border-slate-100 pt-3 text-[0.68rem] text-slate-500 space-y-1">
-                  <p><strong className="text-slate-600">Trigger:</strong> {rule.trigger}</p>
-                  <p><strong className="text-slate-600">Actions:</strong> {rule.actions.join(' → ')}</p>
-                  <p><strong className="text-slate-600">Category:</strong> {rule.category}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="glass rounded-2xl p-4 text-center">
-        <Apple className="mx-auto h-6 w-6 text-slate-300 mb-2" />
-        <p className="text-xs text-slate-500 mb-2">Create advanced macOS automation rules in the full Automation Engine.</p>
-        <button type="button" className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white water-glow"
-          style={{ background: 'linear-gradient(135deg,#F46C00,#FB471F)' }}>
-          <Plus className="h-3.5 w-3.5" />Open Automation Engine
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── KPI Drill-down Modal ─────────────────────────────────────────────────────
 
 function KpiDrillModal({
@@ -1413,7 +1279,6 @@ function KpiDrillModal({
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'devices',      label: 'Devices',     icon: <Apple     className="h-3.5 w-3.5" /> },
   { id: 'security',     label: 'Security',    icon: <Shield    className="h-3.5 w-3.5" /> },
-  { id: 'automation',   label: 'Automation',  icon: <Zap       className="h-3.5 w-3.5" /> },
   { id: 'reports',      label: 'Reports',     icon: <BarChart2 className="h-3.5 w-3.5" /> },
 ]
 
@@ -1533,7 +1398,6 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice }: Props) {
       {/* ── Tab content ── */}
       {tab === 'devices'      && <DevicesTab      devices={devices} loading={loadingDevices} onSelectDevice={setPanelDevice} />}
       {tab === 'security'     && <SecurityTab     devices={devices} loading={loadingDevices} onSelectDevice={setPanelDevice} />}
-      {tab === 'automation'   && <MacAutomationTab />}
       {tab === 'reports'      && <ReportsTab      devices={devices} />}
 
       {/* ── Device detail panel ── */}

@@ -42,7 +42,6 @@ Frontend types (src/types.ts)
 API types (src/api/index.ts) — mirror of server types
 ├── ApiStats                 ← response from GET /api/devices/stats
 ├── ApiDevice                ← response from GET /api/devices
-├── ApiActivityItem          ← response from GET /api/activity
 ├── ApiNotification          ← response from GET /api/notifications
 ├── AppStatus                ← app install record on a device
 ├── LapsInfo                 ← LAPS password info on a device

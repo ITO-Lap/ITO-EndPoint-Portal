@@ -14,9 +14,10 @@
 | **Microsoft Entra ID** | Identity / Directory | [ENTRA.md](ENTRA.md) | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` |
 | **Slack** | Communication | [SLACK.md](SLACK.md) | `SLACK_BOT_TOKEN` |
 | **Jira** | ITSM | [JIRA.md](JIRA.md) | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
-| **Confluence** | Knowledge Base | (uses Jira credentials) | `CONFLUENCE_BASE_URL` |
+| **Confluence** | Knowledge Base | [CONFLUENCE.md](CONFLUENCE.md) | `CONFLUENCE_BASE_URL` (uses Jira credentials) |
+| **OpenAI** | AI / LLM | [OPENAI.md](OPENAI.md) | `OPENAI_API_KEY` |
 
-> **Note:** OpenAI integration has been removed. Runbook guidance uses a built-in rule-based engine that works without any API key.
+> **Note:** OpenAI is a live integration (GPT-4o-mini). It powers Risk Scoring's AI narrative, Compliance Intelligence's executive summary, the Endpoint Operations Copilot chat panel, and AI-generated actions in Automation Rules. See [OPENAI.md](OPENAI.md) for setup and details.
 
 ---
 

@@ -23,32 +23,36 @@ server/src/
 ├── index.ts                    Entry point — Express app + route mounting
 ├── types.ts                    Shared type definitions (Device, etc.)
 │
-├── routes/
+├── routes/                     One router per mount point — see the list below
 │   ├── devices.ts              GET /api/devices, /api/devices/stats
 │   ├── integrations.ts         GET/POST /api/integrations/*
-│   ├── runbooks.ts             GET /api/runbooks, /api/runbooks/:id
 │   ├── notifications.ts        GET/PATCH /api/notifications
-│   ├── activity.ts             GET /api/activity
-│   └── ai.ts                   GET/POST /api/ai/*
+│   ├── intelligence.ts         POST /api/intelligence/* — risk scores, AI summary/explain, exports
+│   ├── copilot.ts              /api/copilot/* — Endpoint Operations Copilot chat + pending actions
+│   ├── entra.ts, jira.ts, slack.ts, auth.ts, users.ts, automations.ts,
+│   │   auditLog.ts, scheduledReports.ts, securityInventory.ts, securityPolicies.ts,
+│   │   roleActivity.ts, intuneScriptsConfig.ts, reports.ts
 │
 ├── services/
 │   ├── intune.ts               Microsoft Graph API client
 │   ├── manageEngine.ts         ManageEngine REST API client (Windows, cross-platform, and macOS devices)
-│   └── openai.ts               OpenAI client (device analysis + chat)
+│   ├── openai.ts                OpenAI client (device analysis, chat, summaries)
+│   ├── jira.ts / confluence.ts  Jira + Confluence REST clients
+│   ├── copilotTools.ts          Copilot tool definitions (read + confirm-before-write actions)
+│   └── automationEngine.ts      Automation rule trigger/condition/action execution
 │
 ├── middleware/
 │   ├── errorHandler.ts         Global error handler + asyncHandler wrapper
-│   └── requestLogger.ts        HTTP request logging
-│
-├── data/
-│   ├── mockDevices.ts          Mock device records (used when no MDM configured)
-│   ├── mockRunbooks.ts         Mock runbook library
-│   ├── mockActivity.ts         Mock activity feed
-│   └── mockNotifications.ts   Mock notifications
+│   ├── requestLogger.ts        HTTP request logging
+│   └── requireRole.ts          RBAC guard for role-gated routes
 │
 └── store/
     └── integrationStore.ts     Runtime credential + fetch result cache
 ```
+
+There is no `server/src/data/mock*.ts` set anymore — `/api/devices` has no static mock fallback (see
+[Architecture](../01-overview/ARCHITECTURE.md#empty-state-behavior--apidevices)); it returns an empty
+list when no MDM source is configured, rather than synthetic devices.
 
 ---
 
@@ -62,17 +66,17 @@ server/src/
 | GET | `/api/integrations/status` | Per-integration health |
 | POST | `/api/integrations/:id/credentials` | Push credentials from UI |
 | POST | `/api/integrations/:id/sync` | Force a fresh data fetch |
-| GET | `/api/runbooks` | List all runbooks |
-| GET | `/api/runbooks/:id` | Get single runbook |
 | GET | `/api/notifications` | List notifications |
 | PATCH | `/api/notifications/read-all` | Mark all read |
 | PATCH | `/api/notifications/:id/read` | Mark one read |
-| GET | `/api/activity` | Recent activity events |
-| GET | `/api/ai/status` | Check if OpenAI is configured |
-| POST | `/api/ai/analyze` | AI compliance analysis for a device |
-| POST | `/api/ai/chat` | Freeform AI assistant chat |
+| POST | `/api/intelligence/summary` | AI executive compliance summary |
+| POST | `/api/copilot/...` | Copilot chat turn / pending action confirm-reject |
+| POST | `/api/jira/*` | Jira ticket create/search |
 
-Full request/response details in [API-REFERENCE.md](API-REFERENCE.md).
+This is a representative subset, not exhaustive — see `server/src/index.ts` for the full list of
+mounted routers and [API-REFERENCE.md](API-REFERENCE.md) for endpoint details (note: some entries in
+that reference may also be stale from the same refactor that removed `/api/activity`, `/api/ai/*`,
+and `/api/runbooks`).
 
 ---
 

@@ -32,15 +32,14 @@ src/
 │   └── usersData.ts          Mock user records
 │
 ├── assets/
-│   └── hero.png              Sign-in hero image
+│   └── hero.png              Orphaned image asset (left over from the removed sign-in page; not imported anywhere)
 │
 ├── hooks/
-│   ├── useActivity.ts        Polls /api/activity
 │   ├── useClickOutside.ts    Click-outside detection for dropdowns
-│   ├── useDashboardState.ts  Dashboard UI state helper
-│   ├── useIntegrationStatus.ts  Polls /api/integrations/status
+│   ├── useDashboardState.ts  Dashboard UI state helper (runbook modal)
+│   ├── useIntegrationStatus.ts  Polls /api/integrations/status every 10s
 │   ├── useLocalStorage.ts    Persistent key-value store
-│   ├── useNotifications.ts   Polls /api/notifications
+│   ├── useNotifications.ts   Fetches /api/notifications once on mount
 │   └── useStats.ts           Polls /api/devices/stats with countdown
 │
 ├── components/
@@ -62,35 +61,39 @@ src/
 │   │   ├── StatCard.tsx
 │   │   ├── ComplianceDonut.tsx
 │   │   ├── IssueCategories.tsx
-│   │   ├── RecentActivity.tsx
-│   │   ├── ActivityListModal.tsx
 │   │   ├── LiveDataBar.tsx
 │   │   └── PolicyDetailsModal.tsx
 │   │
 │   ├── devices/              Device management
-│   │   ├── DeviceLookupPage.tsx
 │   │   ├── DeviceSummary.tsx
 │   │   ├── DeviceDetailPanel.tsx
 │   │   ├── ComplianceDetails.tsx
 │   │   ├── AllDevicesDrawer.tsx
 │   │   └── SourceModal.tsx
 │   │
-│   ├── runbooks/             Runbook display
+│   ├── runbooks/             Runbook + Jira/Confluence display
 │   │   ├── RunbookCard.tsx
-│   │   └── RunbookModal.tsx
+│   │   ├── RunbookModal.tsx
+│   │   ├── JiraModal.tsx
+│   │   └── ConfluenceModal.tsx
 │   │
 │   ├── settings/             Settings page
 │   │   ├── SettingsPage.tsx
 │   │   └── QuietHoursModal.tsx
 │   │
-│   └── auth/
-│       └── SignInPage.tsx
+│   ├── automation/           Automation rules engine UI
+│   ├── copilot/              Endpoint Operations Copilot chat panel
+│   └── entra/                Entra Intelligence dashboard
 │
-└── pages/                    Full-page components
+└── pages/                    Full-page components (see src/pages/ for the current, full list)
     ├── UsersPage.tsx
-    ├── ProfilePage.tsx
+    ├── IntuneDevicesPage.tsx
+    ├── MacDevicesPage.tsx
     └── DocsPage.tsx
 ```
+
+There is no `src/components/auth/` folder — the sign-in screen was deliberately removed; the app
+always runs as Global Admin with no auth gate.
 
 ---
 
@@ -105,7 +108,7 @@ const [activePage, setActivePage] = useLocalStorage('activePage', 'Dashboard')
 
 // In App.tsx JSX:
 {activePage === 'Dashboard' ? <DashboardContent ... />
-  : activePage === 'Device Lookup' ? <DeviceLookupPage ... />
+  : activePage === 'Users' ? <UsersPage ... />
   : <PlaceholderPage title={activePage} />}
 ```
 

@@ -90,9 +90,7 @@ In the current mock data, risk levels are set statically. In production, calcula
 
 ### Connect to a real user directory
 
-1. Create `server/src/routes/users.ts`
-2. Call Microsoft Graph `/users` endpoint (similar to devices)
-3. Map to `AppUser` shape
-4. Add `GET /api/users` to `server/src/index.ts`
-5. Create `src/hooks/useUsers.ts` to fetch from `GET /api/users`
-6. Replace mock data in `UsersPage.tsx` with the hook
+`server/src/routes/users.ts` already exists and is mounted at `GET /api/users` (`/api/users/:id` for
+a single user) — there is no separate `useUsers` hook; `UsersPage.tsx` calls the API client directly.
+To extend it: add fields to the Graph mapping in `users.ts`, keep `AppUser` in sync in both
+`src/types.ts` and `server/src/types.ts`, and update `UsersPage.tsx`'s rendering.

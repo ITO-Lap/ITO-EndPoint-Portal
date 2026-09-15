@@ -192,7 +192,6 @@ export interface IntegrationStatusItem {
 export type ReportCategory =
   | 'inventory' | 'compliance' | 'security' | 'software' | 'health' | 'users'
   | 'endpoint' | 'threat' | 'identity' | 'audit'
-  | 'slack-access' | 'slack-channel' | 'slack-users' | 'slack-files' | 'slack-compliance'
 
 export interface ReportColumn {
   key:    string

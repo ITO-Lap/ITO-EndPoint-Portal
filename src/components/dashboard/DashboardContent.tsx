@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { MonitorSmartphone } from 'lucide-react'
+import { api } from '../../api'
 import { StatCard } from './StatCard'
 import { DeviceSummary } from '../devices/DeviceSummary'
 import { ComplianceDetails } from '../devices/ComplianceDetails'
@@ -57,7 +58,6 @@ export function DashboardContent({
   onNavigate,
 }: DashboardContentProps) {
   const { notify } = useToast()
-  const [automationLoading, setAutomationLoading] = useState(false)
   const [syncLoading, setSyncLoading] = useState(false)
   const [selectedDonutLabel, setSelectedDonutLabel] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -73,19 +73,24 @@ export function DashboardContent({
     return selectedDevice ? getComplianceRowsForDevice(selectedDevice) : []
   }, [selectedDevice])
 
-  const handleStartAutomation = async () => {
-    setAutomationLoading(true)
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setAutomationLoading(false)
-    notify('success', 'Automation Started', 'Device automation has been initiated successfully')
-    setRunbookModalOpen(false)
-  }
-
   const handleSyncNow = async () => {
+    const sourceId: 'intune' | 'manageengine' =
+      (selectedDevice?.managementSource ?? '').toLowerCase().includes('intune') ? 'intune' : 'manageengine'
+    const sourceLabel = sourceId === 'intune' ? 'Intune' : 'ManageEngine'
     setSyncLoading(true)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setSyncLoading(false)
-    notify('success', 'Sync Complete', 'Device data has been synchronized successfully')
+    try {
+      const result = await api.syncIntegration(sourceId)
+      if (result.error) {
+        notify('error', 'Sync Failed', result.error)
+      } else {
+        notify('success', 'Sync Complete', `${sourceLabel} re-synced ${result.deviceCount} device${result.deviceCount === 1 ? '' : 's'}`)
+        onRefresh?.()
+      }
+    } catch (err) {
+      notify('error', 'Sync Failed', err instanceof Error ? err.message : 'Could not reach the sync endpoint')
+    } finally {
+      setSyncLoading(false)
+    }
   }
 
   const handleCopy = (text: string, label: string) => {
@@ -218,8 +223,6 @@ export function DashboardContent({
               notify('error', 'Error', 'Failed to copy to clipboard')
             })
           }}
-          onStartAutomation={handleStartAutomation}
-          automationLoading={automationLoading}
         />
       )}
 

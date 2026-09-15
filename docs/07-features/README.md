@@ -9,37 +9,40 @@ Each feature in the dashboard has its own deep-dive doc.
 | Feature | Page | Status | Doc |
 |---|---|---|---|
 | Dashboard | `Dashboard` | Live | [DASHBOARD.md](DASHBOARD.md) |
-| Device Lookup | `Device Lookup` | Live | [DEVICE-LOOKUP.md](DEVICE-LOOKUP.md) |
+| Mac Devices (ManageEngine) | `Mac Devices` | Live | [mac-devices.md](mac-devices.md) |
+| Mac Fleet Reports | `Mac Fleet Reports` | Live | [MAC-FLEET-REPORTS.md](MAC-FLEET-REPORTS.md) |
+| Intune Devices | `Intune Devices` | Live | [ENDPOINT-PAGES.md](ENDPOINT-PAGES.md) |
 | Users | `Users` | Live | [USERS.md](USERS.md) |
-| Runbooks | `Runbooks` | Placeholder | [RUNBOOKS.md](RUNBOOKS.md) |
-| AI Copilot | (cross-cutting) | Live | [AI-COPILOT.md](AI-COPILOT.md) |
-| Diagnostics | `Diagnostics` | Placeholder | — |
-| Reports & Analytics | `Reports & Analytics` | Placeholder | — |
-| Activity Log | `Activity Log` | Placeholder | — |
+| Automation Engine | `Automation` | Live | [AUTOMATION-ENGINE.md](AUTOMATION-ENGINE.md) |
+| Entra Intelligence | `Entra Intelligence` | Live | [ENTRA-INTELLIGENCE.md](ENTRA-INTELLIGENCE.md) |
+| Endpoint Operations Copilot | (cross-cutting) | Live | [AI-COPILOT.md](AI-COPILOT.md) |
 | Settings | `Settings` | Live | — |
-| Profile | `Profile` | Live | — |
 | Documentation | `Documentation` | Live | — |
-
-"Placeholder" pages show a `<PlaceholderPage>` component with a coming-soon UI.
 
 ---
 
 ## Feature overview
 
 ### Dashboard
-The main command centre. Shows compliance stats, a donut chart, issue breakdown, selected device detail, AI runbook, and a recent activity feed. Stats refresh every 30 seconds from the live API.
+The main command centre. Shows compliance stats, a donut chart, issue breakdown, selected device detail, and an AI-recommended runbook. Stats refresh every 30 seconds from the live API.
 
-### Device Lookup
-Search any managed device across all connected sources by name, email, or serial number. Filter by source, compliance state, or platform. Click a device to see the full detail panel — hardware, network, security profile, installed apps, and LAPS info.
+### Mac Devices / Mac Fleet Reports
+ManageEngine-backed macOS fleet management — device inventory, apps, security, automation rules, and a KPI-card fleet report with drill-down device tables and Excel export.
+
+### Intune Devices
+Windows/cross-platform device dashboard sourced from Microsoft Intune, with KPI cards, a device table, compliance/security breakdowns, platform-scoped automation rules, and reports.
 
 ### Users
-Browse all user accounts with risk scoring. View each user's assigned devices, recent security activity, Jira tickets, and data sources. Role-aware: Helpdesk cannot access this page.
+Browse all user accounts with risk scoring. View each user's assigned devices, recent security activity, Jira tickets, and data sources.
 
-### Runbooks
-Library of remediation playbooks for common compliance issues. Each runbook shows step-by-step instructions, automation capability, and escalation guidance.
+### Automation Engine
+Rule-based automation: triggers → conditions → actions (Jira ticket creation, Slack alerts, runbook/script execution, notifications). Rules can be manually test-run.
 
-### AI Copilot
-Cross-cutting AI feature. Available as deep analysis per device (`/api/ai/analyze`) and as a freeform IT assistant chat (`/api/ai/chat`). Requires OpenAI API key.
+### Entra Intelligence
+Microsoft Graph-backed dashboard showing device platform distribution and stale check-in devices for the Entra/Intune-managed fleet.
+
+### Endpoint Operations Copilot
+Cross-cutting AI feature — a global chat panel (GPT-4o-mini via tool/function calling) with real data lookups and confirmed write actions (e.g. creating a Jira ticket, running an automation rule).
 
 ### Settings
 Full configuration hub: integration credentials, notification preferences, compliance policy settings, automation rules, security settings, data privacy, and danger zone actions.

@@ -4,17 +4,16 @@ import {
   CheckCircle2, XCircle, MinusCircle, ChevronRight, BookOpen,
   HelpCircle, AlertTriangle, Lock, Globe, LifeBuoy, FileText,
   Terminal, BarChart2, Wrench, Play, Bell, MessageSquare, Ticket,
-  Clock, Package, Activity, ToggleRight,
+  Clock, Package, Activity,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DocSection =
   | 'overview' | 'quickstart' | 'onboarding'
-  | 'dashboard' | 'identity' | 'runbooks' | 'scripts' | 'automation' | 'reports' | 'security'
+  | 'dashboard' | 'identity' | 'automation' | 'reports' | 'security'
   | 'configuration' | 'roles'
   | 'troubleshooting' | 'faq'
-  | 'featureguide'
 
 interface NavItem { key: DocSection; label: string; icon: React.ElementType; badge?: string }
 interface NavGroup { label: string; items: NavItem[] }
@@ -33,11 +32,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'dashboard',   label: 'Dashboard & Devices',       icon: Laptop2     },
       { key: 'identity',    label: 'Users & Identity',          icon: Users       },
-      { key: 'runbooks',    label: 'Runbooks',                  icon: BookOpen    },
-      { key: 'scripts',     label: 'Remote Scripts',            icon: Terminal    },
       { key: 'automation',  label: 'Automation Rules',          icon: Activity    },
       { key: 'reports',     label: 'Reports & Analytics',       icon: BarChart2   },
-      { key: 'security',    label: 'Security & Vulnerabilities', icon: ShieldCheck },
+      { key: 'security',    label: 'Security Posture',          icon: ShieldCheck },
     ],
   },
   {
@@ -52,12 +49,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'troubleshooting', label: 'Troubleshooting', icon: Wrench     },
       { key: 'faq',             label: 'FAQ',             icon: HelpCircle },
-    ],
-  },
-  {
-    label: 'Showcase',
-    items: [
-      { key: 'featureguide', label: 'Full Feature Guide', icon: FileText, badge: 'New' },
     ],
   },
 ]
@@ -106,8 +97,8 @@ function OverviewSection() {
   const features = [
     { icon: Laptop2,    label: 'Device Management',    desc: 'Search and inspect managed endpoints across all connected MDM sources.' },
     { icon: ShieldCheck,label: 'Compliance Monitoring', desc: 'Real-time compliance status, policy failure details, and trend visualisation.' },
-    { icon: BookOpen,   label: 'Runbooks',              desc: 'Step-by-step remediation guides with one-click automation.' },
-    { icon: Globe,      label: 'Integrations',          desc: 'Unified view across Microsoft Intune and ManageEngine.' },
+    { icon: BookOpen,   label: 'Endpoint Operations Copilot', desc: 'AI chat assistant that answers questions and performs confirmed write actions (Jira tickets, automation test-runs) over live app data.' },
+    { icon: Globe,      label: 'Integrations',          desc: 'Unified view across Microsoft Intune, Microsoft Entra ID, and ManageEngine (Windows, macOS, Linux).' },
     { icon: Settings,   label: 'Settings',              desc: 'Organisation-wide configuration for compliance, automation, and security.' },
   ]
 
@@ -116,7 +107,7 @@ function OverviewSection() {
       <DocCard>
         <div className="px-5 py-5 space-y-4">
           <p className="text-sm text-slate-700 leading-relaxed">
-            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune and ManageEngine, surfaces compliance issues in real time, and provides actionable runbooks to resolve them — with full automation support.
+            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune, Microsoft Entra ID, and ManageEngine, surfaces compliance and identity risk in real time, and includes an AI Operations Copilot that can act on that data directly.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {features.map(f => (
@@ -199,13 +190,12 @@ const PERMISSION_GROUPS = [
     ],
   },
   {
-    group: 'Runbooks & Automation',
+    group: 'Automation Rules',
     rows: [
-      { label: 'View runbook steps',             global: 'allow', admin: 'allow', helpdesk: 'allow' },
-      { label: 'Execute a runbook',              global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-      { label: 'Start automation',               global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-      { label: 'Create / edit runbooks',         global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
-      { label: 'Configure auto-remediation',     global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+      { label: 'View automation rules',          global: 'allow', admin: 'allow', helpdesk: 'allow' },
+      { label: 'Trigger a Test Run',             global: 'allow', admin: 'allow', helpdesk: 'deny'  },
+      { label: 'Create / edit / delete rules',   global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+      { label: 'Confirm a Copilot write action',  global: 'allow', admin: 'allow', helpdesk: 'deny'  },
     ],
   },
   {
@@ -403,10 +393,9 @@ function OnboardingSection() {
         title: 'Daily Workflow',
         items: [
           'Check the Non-Compliant stat card each morning for new issues',
-          'Click a red device in Recent Activity to view its compliance details',
-          'Use "View Runbook" to see the recommended fix for an issue',
-          'Click "Start Automation" to trigger remediation (or copy steps for manual fix)',
-          'Set your personal notification preferences in Profile → Notifications',
+          'Use Risk Scoring to see which devices/users need the most urgent attention',
+          'Ask the Endpoint Operations Copilot for a summary of overnight compliance changes',
+          'Escalate a device to Jira or link a Confluence article directly from its Risk Scoring row',
         ],
       },
     ],
@@ -425,13 +414,12 @@ function OnboardingSection() {
           'Use the search bar at the top — search by device name, user email, or serial number',
           'The Device Summary card shows the device\'s current state and primary issue',
           'The Compliance Details card shows which specific policy failed and why',
-          'The Runbook card shows the steps needed to fix the issue — share these with the user or escalate to an IT Admin',
         ],
       },
       {
         title: 'Escalation Rules',
         items: [
-          'If a device needs a runbook executed: escalate to an IT Admin',
+          'If a device needs remediation triggered: escalate to an IT Admin',
           'If a device needs a policy change: escalate to an IT Admin',
           'You CAN click "Sync Now" on a device — this is safe and non-destructive',
           'Do not attempt to access Settings — it is not available to your role',
@@ -523,7 +511,7 @@ function FaqSection() {
   const faqs = [
     {
       q: 'Can an IT Admin run an automation without approval?',
-      a: 'Yes — IT Admins have full runbook execution and automation rights. Only Helpdesk users require escalation to an IT Admin before any runbook can be executed.',
+      a: 'Yes — IT Admins have full automation rights, including enabling/disabling rules and triggering a Test Run. Only Helpdesk users require escalation to an IT Admin before remediation is triggered.',
     },
     {
       q: 'Can Helpdesk see the user email associated with a device?',
@@ -534,8 +522,8 @@ function FaqSection() {
       a: 'Only Global Admins. Disconnecting stops all syncs for that platform immediately. IT Admins can view integration status and trigger a sync, but cannot modify or disconnect.',
     },
     {
-      q: 'What should a Helpdesk agent do when a device needs a runbook?',
-      a: 'View the Runbook steps in the Runbook Card (read-only) and share them with the end user, then escalate to an IT Admin to execute. The "Start Automation" button is not visible to Helpdesk users.',
+      q: 'What should a Helpdesk agent do when a device needs remediation?',
+      a: 'Share the Compliance Details with the end user, then escalate to an IT Admin, who can trigger the relevant Automation Rule or create a Jira ticket directly from that device\'s Risk Scoring row.',
     },
     {
       q: 'How many Global Admins should we have?',
@@ -616,8 +604,9 @@ function AutomationSection() {
     { name: 'Send In-App Notification', desc: 'Posts a notification in the ITO Endpoint notification centre.', icon: Bell,           color: 'bg-orange-100 text-orange-700' },
     { name: 'Send Slack Message',        desc: 'Posts a message to the configured Slack bot channel.',           icon: MessageSquare,  color: 'bg-purple-100 text-purple-700' },
     { name: 'Create Jira Ticket',        desc: 'Creates an Incident, Task, Bug, or Story in your Jira project.',  icon: Ticket,         color: 'bg-blue-100 text-blue-700' },
-    { name: 'Trigger Runbook',           desc: 'Queues a remediation runbook for immediate execution on the device.', icon: Play,       color: 'bg-emerald-100 text-emerald-700' },
-    { name: 'Run Remote Script',         desc: 'Executes a saved script from the Remote Scripts library on the target device.', icon: Terminal, color: 'bg-slate-100 text-slate-700' },
+    { name: 'Send Teams Message',        desc: 'Posts an alert to the configured Microsoft Teams webhook.',       icon: MessageSquare,  color: 'bg-indigo-100 text-indigo-700' },
+    { name: 'Generate AI Runbook',       desc: 'Calls OpenAI to produce remediation steps tailored to the triggering device — informational output, not remote execution.', icon: Play, color: 'bg-emerald-100 text-emerald-700' },
+    { name: 'Generate AI Script',        desc: 'Calls OpenAI to draft a remediation script for the device\'s platform — output only, the script is not run automatically.', icon: Terminal, color: 'bg-slate-100 text-slate-700' },
     { name: 'Generate Report',           desc: 'Runs a saved report and makes results available in Reports & Analytics.', icon: BarChart2, color: 'bg-violet-100 text-violet-700' },
   ]
 
@@ -739,247 +728,6 @@ function AutomationSection() {
   )
 }
 
-// ─── Section: Remote Scripts ──────────────────────────────────────────────────
-
-function ScriptsSection() {
-  const scriptTypes = [
-    { type: 'PowerShell', os: 'Windows', color: 'bg-blue-100 text-blue-700' },
-    { type: 'Bash',       os: 'macOS / Linux', color: 'bg-slate-100 text-slate-700' },
-    { type: 'Batch',      os: 'Windows (legacy)', color: 'bg-orange-100 text-orange-700' },
-    { type: 'Python',     os: 'Cross-platform', color: 'bg-emerald-100 text-emerald-700' },
-  ]
-
-  const prebuilt = [
-    { name: 'FileVault Status Check',     os: 'macOS',   desc: 'Reports current FileVault encryption status and key type.' },
-    { name: 'BitLocker Status Check',     os: 'Windows', desc: 'Reports BitLocker protection status for all drives.' },
-    { name: 'MDM Force Sync',             os: 'All',     desc: 'Forces an immediate check-in with the MDM agent.' },
-    { name: 'System Hardware Inventory',  os: 'All',     desc: 'Collects CPU, RAM, disk, and firmware details.' },
-    { name: 'Clear Temporary Files',      os: 'All',     desc: 'Removes temp/cache files to free disk space.' },
-    { name: 'Network Connectivity Test',  os: 'All',     desc: 'Tests DNS resolution and HTTPS reachability to key endpoints.' },
-    { name: 'Installed Applications List',os: 'All',     desc: 'Exports a full list of installed applications with versions.' },
-    { name: 'macOS Security Posture',     os: 'macOS',   desc: 'Checks SIP, Gatekeeper, firewall, and AV in one pass.' },
-    { name: 'Restart MDM Agent',          os: 'All',     desc: 'Restarts the MDM management daemon to resolve agent issues.' },
-  ]
-
-  const tips = [
-    { icon: Lock,         tip: 'Mark scripts as Destructive to require a confirmation click before any execution.' },
-    { icon: Users,        tip: 'Set minRole to "Global Admin" for scripts that change system settings.' },
-    { icon: Clock,        tip: 'Use a conservative timeout (60–120s) for most scripts; increase only for long-running operations.' },
-    { icon: ToggleRight,  tip: 'Use script parameters to make a script reusable across devices without editing the code.' },
-    { icon: Terminal,     tip: 'Always check both stdout and exit code — a zero exit code with error output in stdout still means success.' },
-  ]
-
-  return (
-    <SectionWrap title="Remote Scripts" description="Execute diagnostic and remediation scripts on any managed device across all MDM sources">
-
-      <DocCard>
-        <CardHeader title="Script Types" description="Choose the right script type for the target operating system" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 py-4">
-          {scriptTypes.map(s => (
-            <div key={s.type} className={`rounded-xl px-3.5 py-3 ${s.color}`}>
-              <p className="text-xs font-bold">{s.type}</p>
-              <p className="text-[0.62rem] mt-0.5 opacity-75">{s.os}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Pre-built Scripts" description="Ready-to-use scripts in the default library — safe to run on any supported device" />
-        <div className="divide-y divide-slate-100">
-          {prebuilt.map(s => (
-            <div key={s.name} className="flex items-start gap-3 px-5 py-3">
-              <Terminal className="h-4 w-4 flex-shrink-0 text-slate-400 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-xs font-semibold text-slate-900">{s.name}</p>
-                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[0.6rem] font-medium text-slate-600">{s.os}</span>
-                </div>
-                <p className="text-[0.68rem] text-slate-500 mt-0.5">{s.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Execution Lifecycle" description="What happens from the moment you click Execute to when the result appears" />
-        <div className="px-5 py-4 space-y-3">
-          {[
-            { state: 'Queued',           color: 'bg-slate-100 text-slate-600',   desc: 'Execution is waiting to be dispatched to the MDM agent.' },
-            { state: 'Running',          color: 'bg-blue-100 text-blue-700',     desc: 'Script is actively executing on the target device.' },
-            { state: 'Completed',        color: 'bg-emerald-100 text-emerald-700', desc: 'Script exited with code 0. Stdout is captured.' },
-            { state: 'Failed',           color: 'bg-red-100 text-red-700',       desc: 'Script exited with a non-zero exit code. Check stderr.' },
-            { state: 'Timeout',          color: 'bg-amber-100 text-amber-700',   desc: 'Script exceeded the configured timeout and was killed.' },
-            { state: 'Cancelled',        color: 'bg-slate-100 text-slate-500',   desc: 'Manually cancelled before completion.' },
-            { state: 'Pending Approval', color: 'bg-violet-100 text-violet-700', desc: 'Script requires a higher-role user to approve before running.' },
-          ].map(s => (
-            <div key={s.state} className="flex items-start gap-3">
-              <span className={`inline-flex min-w-[110px] justify-center rounded-full px-2.5 py-1 text-[0.62rem] font-bold ${s.color}`}>{s.state}</span>
-              <p className="text-[0.72rem] text-slate-600 leading-snug">{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Script Best Practices" />
-        <div className="px-5 py-4 space-y-3">
-          {tips.map((t, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-orange-100">
-                <t.icon className="h-3.5 w-3.5 text-orange-600" />
-              </div>
-              <p className="text-[0.72rem] text-slate-600 leading-relaxed">{t.tip}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      {/* ── Creating a New Script ── */}
-      <DocCard>
-        <CardHeader title="Creating a New Script" description="Step-by-step guide to adding your own script to the library" />
-
-        {/* Steps */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-slate-100">
-          {[
-            { n: '1', title: 'Open the modal',     desc: 'Go to Remote Scripts → click New Script (top-right orange button).' },
-            { n: '2', title: 'Fill in details',    desc: 'Set the name, description, OS, script type, role, and timeout.' },
-            { n: '3', title: 'Paste your code',    desc: 'Write or paste the script content into the code editor at the bottom.' },
-            { n: '4', title: 'Save & run',         desc: 'Click Save Script — it auto-selects in the library, ready to execute.' },
-          ].map(s => (
-            <div key={s.n} className="bg-white px-4 py-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-orange-500 text-[0.65rem] font-extrabold text-white">{s.n}</span>
-                <p className="text-xs font-bold text-slate-900">{s.title}</p>
-              </div>
-              <p className="text-[0.68rem] text-slate-500 leading-relaxed">{s.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Fields reference */}
-        <div className="px-5 py-4 space-y-4">
-          <p className="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Field Reference</p>
-
-          {/* Required fields */}
-          <div>
-            <p className="text-[0.68rem] font-semibold text-slate-700 mb-2">Required fields <span className="text-red-500">*</span></p>
-            <div className="rounded-xl border border-slate-100 overflow-hidden">
-              {[
-                { field: 'Name',           hint: 'Short label shown in the library list.',                         eg: 'Check Antivirus Status' },
-                { field: 'Description',    hint: 'One sentence on what the script does and when to use it.',       eg: 'Reports AV agent state and last update' },
-                { field: 'Script Content', hint: 'Paste or type the full script code in the editor at the bottom.', eg: 'Get-MpComputerStatus | Select AMRunningMode' },
-              ].map((r, i) => (
-                <div key={r.field} className={`grid grid-cols-[120px_1fr] gap-4 px-4 py-3 text-[0.72rem] ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                  <span className="font-semibold text-slate-800">{r.field} <span className="text-red-400">*</span></span>
-                  <div>
-                    <p className="text-slate-600">{r.hint}</p>
-                    <p className="mt-0.5 font-mono text-[0.62rem] text-slate-400">e.g. {r.eg}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Config fields */}
-          <div>
-            <p className="text-[0.68rem] font-semibold text-slate-700 mb-2">Configuration fields</p>
-            <div className="rounded-xl border border-slate-100 overflow-hidden">
-              {[
-                { field: 'OS',            hint: 'Target operating system.',                              options: 'Windows · macOS · Linux · Cross-platform', default: 'Windows' },
-                { field: 'Type',          hint: 'Script language / shell interpreter.',                  options: 'PowerShell · Bash · Batch · Python',        default: 'PowerShell' },
-                { field: 'Minimum Role',  hint: 'Lowest role that can execute this script.',             options: 'Helpdesk · IT Admin · Global Admin',         default: 'Helpdesk' },
-                { field: 'Timeout',       hint: 'Seconds before the execution is forcibly killed.',      options: '5 – 3600 seconds',                           default: '60 s' },
-              ].map((r, i) => (
-                <div key={r.field} className={`grid grid-cols-[120px_1fr_80px] gap-4 px-4 py-3 text-[0.72rem] ${i % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
-                  <span className="font-semibold text-slate-800">{r.field}</span>
-                  <div>
-                    <p className="text-slate-600">{r.hint}</p>
-                    <p className="mt-0.5 text-[0.62rem] text-slate-400">{r.options}</p>
-                  </div>
-                  <span className="text-right text-[0.62rem] font-mono text-slate-400 self-center">default: {r.default}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div className="rounded-xl border border-slate-100 bg-white px-4 py-3.5">
-            <p className="text-[0.72rem] font-semibold text-slate-800 mb-1">Tags <span className="text-slate-400 font-normal">(optional)</span></p>
-            <p className="text-[0.68rem] text-slate-500 leading-relaxed">
-              Type a word and press <kbd className="inline-block rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.6rem] text-slate-700">Enter</kbd> or click <strong>Add</strong>.
-              Tags appear as searchable chips in the library — useful labels include <span className="font-mono text-[0.62rem]">security</span>, <span className="font-mono text-[0.62rem]">encryption</span>, <span className="font-mono text-[0.62rem]">diagnostic</span>, <span className="font-mono text-[0.62rem]">patching</span>.
-              Click <strong>×</strong> on any tag chip to remove it.
-            </p>
-          </div>
-
-          {/* Checkboxes */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3.5">
-              <p className="text-[0.72rem] font-bold text-red-700 mb-1">Destructive</p>
-              <p className="text-[0.68rem] text-red-600 leading-relaxed">
-                Check this when the script makes changes that cannot be automatically reversed — deleting files, modifying system config, rotating passwords.
-                Users see a red warning banner before execution and must confirm the target device.
-              </p>
-            </div>
-            <div className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3.5">
-              <p className="text-[0.72rem] font-bold text-violet-700 mb-1">Requires Approval</p>
-              <p className="text-[0.68rem] text-violet-600 leading-relaxed">
-                Check this to hold execution in <span className="font-mono">pending_approval</span> status until a user with a higher role approves it.
-                Use for scripts that affect production systems or require a four-eyes review.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Running after creation */}
-        <div className="border-t border-slate-100 px-5 py-4 space-y-3">
-          <p className="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Running the Script After Saving</p>
-          <div className="space-y-2">
-            {[
-              'After saving, the script auto-selects in the library panel on the left.',
-              'In the right panel, type a device name or user email in the Target Device search box and pick from the dropdown.',
-              'Fill in any parameter fields (required parameters are marked with a red asterisk).',
-              'Click the orange Run on [Device] button — output appears in the terminal viewer below with status, exit code, runtime, and stdout / stderr.',
-              'The execution is recorded in Execution History and the script\'s run count increments automatically.',
-            ].map((step, i) => (
-              <div key={i} className="flex items-start gap-2.5">
-                <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-orange-100 text-[0.6rem] font-bold text-orange-700 mt-0.5">{i + 1}</span>
-                <p className="text-[0.72rem] text-slate-700 leading-snug">{step}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Worked example */}
-        <div className="border-t border-slate-100 px-5 py-4">
-          <p className="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 mb-3">Worked Example — Check Disk Space (PowerShell)</p>
-          <div className="rounded-xl bg-slate-900 overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700">
-              <span className="text-[0.62rem] font-semibold text-slate-300">Name</span>
-              <span className="text-[0.62rem] text-slate-400">Check Disk Space</span>
-              <span className="mx-2 text-slate-600">·</span>
-              <span className="text-[0.62rem] font-semibold text-slate-300">OS</span>
-              <span className="text-[0.62rem] text-slate-400">Windows</span>
-              <span className="mx-2 text-slate-600">·</span>
-              <span className="text-[0.62rem] font-semibold text-slate-300">Type</span>
-              <span className="text-[0.62rem] text-slate-400">PowerShell</span>
-              <span className="mx-2 text-slate-600">·</span>
-              <span className="text-[0.62rem] font-semibold text-slate-300">Timeout</span>
-              <span className="text-[0.62rem] text-slate-400">30s</span>
-            </div>
-            <pre className="px-4 py-3 text-xs font-mono text-emerald-300 leading-relaxed whitespace-pre">{`Get-PSDrive -PSProvider FileSystem |
-  Select-Object Name, Used, Free |
-  Format-Table -AutoSize`}</pre>
-          </div>
-          <p className="mt-2 text-[0.65rem] text-slate-400">Save → pick any Windows device → Run. The drive table appears in the output viewer with exit code 0.</p>
-        </div>
-      </DocCard>
-    </SectionWrap>
-  )
-}
-
 // ─── Section: Reports ─────────────────────────────────────────────────────────
 
 function ReportsSection() {
@@ -1008,7 +756,7 @@ function ReportsSection() {
   ]
 
   return (
-    <SectionWrap title="Reports & Analytics" description="19 built-in reports across 6 categories — all exportable to CSV">
+    <SectionWrap title="Reports & Analytics" description="Built-in reports across inventory, compliance, security, users, health, and Slack-access categories — all exportable to CSV. The catalog below is illustrative, not exhaustive — see the Reports & Analytics page for the full current list.">
 
       <DocCard>
         <CardHeader title="Report Categories" />
@@ -1048,7 +796,7 @@ function ReportsSection() {
             { icon: FileText,  tip: 'Click Export CSV to download the full dataset as a spreadsheet-ready CSV file.' },
             { icon: BarChart2, tip: 'Use the column headers to sort the report in-place. Pagination controls appear for reports with more than 100 rows.' },
             { icon: Zap,       tip: 'Combine with Automation Rules to schedule reports automatically every week or month.' },
-            { icon: Bell,      tip: 'The Sign-in Risk Report requires the Entra ID integration to be configured and will show mock data otherwise.' },
+            { icon: Bell,      tip: 'The Sign-in Risk Report requires the Entra ID integration to be configured — without it, the report returns an explicit "not configured" result rather than sample data.' },
           ].map((t, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-violet-100">
@@ -1221,12 +969,11 @@ function TroubleshootingSection() {
       ],
     },
     {
-      problem: 'Remote script execution stays in "Queued" forever',
-      cause: 'Script execution in this version is simulated — the execution engine does not have a live MDM agent connection.',
+      problem: 'An automation rule\'s "Generate AI Runbook" / "Generate AI Script" action returns generic, non-specific output',
+      cause: 'OPENAI_API_KEY is not configured, so the action falls back to a deterministic generic template instead of calling GPT-4o-mini.',
       steps: [
-        'This is expected behaviour in the current release — script dispatching to live MDM agents is planned for a future version.',
-        'The output shown is realistic simulated output based on the script type and OS.',
-        'For live execution, connect a script dispatcher webhook to the MDM API (see docs/03-backend/services-guide.md).',
+        'Add OPENAI_API_KEY in server/.env and restart the server.',
+        'Re-run the rule\'s Test Run — the result detail will include the AI-generated steps or script once configured.',
       ],
     },
     {
@@ -1310,45 +1057,45 @@ function TroubleshootingSection() {
 function QuickStartSection() {
   const steps = [
     {
-      n: '1', title: 'Sign in', color: 'bg-orange-500',
-      desc: 'Open the app and choose your role on the sign-in screen. Use Global Admin for the full walkthrough.',
-      tips: ['Four roles are available: Global Admin, IT Admin, Helpdesk, End User.', 'Your role controls which features and pages are visible.'],
-    },
-    {
-      n: '2', title: 'Read the dashboard', color: 'bg-orange-500',
-      desc: 'The dashboard opens automatically. The 7 stat cards at the top show your fleet at a glance — total devices, compliant, non-compliant, warning, open issues, Windows, and Mac.',
+      n: '1', title: 'Open the dashboard', color: 'bg-orange-500',
+      desc: 'The app opens straight to the dashboard — there is no sign-in step in this deployment. The stat cards at the top show your fleet at a glance: total devices, compliant, non-compliant, warning, Windows, and Mac.',
       tips: ['Click any stat card number to drill into a filtered device list.', 'The donut chart and issue categories update in real time from your MDM sources.'],
     },
     {
-      n: '3', title: 'Find a device', color: 'bg-orange-500',
+      n: '2', title: 'Find a device', color: 'bg-orange-500',
       desc: 'Type a device name, user email, or serial number into the search bar at the top. The dashboard switches to show that device\'s full compliance detail.',
-      tips: ['The app auto-selects the first non-compliant device on load so you always see a real example.', 'Use Device Lookup (sidebar) for advanced search and filtering.'],
+      tips: ['The app auto-selects the first non-compliant device on load so you always see a real example.'],
     },
     {
-      n: '4', title: 'View the AI runbook', color: 'bg-orange-500',
-      desc: 'With a device selected, the right panel shows the AI-recommended runbook for that device\'s primary issue. Click View Runbook to see the full step-by-step guide.',
-      tips: ['Click Start Automation to queue the remediation (IT Admin and above).', 'Copy Steps sends the runbook to your clipboard to share with the end user.'],
+      n: '3', title: 'Check Risk Scoring', color: 'bg-orange-500',
+      desc: 'Navigate to Risk Scoring in the sidebar to see devices/users ranked by combined compliance and identity risk. Expand a row to create a Jira ticket or link a Confluence article for that device.',
+      tips: ['Jira and Confluence escalation are gated on those integrations actually being configured.'],
+    },
+    {
+      n: '4', title: 'Try the Endpoint Operations Copilot', color: 'bg-orange-500',
+      desc: 'Open the Copilot panel from the header on any page. Ask it a question (e.g. "which devices are non-compliant and offline?") or ask it to create a Jira ticket or test-run an automation rule — write actions require your explicit confirmation.',
+      tips: ['The Copilot only reads and acts on modules already live in this app — it does not fabricate data.'],
     },
     {
       n: '5', title: 'Check automation rules', color: 'bg-orange-500',
-      desc: 'Navigate to Automation in the sidebar. 19 pre-built rules cover compliance, security, patching, reporting, and drift detection — all ready to enable.',
+      desc: 'Navigate to Automation in the sidebar to review trigger-based rules covering compliance, security, patching, reporting, and drift detection.',
       tips: ['Use the Test Run button on any rule to simulate a trigger without waiting for a real event.', 'Enable the rules relevant to your environment and leave the rest disabled.'],
     },
     {
       n: '6', title: 'Connect your MDM', color: 'bg-orange-500',
-      desc: 'When you\'re ready for live data, go to Settings → Integrations. Add your Intune or ManageEngine credentials. See Integration Setup in this docs for step-by-step instructions.',
-      tips: ['Without credentials, all data is realistic mock data — safe to explore.', 'Each integration can be connected independently; you don\'t need all three.'],
+      desc: 'When you\'re ready for live data, go to Settings → Integrations. Add your Intune, Entra ID, or ManageEngine credentials. See Integration Setup in this docs for step-by-step instructions.',
+      tips: ['Without credentials, unconfigured integrations show clearly as not-connected rather than mock data.', 'Each integration can be connected independently; you don\'t need all of them.'],
     },
   ]
 
   const nextByRole = [
-    { role: 'Global Admin', badge: 'bg-orange-100 text-orange-700', next: ['Connect integrations in Settings → Integrations', 'Invite IT Admins and assign roles', 'Review and enable automation rules', 'Configure Slack and Jira for alert routing'] },
-    { role: 'IT Admin',     badge: 'bg-lime-100 text-lime-700',     next: ['Search for devices with active issues', 'Run a runbook on a non-compliant device', 'Review the Execution History in Remote Scripts', 'Check Reports & Analytics for fleet trends'] },
-    { role: 'Helpdesk',     badge: 'bg-slate-100 text-slate-700',   next: ['Use the search bar to find a device by user email', 'Read the Compliance Details to understand the issue', 'Share the runbook steps with the end user', 'Escalate to an IT Admin if execution is needed'] },
+    { role: 'Global Admin', badge: 'bg-orange-100 text-orange-700', next: ['Connect integrations in Settings → Integrations', 'Review and enable automation rules', 'Configure Slack, Teams, and Jira for alert routing'] },
+    { role: 'IT Admin',     badge: 'bg-lime-100 text-lime-700',     next: ['Search for devices with active issues', 'Use Risk Scoring to prioritise remediation', 'Ask the Copilot to trigger an automation Test Run', 'Check Reports & Analytics for fleet trends'] },
+    { role: 'Helpdesk',     badge: 'bg-slate-100 text-slate-700',   next: ['Use the search bar to find a device by user email', 'Read the Compliance Details to understand the issue', 'Escalate to an IT Admin if remediation is needed'] },
   ]
 
   return (
-    <SectionWrap title="Quick Start" description="From first login to your first remediated device in under 10 minutes">
+    <SectionWrap title="Quick Start" description="From opening the dashboard to your first remediation escalation in under 10 minutes">
 
       <DocCard>
         <CardHeader title="Six Steps to Get Started" />
@@ -1397,7 +1144,7 @@ function QuickStartSection() {
       <div className="flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3.5">
         <Zap className="h-4 w-4 text-orange-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-700">
-          Running without credentials? <strong>Everything still works</strong> — all automation rules, reports, and runbook guidance operate fully without any external API keys. Add credentials when you're ready to go live.
+          Running without credentials? Automation rules and reports still operate against whatever devices are already synced — an unconfigured integration is shown as not-connected rather than backfilled with mock data. Add credentials when you're ready to go live.
         </p>
       </div>
     </SectionWrap>
@@ -1463,23 +1210,11 @@ function DashboardSection() {
         </DocCard>
       </div>
 
-      {/* Recent activity */}
+      {/* Live data bar */}
       <DocCard>
-        <CardHeader title="Recent Activity Feed" description="Shows the latest device compliance events — updated on every data refresh" />
-        <div className="px-5 py-4 space-y-3 text-[0.72rem] text-slate-600">
-          <p>Each row shows: device name, event message, compliance status badge, and timestamp. Click <strong>View All</strong> to open the full activity modal with 100+ entries.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
-            {[
-              { label: 'Click a row',   desc: 'Jumps to that device in Device Lookup with full detail.' },
-              { label: 'Filter pills',  desc: 'Filter by All / Non-Compliant / Warning / Compliant.' },
-              { label: 'Live refresh',  desc: 'The countdown timer shows seconds until the next automatic data pull.' },
-            ].map(i => (
-              <div key={i.label} className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
-                <p className="text-[0.65rem] font-bold text-slate-800 mb-0.5">{i.label}</p>
-                <p className="text-[0.62rem] text-slate-500">{i.desc}</p>
-              </div>
-            ))}
-          </div>
+        <CardHeader title="Live Data Bar" description="The status strip above the stat cards" />
+        <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
+          <p>Shows a live per-source device count (Intune / ManageEngine), a countdown to the next automatic refresh, and the timestamp of the last successful pull. Click <strong>Refresh</strong> to force an immediate re-fetch.</p>
         </div>
       </DocCard>
 
@@ -1498,15 +1233,13 @@ function DashboardSection() {
 
       {/* Runbook card */}
       <DocCard>
-        <CardHeader title="Runbook Card" description="The remediation panel at the bottom of the device detail section" />
+        <CardHeader title="Recommended Action / Runbook Card" description="The remediation panel next to the device detail section" />
         <div className="px-5 py-4 space-y-3 text-[0.72rem] text-slate-600 leading-relaxed">
-          <p>When a device is selected, the rule-based engine analyses its compliance state and returns a <strong>root cause summary</strong>, <strong>recommended runbook</strong>, <strong>risk level</strong>, and <strong>step-by-step remediation</strong>.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+          <p>When a device is selected, a rule-based lookup maps its platform and compliance state to a recommended runbook name, ordered remediation steps, an escalation flag, and an automation-availability note.</p>
+          <div className="grid grid-cols-2 gap-2 mt-1">
             {[
-              { label: 'View Runbook', desc: 'Opens the full runbook modal with prerequisites and expected result.' },
-              { label: 'Start Automation', desc: 'Queues the runbook for execution (IT Admin+).' },
+              { label: 'View Runbook', desc: 'Opens the full step list in a modal.' },
               { label: 'Copy Steps', desc: 'Copies all steps to clipboard for manual remediation.' },
-              { label: 'Create Jira', desc: 'Opens the Jira ticket modal pre-filled with device context.' },
             ].map(a => (
               <div key={a.label} className="rounded-xl bg-orange-50 border border-orange-100 px-3 py-2.5">
                 <p className="text-[0.65rem] font-bold text-orange-800 mb-0.5">{a.label}</p>
@@ -1534,7 +1267,7 @@ function DashboardSection() {
               </div>
             ))}
           </div>
-          <p className="mt-1">For bulk search, filtering by platform or source, go to <strong>Device Lookup</strong> in the sidebar — it supports multi-column filtering, sortable columns, and a full-fleet view.</p>
+          <p className="mt-1">For a filterable full-fleet view, open <strong>Intune Devices</strong> or <strong>Mac Devices</strong> in the sidebar — each has its own Devices tab with column filtering and sorting.</p>
         </div>
       </DocCard>
     </SectionWrap>
@@ -1555,49 +1288,34 @@ function IdentitySection() {
   ]
 
   return (
-    <SectionWrap title="Users & Identity" description="User management, Entra ID sign-in data, MFA status, and device-to-user mapping">
+    <SectionWrap title="Users & Identity" description="Find a user, then open their cross-system risk view combining Entra sign-in risk with MDM device compliance">
 
       <DocCard>
-        <CardHeader title="The Users Page" description="Requires the Entra ID integration to show live data; uses mock data otherwise" />
-        <div className="px-5 py-4 space-y-3 text-[0.72rem] text-slate-600 leading-relaxed">
-          <p>The Users page pulls identity data from <strong>Microsoft Entra ID</strong> (formerly Azure AD) and combines it with MDM compliance data to give a complete picture of each user's risk posture.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-            {[
-              { label: 'User list',        desc: 'All users in your Entra directory with name, email, role, department, and risk level.' },
-              { label: 'Device count',     desc: 'Number of managed devices assigned to each user.' },
-              { label: 'Risk level',       desc: 'Calculated from Entra risky sign-ins + MDM compliance of assigned devices.' },
-              { label: 'Last active',      desc: 'Timestamp of most recent sign-in from Entra audit logs.' },
-              { label: 'MFA status',       desc: 'Whether the user has enrolled in MFA (from Entra registration data).' },
-              { label: 'Jira tickets',     desc: 'Open Jira issues linked to this user\'s devices.' },
-            ].map(f => (
-              <div key={f.label} className="flex items-start gap-2.5 rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-3">
-                <div className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg bg-orange-100 mt-0.5">
-                  <Users className="h-3 w-3 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-[0.65rem] font-bold text-slate-800">{f.label}</p>
-                  <p className="text-[0.62rem] text-slate-500 mt-0.5">{f.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        <CardHeader title="Find a User" description="Users in the sidebar — deliberately a minimal lookup, not a full directory dashboard" />
+        <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
+          <p>Search by name, email, or department. There's no sort/filter grid or Invite/Edit actions here on purpose — this page exists only to hand off into <strong>User Intelligence</strong>, the real cross-system correlation view. Selecting a result opens that user's User Intelligence page.</p>
         </div>
       </DocCard>
 
       <DocCard>
-        <CardHeader title="User Detail View" description="Click any user row to open their full profile" />
+        <CardHeader title="User Intelligence — Tabs" description="Click any user to open this view" />
         <div className="divide-y divide-slate-100">
           {[
-            { tab: 'Sign-ins',   desc: 'Last 10–50 sign-in events from Entra audit logs with risk level, MFA method, and Conditional Access result.' },
-            { tab: 'Devices',    desc: 'All managed devices assigned to this user: platform, compliance state, encryption status, last check-in, and risk score.' },
-            { tab: 'Groups',     desc: 'Entra security and Microsoft 365 groups the user belongs to.' },
-            { tab: 'Apps',       desc: 'Enterprise applications the user has accessed via SSO.' },
-            { tab: 'Licenses',   desc: 'Assigned Microsoft 365 and Azure licenses with provisioning status.' },
-            { tab: 'Roles',      desc: 'Entra directory roles (e.g. Global Administrator, Helpdesk Administrator).' },
+            { tab: 'Overview',      desc: 'Combined health score correlating Entra sign-in/MFA risk with Intune/ManageEngine device compliance.', live: true },
+            { tab: 'Devices',       desc: 'All managed devices assigned to this user: platform, compliance state, encryption status, and last check-in.', live: true },
+            { tab: 'Sign-in Analytics', desc: 'Recent sign-in events from Entra with risk level and result.', live: true },
+            { tab: 'Groups & Roles', desc: 'Security/M365 groups and directory role assignments.', live: false },
+            { tab: 'Security',      desc: 'Auth method breakdown, password age, Identity Protection alerts, Conditional Access diagnostics.', live: false },
+            { tab: 'Intune',        desc: 'Compliance policies, configuration profiles, update rings, Autopilot enrollment detail.', live: false },
+            { tab: 'AI Insights',   desc: 'GPT-generated root-cause analysis and remediation recommendations for this user.', live: false },
+            { tab: 'Report Center', desc: 'Export a summary/device/compliance/sign-in report.', live: false },
           ].map(t => (
             <div key={t.tab} className="flex items-start gap-3 px-5 py-3">
-              <span className="inline-flex rounded-lg bg-orange-100 px-2 py-1 text-[0.62rem] font-bold text-orange-700 w-20 flex-shrink-0 mt-0.5 text-center justify-center">{t.tab}</span>
-              <p className="text-[0.72rem] text-slate-600 leading-snug">{t.desc}</p>
+              <span className="inline-flex rounded-lg bg-orange-100 px-2 py-1 text-[0.62rem] font-bold text-orange-700 w-28 flex-shrink-0 mt-0.5 text-center justify-center">{t.tab}</span>
+              <div className="flex-1">
+                <p className="text-[0.72rem] text-slate-600 leading-snug">{t.desc}</p>
+                {!t.live && <span className="inline-flex mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[0.58rem] font-semibold text-slate-500">Coming Soon — shown as a placeholder in-app, not faked data</span>}
+              </div>
             </div>
           ))}
         </div>
@@ -1635,95 +1353,7 @@ function IdentitySection() {
   )
 }
 
-// ─── Section: Runbooks ────────────────────────────────────────────────────────
-
-function RunbooksSection() {
-  return (
-    <SectionWrap title="Runbooks" description="Step-by-step remediation guides — find them, read them, execute them, and link them to tickets">
-
-      <DocCard>
-        <CardHeader title="What is a Runbook?" />
-        <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-          <p>A runbook is a structured remediation guide for a specific compliance or security issue. Each runbook contains a <strong>list of prerequisites</strong>, <strong>numbered steps</strong>, and an <strong>expected result</strong> that confirms the issue is resolved.</p>
-          <p>The AI engine recommends the most relevant runbook for the selected device automatically. Runbooks can also be browsed and executed from the dedicated Runbooks page.</p>
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Finding the Right Runbook" />
-        <div className="divide-y divide-slate-100">
-          {[
-            { how: 'AI recommendation', desc: 'Select any device on the dashboard. The AI panel automatically suggests the best runbook based on the device\'s platform, management source, and primary issue.' },
-            { how: 'Runbooks page',     desc: 'Navigate to Runbooks in the sidebar for the full library. Use the search bar and category filters to find runbooks by name, issue type, or platform.' },
-            { how: 'Jira link',         desc: 'When creating a Jira ticket from a device, the runbook modal offers a Confluence search to link existing knowledge-base articles alongside the runbook steps.' },
-          ].map(r => (
-            <div key={r.how} className="flex items-start gap-3 px-5 py-3.5">
-              <span className="inline-flex rounded-lg bg-orange-100 px-2 py-1 text-[0.62rem] font-bold text-orange-700 min-w-[110px] flex-shrink-0 mt-0.5 text-center justify-center">{r.how}</span>
-              <p className="text-[0.72rem] text-slate-600 leading-snug">{r.desc}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Anatomy of a Runbook" description="What every runbook contains" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-5 py-4">
-          {[
-            { label: 'Name & Description', desc: 'Short title and one-sentence summary of the issue this runbook addresses.', color: 'bg-slate-50' },
-            { label: 'Prerequisites',      desc: 'Conditions that must be true before running — e.g. device must be online, admin rights required.', color: 'bg-slate-50' },
-            { label: 'Steps',              desc: 'Numbered list of actions. Each step is clear and actionable. Steps adapt based on platform (Windows vs macOS).', color: 'bg-slate-50' },
-            { label: 'Expected Result',    desc: 'What a successful completion looks like — used to verify the fix worked before closing the ticket.', color: 'bg-slate-50' },
-            { label: 'Automation Available', desc: 'Whether Start Automation can run this runbook programmatically or if manual steps are required.', color: 'bg-slate-50' },
-            { label: 'Escalation Needed', desc: 'Whether the issue requires escalation beyond standard IT Admin access (e.g. infrastructure or security team involvement).', color: 'bg-slate-50' },
-          ].map(f => (
-            <div key={f.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-              <p className="text-[0.65rem] font-bold text-slate-900 mb-0.5">{f.label}</p>
-              <p className="text-[0.62rem] text-slate-500 leading-snug">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Executing a Runbook" description="Three ways to run a runbook" />
-        <div className="divide-y divide-slate-100">
-          {[
-            { method: 'Start Automation', who: 'IT Admin+', desc: 'Click Start Automation on the Runbook Card in the dashboard. The runbook is queued and executed on the target device. Progress appears in the Execution Log.' },
-            { method: 'Manual steps',    who: 'All roles',  desc: 'Click Copy Steps to copy the runbook to your clipboard. Share with the end user or follow the steps yourself. Use this when automation is not available for this runbook.' },
-            { method: 'Via Automation',  who: 'IT Admin+',  desc: 'An Automation Rule with an execute_runbook action can trigger a runbook automatically when a device enters a non-compliant state — no manual click needed.' },
-          ].map(m => (
-            <div key={m.method} className="flex items-start gap-3 px-5 py-3.5">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="inline-flex rounded-lg bg-emerald-100 px-2 py-1 text-[0.62rem] font-bold text-emerald-700">{m.method}</span>
-                  <span className="text-[0.58rem] font-semibold text-slate-400 uppercase">{m.who}</span>
-                </div>
-                <p className="text-[0.72rem] text-slate-600 leading-snug">{m.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <DocCard>
-          <CardHeader title="Creating a Jira Ticket" />
-          <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-            <p>Click <strong>Create Jira Ticket</strong> in the Runbook modal. The form is pre-filled with the device name, issue description, and runbook reference. Choose issue type (Incident/Task/Bug), priority, and submit. The Jira key appears in the runbook card once created.</p>
-          </div>
-        </DocCard>
-        <DocCard>
-          <CardHeader title="Linking a Confluence Page" />
-          <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-            <p>In the Jira modal, use the <strong>Confluence Search</strong> tab to find and link a related knowledge-base article. The linked page appears as a reference alongside the runbook steps for easy access during remediation.</p>
-          </div>
-        </DocCard>
-      </div>
-    </SectionWrap>
-  )
-}
-
-// ─── Section: Security & Vulnerabilities ─────────────────────────────────────
+// ─── Section: Security Posture ────────────────────────────────────────────────
 
 function SecuritySection() {
   const securityCategories = [
@@ -1736,7 +1366,7 @@ function SecuritySection() {
   ]
 
   return (
-    <SectionWrap title="Security & Vulnerabilities" description="Security Posture, LAPS, encryption monitoring, and the Vulnerabilities tracker">
+    <SectionWrap title="Security Posture" description="Fleet-wide security controls, LAPS, and encryption monitoring">
 
       <DocCard>
         <CardHeader title="Security Posture Page" description="Navigate via Security Posture in the sidebar" />
@@ -1758,25 +1388,13 @@ function SecuritySection() {
         </div>
       </DocCard>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <DocCard>
-          <CardHeader title="LAPS (Local Admin Password)" />
-          <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-            <p><strong>LAPS</strong> (Local Administrator Password Solution) automatically rotates the local admin password on managed devices so that every device has a unique, time-limited credential.</p>
-            <p>View LAPS status per device in the <strong>Device Detail Panel → LAPS tab</strong>. Fields shown: enabled status, managing source (Microsoft LAPS / ManageEngine Managed / Legacy LAPS), account name, last rotation, and expiry date.</p>
-          </div>
-        </DocCard>
-        <DocCard>
-          <CardHeader title="Vulnerabilities Page" />
-          <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-            <p>The Vulnerabilities page tracks CVE-level patch exposure across your fleet — which devices are affected by which CVEs, severity ratings, and patch availability status.</p>
-            <p className="flex items-start gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-              <span>This page is under active development. CVE data will be pulled from Defender Vulnerability Management (Intune) and ManageEngine in a future release.</span>
-            </p>
-          </div>
-        </DocCard>
-      </div>
+      <DocCard>
+        <CardHeader title="LAPS (Local Admin Password)" />
+        <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
+          <p><strong>LAPS</strong> (Local Administrator Password Solution) automatically rotates the local admin password on managed devices so that every device has a unique, time-limited credential.</p>
+          <p>View LAPS status per device in the <strong>Device Detail Panel → LAPS tab</strong>. Fields shown: enabled status, managing source (Microsoft LAPS / ManageEngine Managed / Legacy LAPS), account name, last rotation, and expiry date.</p>
+        </div>
+      </DocCard>
 
       <DocCard>
         <CardHeader title="Encryption Monitoring in Depth" />
@@ -1808,409 +1426,12 @@ function SecuritySection() {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-// ─── Section: Full Feature Guide ─────────────────────────────────────────────
-
-function CompareTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[0.68rem] border-collapse">
-        <thead>
-          <tr>
-            {headers.map((h, i) => (
-              <th key={i} className="bg-slate-800 text-white font-semibold px-3 py-2 text-left first:rounded-tl-lg last:rounded-tr-lg">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} className={ri % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-              {row.map((cell, ci) => (
-                <td key={ci} className={`px-3 py-2 border-b border-slate-100 leading-snug ${ci === 0 ? 'font-semibold text-blue-800' : 'text-slate-700'}`}>
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function AdvantageBox({ title, points, color = 'emerald' }: { title: string; points: string[]; color?: string }) {
-  const cls: Record<string, string> = {
-    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-    blue:    'bg-blue-50  border-blue-200  text-blue-800',
-    amber:   'bg-amber-50 border-amber-200 text-amber-800',
-  }
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${cls[color] ?? cls.emerald}`}>
-      <p className="text-xs font-bold mb-2">{title}</p>
-      <ul className="space-y-1">
-        {points.map((p, i) => (
-          <li key={i} className="flex items-start gap-2 text-[0.68rem] text-slate-700">
-            <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-emerald-500" />
-            {p}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function TabFeatureList({ items }: { items: { tab: string; desc: string }[] }) {
-  return (
-    <div className="divide-y divide-slate-100">
-      {items.map(({ tab, desc }) => (
-        <div key={tab} className="flex items-start gap-3 px-5 py-2.5">
-          <span className="inline-flex min-w-[120px] rounded-lg bg-slate-100 px-2 py-1 text-[0.6rem] font-bold text-slate-700 flex-shrink-0 mt-0.5">{tab}</span>
-          <p className="text-[0.7rem] text-slate-600 leading-snug">{desc}</p>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function FeatureGuideSection() {
-  const [open, setOpen] = useState<string | null>('endpoint')
-  const toggle = (k: string) => setOpen(o => o === k ? null : k)
-
-  const Section = ({ id, title, color, children }: { id: string; title: string; color: string; children: React.ReactNode }) => (
-    <div className="rounded-[18px] border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <button
-        type="button"
-        onClick={() => toggle(id)}
-        className={`flex w-full items-center justify-between px-5 py-3.5 text-left ${color}`}
-      >
-        <span className="text-sm font-bold text-white">{title}</span>
-        <ChevronRight className={`h-4 w-4 text-white/70 transition-transform ${open === id ? 'rotate-90' : ''}`} />
-      </button>
-      {open === id && <div className="px-5 py-4 space-y-5">{children}</div>}
-    </div>
-  )
-
-  return (
-    <SectionWrap
-      title="Full Feature Guide"
-      description="Comprehensive documentation of every module, connector, feature comparison, and advantage analysis"
-    >
-      {/* Download card */}
-      <DocCard>
-        <div className="flex items-center gap-4 px-5 py-4">
-          <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-blue-100">
-            <FileText className="h-5 w-5 text-blue-700" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs font-bold text-slate-900">ITO Endpoint AI Copilot — Full Documentation</p>
-            <p className="text-[0.65rem] text-slate-500 mt-0.5">Complete feature guide with connector comparisons, IRU analysis, and advantage breakdowns</p>
-          </div>
-          <a
-            href="/docs/ITO-Endpoint-AI-Copilot-Full-Documentation.docx"
-            download
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-[0.7rem] font-semibold text-white shadow-sm hover:bg-blue-700 transition"
-          >
-            <Package className="h-3.5 w-3.5" /> Download .docx
-          </a>
-        </div>
-      </DocCard>
-
-      {/* ── Section 1: Endpoint Management ── */}
-      <Section id="endpoint" title="Section 1 — Endpoint Management" color="bg-blue-700">
-
-        <div>
-          <p className="text-xs font-bold text-slate-800 mb-2">1.1 Mac Devices — ManageEngine Connector</p>
-          <p className="text-[0.7rem] text-slate-600 mb-3">Primary hub for Apple macOS device management, backed by ManageEngine MDM On-Demand (Endpoint Central Cloud). Tabs cover the full fleet lifecycle using per-device data — ManageEngine has no global app catalog/blueprint concept, so app and policy data is shown per device rather than as a central library.</p>
-          <DocCard>
-            <CardHeader title="Tabs & Key Features" />
-            <TabFeatureList items={[
-              { tab: 'Devices',      desc: 'Full inventory with model/OS filters, check-in staleness dots (green→today, amber→3-6d, red→7+d), FileVault & compliance badges.' },
-              { tab: 'Applications', desc: 'Per-device installed app inventory and applied configuration profile strings (no global catalog — ManageEngine only exposes per-device app/policy state).' },
-              { tab: 'Security',     desc: 'Per-device FileVault, EDR agent, macOS Firewall, applied policy count, and aggregated risk level.' },
-              { tab: 'Reports',      desc: 'Fleet growth, patch compliance, macOS version mix, stale devices, IRU Patch Report, and fleet KPI dashboard.' },
-            ]} />
-          </DocCard>
-        </div>
-
-        <div>
-          <p className="text-xs font-bold text-slate-800 mb-2">1.2 Intune Connector — Windows, iOS & Android</p>
-          <DocCard>
-            <CardHeader title="Tabs & Key Features" />
-            <TabFeatureList items={[
-              { tab: 'Devices',    desc: 'Multi-platform inventory (Windows · Android · iOS sub-tabs). Columns: device, user, platform, OS, serial, encryption, compliance, last check-in.' },
-              { tab: 'Compliance', desc: 'Policy-level compliance breakdown and top-10 non-compliant device list with failure reasons.' },
-              { tab: 'Security',   desc: 'BitLocker coverage %, Defender active rate, Azure AD MFA enrollment %, compliance policy pass/fail by policy name.' },
-              { tab: 'Automation', desc: 'BitLocker Auto-Remediation, Defender Health Alert, Non-Compliant Escalation, Windows Update Enforcement, Stale Device Quarantine.' },
-              { tab: 'Reports',    desc: 'BitLocker coverage, compliance rate, Defender coverage, and managed device count — all with PDF/CSV export.' },
-              { tab: 'Entra ID',   desc: 'Live or demo Microsoft Graph data: Users (risk/MFA/sign-in), Devices (join type/encryption), Groups (Security/M365/Distribution).' },
-            ]} />
-          </DocCard>
-        </div>
-
-        <div>
-          <p className="text-xs font-bold text-slate-800 mb-2">1.3 IRU — Infrastructure & Remote Users Patch Report</p>
-          <p className="text-[0.7rem] text-slate-600 mb-3">
-            IRU is a specialised macOS patch-compliance and staleness report built on ManageEngine data —
-            not a separate connector. Accessible via Mac Devices → Reports → IRU Patch Report, and as a standalone full-page view.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <DocCard>
-              <CardHeader title="Patch Tiers (6)" />
-              <TabFeatureList items={[
-                { tab: 'Current (26.5)',       desc: 'Latest macOS Tahoe — no action needed.' },
-                { tab: 'Minor Patch (26.4)',   desc: 'One patch behind — ManageEngine notification to upgrade.' },
-                { tab: 'Update Req (26.x)',    desc: 'Multiple versions behind — investigate dev/beta channel.' },
-                { tab: 'Sequoia (15.x)',       desc: 'Outdated major release — enforce upgrade to 26.x.' },
-                { tab: 'Sonoma (14.x)',        desc: '2-3 releases behind — direct outreach + force policy.' },
-                { tab: 'Ventura (13.x)',       desc: 'End of Life — no Apple patches — escalate for refresh.' },
-              ]} />
-            </DocCard>
-            <DocCard>
-              <CardHeader title="Staleness Tiers (4)" />
-              <TabFeatureList items={[
-                { tab: 'Active (0-13d)',    desc: 'Normal operation — no action.' },
-                { tab: 'Stale (14+d)',      desc: 'Amber alert — investigate connectivity or travel.' },
-                { tab: 'Critical (30+d)',   desc: 'Red alert — device may be lost or reassigned.' },
-                { tab: 'Abandoned (90+d)', desc: 'Cross-reference HR offboarding records immediately.' },
-              ]} />
-            </DocCard>
-          </div>
-          <DocCard className="mt-3">
-            <CardHeader title="IRU Views" />
-            <TabFeatureList items={[
-              { tab: 'Full Report',      desc: 'Executive summary: OS compliance table, regional breakdown, stale register preview, and 8 prioritised (P1–P4) admin recommendations.' },
-              { tab: 'Device List',      desc: 'Paginated, sortable table with search, region filter, stale filter, and OS tier filter.' },
-              { tab: 'Outdated & EOL',   desc: 'Filtered view of Sequoia/Sonoma/Ventura devices requiring urgent action.' },
-              { tab: 'Stale Register',   desc: 'Dedicated register with quick-filter buttons: Stale 14+d · Critical 30+d · Abandoned 90+d.' },
-              { tab: 'Regional Summary', desc: 'Patch compliance per office region (North/South/East/West/HQ/Remote) with compliance bar charts.' },
-            ]} />
-          </DocCard>
-        </div>
-
-        <div>
-          <p className="text-xs font-bold text-slate-800 mb-3">1.4 ManageEngine (macOS) vs Intune — Feature Comparison</p>
-          <CompareTable
-            headers={['Feature / Metric', 'ManageEngine (Mac)', 'Intune (Windows / Mobile)', 'Winner']}
-            rows={[
-              ['Primary Platform',     'macOS (M-series & Intel)',    'Windows 10/11, iOS, Android',     'Platform-specific'],
-              ['Disk Encryption',      'FileVault — 90% pass rate',   'BitLocker — 82% pass rate',       'ManageEngine'],
-              ['EDR / Antivirus',      'EDR / AV — 94%',              'Microsoft Defender — 91%',        'ManageEngine'],
-              ['Firewall Compliance',  'macOS Firewall — 96%',        'Windows Firewall — 95%',          'ManageEngine'],
-              ['OS Patch Compliance',  'macOS updates — 79%',         'Windows Update — 68%',            'ManageEngine'],
-              ['Identity / MFA',       'MFA — 90%',                   'Azure AD MFA — 87%',              'ManageEngine'],
-              ['Overall Compliance',   '91% avg',                     '90% avg',                         'ManageEngine'],
-              ['Mobile Device Support','None (Mac only)',              'iOS + Android full MDM',          'Intune'],
-              ['Windows Management',   'Cross-platform (Windows + macOS)', 'Full GPO + Intune policy stack',  'Context-dependent'],
-              ['Patch Reporting',      'IRU (6-tier + regional)',      'Binary: compliant / not',         'ManageEngine'],
-              ['Identity Provider',    'Directory-dependent',         'Azure AD / Entra ID',             'Context-dependent'],
-            ]}
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <AdvantageBox color="emerald" title="ManageEngine Advantages over Intune" points={[
-              'Higher compliance rates across measured macOS security pillars',
-              'Single UEM console covers both Windows and macOS fleets',
-              'IRU provides 6-tier patch segmentation vs Intune\'s binary pass/fail',
-              'On-premises deployment option for strict data residency requirements',
-            ]} />
-            <AdvantageBox color="blue" title="Intune Advantages over ManageEngine" points={[
-              'Full Windows 10/11 management — GPO migration, Win32 app deployment',
-              'iOS and Android MDM in one platform',
-              'Microsoft Graph API is the richest identity + device data source',
-              'Azure AD Conditional Access and risk-based sign-in policies',
-              'Lower cost for orgs already on Microsoft 365 E3/E5 licensing',
-            ]} />
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-bold text-slate-800 mb-2">1.5 ManageEngine Connector</p>
-          <DocCard>
-            <CardHeader title="Tabs & Key Features" />
-            <TabFeatureList items={[
-              { tab: 'Devices',    desc: 'Windows + Linux inventory. Columns: device, user, platform, OS version, compliance, encryption, last scan.' },
-              { tab: 'Patches',    desc: 'Patch distribution: Fully Patched / Patches Available / Critical Missing / Severely Behind — per-device KB list.' },
-              { tab: 'Software',   desc: 'Full installed software inventory: name, version, publisher, install date — per device.' },
-              { tab: 'Automation', desc: 'Missing Critical Patches Alert, Auto-Deploy Security Patches, Unauthorized Software Alert, Offline Check-in, Weekly Patch Report.' },
-              { tab: 'Reports',    desc: 'Patch and software coverage metrics — % fully patched, % critical gaps, software currency.' },
-            ]} />
-          </DocCard>
-          <AdvantageBox color="amber" title="ManageEngine Advantages over Intune" points={[
-            'Full Linux endpoint management — Intune has only limited/preview Linux support',
-            'Granular KB-level patch control vs Intune\'s Windows Update ring abstraction',
-            'Complete installed software inventory (all software, not just managed apps)',
-            'On-premises deployment option for strict data residency requirements',
-            'Lower cost for orgs without Microsoft 365 E3/E5 — no Azure AD prerequisite',
-          ]} />
-        </div>
-      </Section>
-
-      {/* ── Section 2: Security & Compliance ── */}
-      <Section id="security" title="Section 2 — Security & Compliance" color="bg-purple-700">
-        <div>
-          <p className="text-xs font-bold text-slate-800 mb-2">2.1 Security Posture — Pillar Scores</p>
-          <CompareTable
-            headers={['Pillar', 'All Sources', 'Intune (Windows)', 'ManageEngine (Mixed)']}
-            rows={[
-              ['Encryption / FileVault / BitLocker', '87%', '82% BitLocker',  '90%'],
-              ['EDR / Antivirus',                    '93%', '91% Defender',   '94%'],
-              ['Firewall',                           '96%', '95% Win FW',     '96%'],
-              ['OS Patching',                        '74%', '68% Win Update', '79%'],
-              ['Identity / MFA',                     '89%', '87% Azure MFA',  '90%'],
-              ['MDM Compliance',                     '91%', '90% Intune',     '91%'],
-            ]}
-          />
-        </div>
-        <DocCard>
-          <CardHeader title="EDR — 4 Investigation Tabs" />
-          <TabFeatureList items={[
-            { tab: 'Detections',       desc: 'MITRE ATT&CK technique mapping, process forensics, file hashes, IOCs, detection timestamp.' },
-            { tab: 'Incidents',        desc: 'Grouped detections with investigation timeline and analyst notes.' },
-            { tab: 'Response Actions', desc: 'Network isolation, process kill, file quarantine — with success/failure tracking per action.' },
-            { tab: 'Investigation',    desc: 'Full forensic timeline: process tree, network events, file events, registry changes.' },
-          ]} />
-        </DocCard>
-      </Section>
-
-      {/* ── Section 3: Users & Identity ── */}
-      <Section id="identity" title="Section 3 — Users & Identity" color="bg-teal-700">
-        <DocCard>
-          <CardHeader title="User Detail Drawer — 8 Tabs" />
-          <TabFeatureList items={[
-            { tab: 'Profile',        desc: 'Identity card, contact info, employment, account security, directory & MDM sources.' },
-            { tab: 'Sign-in Logs',   desc: 'Sign-in attempts with success/failure, app, IP, location, MFA method, risk level, error reason.' },
-            { tab: 'Assigned Roles', desc: 'Entra ID directory role assignments.' },
-            { tab: 'Groups',         desc: 'Group membership: Microsoft 365 · Security · Distribution · Mail-enabled Security.' },
-            { tab: 'Applications',   desc: 'App role assignments with service names and access levels.' },
-            { tab: 'Licenses',       desc: 'M365 E3/E5, Intune, Entra ID P1/P2 licence assignments with service plan status.' },
-            { tab: 'Devices',        desc: 'Assigned devices: compliance, encryption, risk score, last check-in, sync button.' },
-            { tab: 'Jira',           desc: 'Open & resolved Jira tickets linked to this user — type, priority, status.' },
-          ]} />
-        </DocCard>
-        <DocCard>
-          <CardHeader title="Entra Intelligence — 10 Dashboard Sections" />
-          <TabFeatureList items={[
-            { tab: 'Compliance Over Time',       desc: '6-week stacked bar: Compliant / Non-Compliant / Grace Period per week.' },
-            { tab: 'Devices by Platform',        desc: 'Horizontal bars — Windows, macOS, iOS, Android, Linux with % and counts.' },
-            { tab: 'Top Compliance Issues',      desc: '6 issues with severity badge (High/Medium/Low) and affected device count.' },
-            { tab: 'Recent Alerts',              desc: 'Alert list with title, timestamp, and severity dot.' },
-            { tab: 'Risky Users',                desc: 'User · Department · Risk Level · Last Sign-In · MFA · Sessions — expandable rows.' },
-            { tab: 'Stale Devices',              desc: 'Devices >7d offline — amber >7d, red >14d highlight.' },
-            { tab: 'Device Inventory',           desc: 'Full table up to 100 rows: compliance, encryption, join type.' },
-            { tab: 'Relationship Intelligence',  desc: 'User → Device → Policy → App explorer for access path analysis.' },
-            { tab: 'Helpdesk Quick Lookup',      desc: 'Instant device/user search with device sync action.' },
-            { tab: 'Entra AI Copilot',           desc: 'AI-powered insights and anomaly recommendations from live Entra data.' },
-          ]} />
-        </DocCard>
-      </Section>
-
-      {/* ── Section 4: Automation ── */}
-      <Section id="automation" title="Section 4 — Automation" color="bg-emerald-700">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <DocCard>
-            <CardHeader title="Trigger Types (6)" />
-            <div className="px-5 py-3 space-y-1.5">
-              {['Device Non-Compliant','Encryption Off','Device Offline','Drift Detected','Scheduled (cron)','Script Failure'].map(t => (
-                <div key={t} className="flex items-center gap-2">
-                  <ToggleRight className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                  <span className="text-[0.7rem] text-slate-700">{t}</span>
-                </div>
-              ))}
-            </div>
-          </DocCard>
-          <DocCard>
-            <CardHeader title="Action Types (6)" />
-            <div className="px-5 py-3 space-y-1.5">
-              {['Send in-app notification','Send Slack message','Create Jira ticket','Trigger runbook','Run remote script','Generate report'].map(a => (
-                <div key={a} className="flex items-center gap-2">
-                  <Zap className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                  <span className="text-[0.7rem] text-slate-700">{a}</span>
-                </div>
-              ))}
-            </div>
-          </DocCard>
-        </div>
-        <DocCard>
-          <CardHeader title="Remote Scripts — Execution Status Badges" />
-          <div className="px-5 py-3 flex flex-wrap gap-2">
-            {[
-              { label: 'Queued',            color: 'bg-slate-100 text-slate-700' },
-              { label: 'Running',           color: 'bg-blue-100 text-blue-700' },
-              { label: 'Completed',         color: 'bg-emerald-100 text-emerald-700' },
-              { label: 'Failed',            color: 'bg-red-100 text-red-700' },
-              { label: 'Timeout',           color: 'bg-orange-100 text-orange-700' },
-              { label: 'Awaiting Approval', color: 'bg-purple-100 text-purple-700' },
-            ].map(s => (
-              <span key={s.label} className={`rounded-lg px-2.5 py-1 text-[0.65rem] font-bold ${s.color}`}>{s.label}</span>
-            ))}
-          </div>
-        </DocCard>
-      </Section>
-
-      {/* ── Section 5: Analytics & Reports ── */}
-      <Section id="analytics" title="Section 5 — Analytics & Reports" color="bg-amber-600">
-        <DocCard>
-          <CardHeader title="Mac Fleet Reports — KPI Groups (18+ metrics)" />
-          <TabFeatureList items={[
-            { tab: 'Fleet Health',     desc: 'Total Devices · Compliant · Non-Compliant · Devices at Risk' },
-            { tab: 'Patch Compliance', desc: 'Fully Patched (26.5) · Minor Patch Needed (26.4) · Update Required (26.x) · Critical Missing' },
-            { tab: 'Device Lifecycle', desc: 'Current macOS · Outdated (Sequoia/Sonoma/Ventura) · End of Life · Avg Days Since Check-in' },
-            { tab: 'Stale Devices',    desc: 'Stale 14+d · Critical 30+d · Abandoned 90+d · Active (< 14d)' },
-          ]} />
-        </DocCard>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { icon: BarChart2,    label: 'Reports & Analytics', desc: 'Pre-built templates + custom query builder. PDF & CSV export with scheduling.' },
-            { icon: Clock,        label: 'Activity Log',         desc: 'Full audit trail filterable by date, device, user, action type. CSV export.' },
-            { icon: Activity,     label: 'Diagnostics',          desc: '3 tabs: Infrastructure (API health), Device-level (control state), Fleet (aggregated counts).' },
-          ].map(c => (
-            <div key={c.label} className="rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3 flex items-start gap-3">
-              <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-amber-100 mt-0.5">
-                <c.icon className="h-4 w-4 text-amber-700" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-900">{c.label}</p>
-                <p className="text-[0.65rem] text-slate-500 mt-0.5 leading-snug">{c.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* ── Section 6: Platform ── */}
-      <Section id="platform" title="Section 6 — Platform & Roles" color="bg-slate-700">
-        <CompareTable
-          headers={['Role', 'Permissions']}
-          rows={[
-            ['Global Admin', 'Full read/write on all modules, settings, user management, and integration credentials'],
-            ['IT Admin',     'Full operational access — devices, runbooks, scripts, automation. No org-level configuration'],
-            ['Helpdesk',     'Read-only + device sync. Must escalate runbook execution to an IT Admin'],
-            ['End User',     'Limited view of own assigned devices and compliance status only'],
-          ]}
-        />
-        <DocCard>
-          <CardHeader title="Settings — 4 Configuration Categories" />
-          <TabFeatureList items={[
-            { tab: 'Integrations',          desc: 'Intune · Entra · ManageEngine · Jira · Confluence · Slack — API credentials, connection test.' },
-            { tab: 'Notifications',         desc: 'Alert thresholds by severity, delivery channels (in-app/Slack/email), quiet hours.' },
-            { tab: 'Account Settings',      desc: 'User role assignment, API key management, session management.' },
-            { tab: 'Data & Privacy',        desc: 'Log retention policies, data export, compliance flags (GDPR / SOC 2).' },
-          ]} />
-        </DocCard>
-      </Section>
-
-    </SectionWrap>
-  )
-}
-
 const SECTION_MAP: Record<DocSection, React.ReactNode> = {
   overview:        <OverviewSection />,
   quickstart:      <QuickStartSection />,
   onboarding:      <OnboardingSection />,
   dashboard:       <DashboardSection />,
   identity:        <IdentitySection />,
-  runbooks:        <RunbooksSection />,
-  scripts:         <ScriptsSection />,
   automation:      <AutomationSection />,
   reports:         <ReportsSection />,
   security:        <SecuritySection />,
@@ -2218,7 +1439,6 @@ const SECTION_MAP: Record<DocSection, React.ReactNode> = {
   roles:           <RolesSection />,
   troubleshooting: <TroubleshootingSection />,
   faq:             <FaqSection />,
-  featureguide:    <FeatureGuideSection />,
 }
 
 export function DocsPage() {

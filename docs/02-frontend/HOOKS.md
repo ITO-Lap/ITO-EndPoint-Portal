@@ -12,16 +12,16 @@ Persists state to `localStorage`. Works exactly like `useState` but survives pag
 
 ```tsx
 const [activePage, setActivePage] = useLocalStorage('activePage', 'Dashboard')
-const [isAuthenticated, setAuth] = useLocalStorage('ito_auth', false)
-const [role, setRole] = useLocalStorage('ito_role', 'Global Admin')
+const [copilotOpen, setCopilotOpen] = useLocalStorage('copilot-panel-open', false)
 ```
 
 **Keys in use:**
 | Key | Default | Used for |
 |---|---|---|
 | `activePage` | `'Dashboard'` | Currently displayed page |
-| `ito_auth` | `false` | Whether user is signed in |
-| `ito_role` | `'Global Admin'` | Current user's role |
+| `copilot-panel-open` | `false` | Whether the Endpoint Operations Copilot panel is open |
+
+There are no `ito_auth` / `ito_role` keys — the app has no sign-in gate and always runs as Global Admin.
 
 ---
 
@@ -50,31 +50,18 @@ const { stats, countdown, lastUpdated, refresh } = useStats()
 
 ---
 
-## `useActivity(limit?)`
+There is no `useActivity` hook — the Recent Activity feed and `/api/activity` route were removed in the differentiation refactor.
 
-**File:** `src/hooks/useActivity.ts`
-
-Fetches recent activity events from `/api/activity`. Refreshes every 60 seconds.
-
-```tsx
-const { items, loading, error } = useActivity(20) // default limit: 20
-```
-
-**Item shape:** `{ id, deviceName, message, status, timestamp }`
-
----
-
-## `useNotifications(defaults?)`
+## `useNotifications()`
 
 **File:** `src/hooks/useNotifications.ts`
 
-Manages notification state. Fetches from `/api/notifications` and merges with optional default items (used for hardcoded notification seeds in `App.tsx`).
+Fetches notifications from `/api/notifications` once on mount (no default/seed list, no polling).
 
 ```tsx
-const { notifications, markAllRead, markRead } = useNotifications(DEFAULT_NOTIFICATIONS)
+const { notifications, markAllRead } = useNotifications()
 
-await markAllRead()       // PATCH /api/notifications/read-all
-await markRead('abc123')  // PATCH /api/notifications/abc123/read
+await markAllRead()  // PATCH /api/notifications/read-all
 ```
 
 ---
@@ -83,13 +70,13 @@ await markRead('abc123')  // PATCH /api/notifications/abc123/read
 
 **File:** `src/hooks/useIntegrationStatus.ts`
 
-Polls `/api/integrations/status` to show live integration health in the Settings page.
+Polls `/api/integrations/status` every 10 seconds to show live integration health in the Settings page.
 
 ```tsx
-const { integrations, loading, error, refetch } = useIntegrationStatus()
+const { status, loading, refresh } = useIntegrationStatus()
 ```
 
-**Returns:** array of `IntegrationStatusItem` — one per source (intune, manageengine, openai).
+**Returns:** `status` — array of `IntegrationStatusItem`, one per source (intune, manageengine, openai, ...).
 
 ---
 
@@ -110,14 +97,10 @@ useClickOutside(dropdownRef, () => setOpen(false))
 
 **File:** `src/hooks/useDashboardState.ts`
 
-Manages the local UI state needed by the Dashboard page (runbook modal open/close, activity modal, etc.). Extracted from `DashboardContent` to keep the component clean.
+Manages the local UI state needed by the Dashboard page (currently just the runbook modal open/close state). Extracted from `DashboardContent` to keep the component clean.
 
 ```tsx
-const {
-  runbookModalOpen, setRunbookModalOpen,
-  activityModalOpen, setActivityModalOpen,
-  policyModalOpen, setPolicyModalOpen,
-} = useDashboardState()
+const { runbookModalOpen, setRunbookModalOpen } = useDashboardState()
 ```
 
 ---
@@ -126,5 +109,5 @@ const {
 
 1. Create `src/hooks/useYourHook.ts`
 2. Export a named function starting with `use`
-3. If it fetches data, pattern-match `useActivity.ts` (loading/error states, cleanup on unmount)
+3. If it fetches data, pattern-match `useIntegrationStatus.ts` (loading state, cleanup on unmount)
 4. Import from `'./hooks/useYourHook'` in the consuming component

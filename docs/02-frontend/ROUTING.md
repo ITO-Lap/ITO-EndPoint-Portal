@@ -25,49 +25,48 @@ Defined in two places:
 **1. Nav items** — `src/data/dashboardData.ts` → `navItems`  
 Controls what appears in the sidebar.
 
+Nav items are grouped by section (`Overview`, `Endpoint Management`, `Security & Compliance`, `Users & Identity`, `Automation`, `Analytics & Reports`, `Intelligence Platform`, `Platform`) via the `group` field:
+
 ```ts
 export const navItems: NavItem[] = [
-  { title: 'Dashboard',          icon: Home,       active: true },
-  { title: 'Device Lookup',      icon: Search },
-  { title: 'Users',              icon: Users },
-  { title: 'Runbooks',           icon: BookOpen },
-  { title: 'Diagnostics',        icon: Activity },
-  { title: 'Reports & Analytics',icon: BarChart3 },
-  { title: 'Activity Log',       icon: Clock3 },
-  { title: 'Settings',           icon: Settings },
-  { title: 'Documentation',      icon: BookMarked },
+  { id: 'dashboard', title: 'Dashboard', icon: Home, group: 'Overview', active: true },
+  { id: 'mac_devices', title: 'Mac Devices', icon: Monitor, group: 'Endpoint Management' },
+  { id: 'intune_devices', title: 'Intune Devices', icon: Server, group: 'Endpoint Management' },
+  { id: 'users', title: 'Users', icon: Users, group: 'Users & Identity' },
+  { id: 'automation', title: 'Automation', icon: Zap, group: 'Automation' },
+  { id: 'settings', title: 'Settings', icon: Settings, group: 'Platform' },
+  // ...see src/data/dashboardData.ts for the full, current list
 ]
 ```
+
+Some pages (e.g. Entra Intelligence, Mac Fleet Reports, User Intelligence, Documentation, Scheduled Reports) are reached by drill-down from another page rather than a direct sidebar entry, so they aren't in `navItems` at all.
 
 **2. Page router** — `src/App.tsx`  
 The JSX `if/else` that maps page title → component:
 
 ```tsx
-{activePage === 'Dashboard'     ? <DashboardContent ... />
-: activePage === 'Device Lookup'? <DeviceLookupPage ... />
-: activePage === 'Users'        ? <UsersPage ... />
-: activePage === 'Profile'      ? <ProfilePage />
-: activePage === 'Settings'     ? <SettingsPage />
-: activePage === 'Documentation'? <DocsPage />
-:                                 <PlaceholderPage title={activePage} />}
+{activePage === 'Dashboard'          ? <DashboardContent ... />
+: activePage === 'Mac Devices'       ? <MacDevicesPage ... />
+: activePage === 'Intune Devices'    ? <IntuneDevicesPage ... />
+: activePage === 'Users'             ? <UsersPage ... />
+: activePage === 'Settings'          ? <SettingsPage />
+: activePage === 'Documentation'     ? <DocsPage />
+:                                       <PlaceholderPage title={activePage} />}
 ```
 
-Pages not explicitly handled fall through to `<PlaceholderPage>`.
+Pages not explicitly handled fall through to `<PlaceholderPage>` — see `src/App.tsx` for the full, current list of handled `activePage` branches.
 
 ---
 
 ## Page descriptions
 
-`PAGE_META` in `App.tsx` provides description text for placeholder pages:
+`PAGE_META` in `App.tsx` provides description text used above placeholder/drill-down pages:
 
 ```ts
 const PAGE_META: Record<string, { description: string }> = {
-  'Device Lookup':      { description: '...' },
-  'Runbooks':           { description: '...' },
-  'Diagnostics':        { description: '...' },
-  'Reports & Analytics':{ description: '...' },
-  'Activity Log':       { description: '...' },
-  'Settings':           { description: '...' },
+  'Users':               { description: '...' },
+  'Reports & Analytics': { description: '...' },
+  'Settings':            { description: '...' },
 }
 ```
 
@@ -84,14 +83,11 @@ Some pages are hidden from the sidebar based on role. The `Sidebar` component fi
 Any component can navigate by calling `setActivePage` — which is passed down as `onNavSelect` / `onProfileNav` / etc.:
 
 ```tsx
-// Navigate to profile from header
-onProfileNav('Profile')
+// Navigate to Documentation from the header's profile menu
+onProfileNav('Documentation')
 
 // Navigate to dashboard after device search
 setActivePage('Dashboard')
-
-// Navigate to device lookup with a pre-filled search
-setActivePage('Device Lookup')
 ```
 
 ---

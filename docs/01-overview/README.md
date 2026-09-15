@@ -38,24 +38,25 @@ ITO Endpoint AI Copilot
 │   ├── Issue category breakdown
 │   ├── Device summary panel (selected device)
 │   ├── Compliance detail rows
-│   ├── AI runbook recommendations
-│   ├── Security profile panel
-│   └── Recent activity feed
+│   ├── AI runbook recommendation (card)
+│   └── Security profile panel
 │
-├── Device Lookup
-│   ├── Search by name / email / serial
-│   ├── Advanced filters (source, compliance state, platform)
-│   ├── Device detail side panel
-│   └── "View in Dashboard" action
+├── Mac Devices / Intune Devices / ManageEngine App Inventory
+│   └── Per-source device inventory, compliance, security, automation, reports
 │
 ├── Users
 │   ├── User list with risk scoring
 │   ├── User detail drawer (devices, activity, Jira tickets)
-│   └── Role management
+│   └── User Intelligence drill-down
 │
-├── Runbooks
-│   ├── Runbook library cards
-│   └── Step-by-step execution modal
+├── Risk Scoring / Compliance Intelligence / Policy Conflicts
+│   └── AI-generated narrative, executive summary, and conflict detection over live devices/policies
+│
+├── Automation
+│   └── Rule-based engine: triggers → conditions → actions (Jira, Slack, runbooks, scripts)
+│
+├── Entra Intelligence
+│   └── Platform distribution + stale check-in from Microsoft Graph
 │
 ├── Settings
 │   ├── Integration configuration (push credentials, sync)
@@ -64,10 +65,14 @@ ITO Endpoint AI Copilot
 │   ├── Data & Privacy
 │   └── Danger Zone
 │
-└── AI Copilot
-    ├── POST /api/ai/analyze — deep compliance analysis per device
-    └── POST /api/ai/chat   — freeform IT assistant chat
+└── Endpoint Operations Copilot (global chat panel)
+    └── POST /api/copilot/* — tool-calling AI assistant with confirmed write actions
 ```
+
+There is no dedicated Device Lookup page, standalone Runbooks library page, or `/api/ai/*` route
+anymore — see `docs/README.md` → "Recent Changes" for the full list of what was removed in the
+differentiation refactor, and [OPENAI.md](../04-integrations/OPENAI.md) for where OpenAI is actually
+called from today.
 
 ---
 
@@ -78,8 +83,11 @@ ITO Endpoint AI Copilot
 | Microsoft Intune | Microsoft Graph REST API | OAuth2 client credentials |
 | ManageEngine | REST API | API key |
 | OpenAI | OpenAI Chat Completions | API key |
+| Jira / Confluence | REST API | Basic auth (email + API token) |
 
-When no credentials are set in `.env`, every data source falls back to built-in mock data automatically.
+When no MDM credentials are set, `/api/devices` returns an empty device list rather than falling
+back to mock devices (see [Architecture](ARCHITECTURE.md)). Some other dashboards (e.g. Entra
+Intelligence) still have their own independent demo/mock datasets.
 
 ---
 

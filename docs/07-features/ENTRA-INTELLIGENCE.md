@@ -1,24 +1,23 @@
 # Entra Intelligence Dashboard — Feature Guide
 
-> **Location:** Endpoint Management → Entra Intelligence  
-> **Audience:** Intune Admins · Helpdesk · Security Admins · SOC  
-> **Data source:** Microsoft Graph API (live when Entra ID configured); demo data otherwise
+> **Location:** Endpoint Management → Entra Intelligence
+> **Audience:** Intune Admins · Helpdesk · Security Admins
+> **Data source:** Microsoft Graph API via `/api/entra/devices` (live when Entra ID/Intune credentials are configured); demo data otherwise
+> **Component:** `src/components/entra/EntraIntelligenceDashboard.tsx`
 
 ---
 
 ## What It Does
 
-The Entra Intelligence Dashboard brings Microsoft Entra ID and Intune data directly into ITO Endpoint. It provides a dark-themed enterprise view of your Windows/cross-platform fleet with:
+The Entra Intelligence Dashboard is a focused, dark-themed view of the managed device fleet pulled
+from Microsoft Graph. It renders two collapsible widgets:
 
-- 13 KPI metric cards (devices, compliance, patches, users, security)
-- Compliance trend chart (6 weeks)
-- Device platform distribution
-- Top compliance issues + recent alerts
-- Risky users table (from Azure Identity Protection)
-- Stale device table
-- Relationship Explorer — User → Device → Group → Policy → App chain
-- Helpdesk Quick Lookup
-- AI Copilot panel
+- **Devices by Platform** — a horizontal bar breakdown of device count/percentage per OS (Windows,
+  macOS, iOS/iPadOS, Android, Linux)
+- **Devices with Stale Check-in** — a table of every device that hasn't checked in for more than 7
+  days, sorted oldest-first
+
+Both widgets are driven by the same device list, fetched once on mount and again on **Refresh**.
 
 ---
 
@@ -26,9 +25,11 @@ The Entra Intelligence Dashboard brings Microsoft Entra ID and Intune data direc
 
 Navigate to **Endpoint Management → Entra Intelligence** in the sidebar.
 
-The page shows a status indicator:
-- 🟢 **Live · Microsoft Graph** — credentials configured and API calls succeeding
-- 🟡 **Demo data** — no credentials configured; showing synthetic example data
+The header shows a status indicator:
+- 🟢 **Live · Microsoft Graph** — `fetchEntraDevices()` returned real devices
+- 🟡 **Demo data** — no credentials configured, or the fetch failed/returned nothing; showing synthetic example data from `src/data/entraData.ts`
+
+If a fetch fails outright, a red error banner is shown above the widgets (`Data fetch error: ... — Showing last known / demo data.`) in addition to — not instead of — the demo-mode banner.
 
 ---
 
@@ -36,117 +37,39 @@ The page shows a status indicator:
 
 | Data Type | When Live | When Demo |
 |---|---|---|
-| Device inventory | Real Intune managed devices | 8 synthetic devices |
-| Users | Real Entra directory users | 5 synthetic users |
-| Risky users | Real Azure Identity Protection | Pre-set risk levels |
-| Compliance | Computed from live devices | Hardcoded metrics |
-| Blueprints / Groups | Demo only (Graph doesn't expose easily) | Mock data |
-| Relationships | Demo only | Pre-built chains |
+| Device inventory | Real Intune/Entra managed devices from `GET /api/entra/devices?limit=100` | 8 synthetic devices (`ENTRA_DEVICES` in `src/data/entraData.ts`) |
+| Platform distribution | Computed client-side from live device list | Computed client-side from mock device list |
+| Stale check-in table | Computed client-side from live device list | Computed client-side from mock device list |
 
 ---
 
 ## Required Microsoft Graph Permissions
 
-The following **Application** permissions must be granted to your app registration:
+The following **Application** permission must be granted to your app registration for live data:
 
-| Permission | Purpose | Status |
-|---|---|---|
-| `User.Read.All` | User directory sync | ✅ Used by existing Entra service |
-| `AuditLog.Read.All` | Sign-in logs | ✅ Used by existing Entra service |
-| `IdentityRiskyUser.Read.All` | Risky user detection | ✅ Fetched live |
-| **`DeviceManagementManagedDevices.Read.All`** | **Intune device inventory** | ⚠️ **Add this** |
-| `DeviceManagementConfiguration.Read.All` | Compliance policies | Optional |
+| Permission | Purpose |
+|---|---|
+| `DeviceManagementManagedDevices.Read.All` | Intune device inventory (device name, user, OS, compliance state, check-in time) |
 
 **To add permissions:** Azure Portal → App registrations → your app → API permissions → Add a permission → Microsoft Graph → Application → search `DeviceManagement` → **Grant admin consent**.
 
 ---
 
-## KPI Cards (13)
-
-| Card | Color | Drill-down |
-|---|---|---|
-| Total Devices | Blue | All devices |
-| Compliant Devices | Green | Compliant filter |
-| Non-Compliant | Red | Non-Compliant filter |
-| Inactive Devices | Amber | Devices not synced in 7+ days |
-| Total Users | Purple | — |
-| Total Groups | Indigo | — |
-| Failed Policies | Red | — |
-| App Install Failures | Orange | — |
-| Missing Encryption | Red | BitLocker not enabled |
-| Missing Defender | Red | Defender inactive |
-| Pending Reboot | Amber | — |
-| High Risk Users | Red | Identity Protection risky users |
-| Open Tickets | Amber | — |
-
----
-
 ## Components
 
-### Compliance Trend Chart
-6-week stacked bar chart showing Compliant / Non-Compliant / Grace Period counts. Hover for exact numbers.
+### Integration status strip
 
-### Device Platform Distribution
-Horizontal bar chart: Windows (65%) / iOS (17%) / Android (10%) / macOS (6%) / Linux (2%).
+A row of four chips (Microsoft Graph, Intune, Azure AD, Security Center) that all flip green/"Connected" together when the device fetch succeeds (`isLive`), or stay grey/"Not configured" otherwise. This is a single combined indicator, not four independently-checked integrations.
 
-### Top Compliance Issues
-Ranked list of compliance failures with severity badge and affected device count.
+### Devices by Platform
 
-### Risky Users Table
-Shows all users from Azure Identity Protection with:
-- Risk level chip (High / Medium / Low)
-- Risk factors (impossible travel, password spray, leaked creds)
-- MFA status
-- Last sign-in date
+Horizontal progress bars for Windows, macOS, iOS/iPadOS, Android, and Linux, each showing count and percentage of the total fetched device list, with a running total at the bottom.
 
-### Stale Devices Table
-Devices not synced in 7+ days, sorted by days stale. Color-coded by age (amber → red).
+### Devices with Stale Check-in
 
-### Device Inventory Table
-Full resizable, sortable, searchable device table with:
-- Device name, user, OS, OS version, ownership
-- MDM source badge
-- BitLocker encryption chip
-- Compliance chip
-- Days since last check-in (color-coded)
+Table of devices with `daysSinceCheckIn > 7`, sorted by staleness descending. Columns: Device, User (name + UPN), Last Check-In (amber if 7–14 days, red if 14+), OS, Compliance (colored chip), Issues (open issue count or "None"). Shows a green "no stale devices" message when the fleet is fully current.
 
-### Relationship Explorer
-Select any user to see their full resource graph:
-- **Devices** — compliance + OS
-- **Groups** — Security / M365
-- **Policies** — assigned compliance/config policies
-- **Apps** — assigned applications
-- **Tickets** — linked incidents
-- **Issues** — open compliance failures
-
-### Helpdesk Quick Lookup
-Search any device or user. Shows:
-- Device compliance state
-- BitLocker + Defender status
-- Last check-in
-- Open issues
-- Suggested action
-- **Sync Device** button → `POST /api/entra/devices/:id/sync`
-- **Run AI Diagnosis** button → `POST /api/entra/devices/:id/diagnose`
-- **Create Ticket** button
-
-### AI Copilot Panel
-Chat panel with sample prompts. In demo mode, returns pre-built analytical responses. Intended for future connection to real AI backend.
-
----
-
-## Backend API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/entra/overview` | 13 KPI metrics |
-| GET | `/api/entra/devices` | Device inventory (filtered by `compliance`, `os`, `limit`) |
-| GET | `/api/entra/users` | User directory (filtered by `riskLevel`) |
-| GET | `/api/entra/groups` | Group list |
-| GET | `/api/entra/relationships` | Resource relationships (by `userId`) |
-| GET | `/api/entra/security` | Security metrics |
-| POST | `/api/entra/devices/:id/sync` | Trigger MDM sync |
-| POST | `/api/entra/devices/:id/diagnose` | Run device diagnosis |
+Both sections are collapsible via the header chevron and default to expanded.
 
 ---
 
@@ -154,20 +77,18 @@ Chat panel with sample prompts. In demo mode, returns pre-built analytical respo
 
 | File | Purpose |
 |---|---|
-| `src/components/entra/EntraIntelligenceDashboard.tsx` | Main dashboard orchestrator |
-| `src/data/entraData.ts` | Mock/demo data + all TypeScript types |
-| `server/src/routes/entra.ts` | Express router |
-| `server/src/services/entraIntelligence.ts` | Business logic + Graph API calls |
-| `server/src/data/entra.ts` | Server-side mock data |
+| `src/components/entra/EntraIntelligenceDashboard.tsx` | Dashboard component — fetch, header, both widgets |
+| `src/data/entraData.ts` | `EntraDevice` type + demo/mock device list used as the fallback |
+| `server/src/routes/entra.ts` | Express router, including `GET /api/entra/devices` |
+| `server/src/services/entraIntelligence.ts` | Graph API device-fetch logic |
 
 ---
 
 ## Design
 
-The dashboard uses a deliberately dark navy theme (`bg-[#0d1117]`) to visually distinguish it from the rest of the light-themed app — signalling "this is a Microsoft Entra/Intune section". Status chips use translucent colored backgrounds matching the existing platform badge system.
+The dashboard uses a deliberately dark navy theme (`bg-[#0d1117]`) to visually distinguish it from the rest of the light-themed app — signalling "this is a Microsoft Entra/Intune section."
 
 ---
 
 ## Related Docs
 - [Entra ID Integration Setup](../04-integrations/ENTRA.md) — credentials, permissions, Graph API
-- [EDR Feature Guide](EDR.md) — detection & response design (companion module)

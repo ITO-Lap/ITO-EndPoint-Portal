@@ -1,10 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Server, RefreshCw, Shield, Lock, ShieldCheck, ShieldAlert,
-  Search, X, ArrowLeft, Zap, ToggleLeft, ToggleRight, Play,
+  Search, X, ArrowLeft,
   BarChart2, CheckCircle2, XCircle, AlertCircle,
   Clock, Monitor, Laptop2, Download, TrendingUp,
-  ChevronDown, ChevronUp, Plus,
   Users, UserX, Building2, KeyRound, Activity, Info,
   Wifi, ShieldBan, CheckCheck, LogIn, Smartphone,
   Calendar, Package, User, ChevronLeft, ChevronRight,
@@ -23,7 +22,7 @@ import { IntuneScriptsConfigTab } from './IntuneScriptsConfigPage'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'devices' | 'compliance' | 'security' | 'automation' | 'reports' | 'entra' | 'entra_groups' | 'scripts_config'
+type Tab = 'devices' | 'compliance' | 'security' | 'reports' | 'entra' | 'entra_groups' | 'scripts_config'
 
 // Tabs restricted to this smaller set of roles — currently just Scripts &
 // Configs, which reads/exports raw script content and policy JSON and
@@ -38,82 +37,6 @@ const RESTRICTED_TABS: Partial<Record<Tab, UserToolRole[]>> = {
 function canSeeTab(tab: Tab, viewerRole: UserToolRole): boolean {
   const allowed = RESTRICTED_TABS[tab]
   return !allowed || allowed.includes(viewerRole)
-}
-
-interface AutomationRule {
-  id: string
-  name: string
-  description: string
-  category: 'compliance' | 'security' | 'patching'
-  enabled: boolean
-  trigger: string
-  actions: string[]
-  lastTriggered?: string
-  triggerCount: number
-}
-
-// ── Intune-specific automation rules ──────────────────────────────────────────
-
-const INTUNE_RULES: AutomationRule[] = [
-  {
-    id: 'ir-001', name: 'BitLocker Auto-Remediation',
-    description: 'Trigger a BitLocker enforcement runbook when a device reports encryption as disabled.',
-    category: 'security', enabled: true,
-    trigger: 'BitLocker turns Off',
-    actions: ['Execute BitLocker runbook', 'Send in-app notification'],
-    lastTriggered: new Date(Date.now() - 2 * 3600_000).toISOString(), triggerCount: 8,
-  },
-  {
-    id: 'ir-002', name: 'Defender Health Alert',
-    description: 'Alert IT when Windows Defender reports an inactive or degraded state on any managed device.',
-    category: 'security', enabled: true,
-    trigger: 'Defender becomes inactive',
-    actions: ['Create Jira incident', 'Send Slack notification'],
-    lastTriggered: new Date(Date.now() - 24 * 3600_000).toISOString(), triggerCount: 3,
-  },
-  {
-    id: 'ir-003', name: 'Non-Compliant Device Escalation',
-    description: 'Auto-escalate devices that remain Non-Compliant for more than 48 hours.',
-    category: 'compliance', enabled: true,
-    trigger: 'Device Non-Compliant > 48h',
-    actions: ['Create Jira ticket', 'Send Slack alert'],
-    lastTriggered: new Date(Date.now() - 6 * 3600_000).toISOString(), triggerCount: 12,
-  },
-  {
-    id: 'ir-004', name: 'Windows Update Enforcement',
-    description: 'Force a Windows Update check when a device is more than 30 days behind on patches.',
-    category: 'patching', enabled: true,
-    trigger: 'Patch age > 30 days',
-    actions: ['Run Update Check script', 'Send notification'],
-    lastTriggered: new Date(Date.now() - 3 * 3600_000).toISOString(), triggerCount: 21,
-  },
-  {
-    id: 'ir-005', name: 'Stale Device Quarantine Alert',
-    description: 'Flag devices that have not checked into Intune for more than 14 days.',
-    category: 'compliance', enabled: false,
-    trigger: 'Device offline > 14 days',
-    actions: ['Send notification', 'Create Jira task'],
-    triggerCount: 0,
-  },
-]
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function relativeTime(iso?: string) {
-  if (!iso) return 'Never'
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 2) return 'Just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-const CATEGORY_BADGE: Record<string, string> = {
-  compliance: 'bg-blue-50 text-blue-700 border-blue-200',
-  security:   'bg-red-50 text-red-700 border-red-200',
-  patching:   'bg-orange-50 text-orange-700 border-orange-200',
 }
 
 // ── KPI Card (static or clickable) ───────────────────────────────────────────
@@ -406,110 +329,6 @@ function ComplianceTab({ devices }: { devices: ApiDevice[] }) {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Automation Tab ────────────────────────────────────────────────────────────
-
-function AutomationTab() {
-  const { notify } = useToast()
-  const [rules, setRules] = useState(INTUNE_RULES)
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const toggle = (id: string) => {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r))
-    const rule = rules.find(r => r.id === id)
-    if (rule) notify('success', 'Rule Updated', `"${rule.name}" ${rule.enabled ? 'disabled' : 'enabled'}`)
-  }
-
-  const runTest = (id: string) => {
-    const rule = rules.find(r => r.id === id)
-    if (!rule) return
-    notify('info', 'Test Triggered', `Running test for "${rule.name}"…`)
-    setTimeout(() => notify('success', 'Test Complete', `"${rule.name}" — all actions passed`), 2000)
-  }
-
-  const active = rules.filter(r => r.enabled).length
-
-  return (
-    <div className="space-y-4">
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <KpiCard label="Total Rules"    value={rules.length} color="#F46C00" />
-        <KpiCard label="Active"         value={active}       color="#10B981" sub="running" />
-        <KpiCard label="Inactive"       value={rules.length - active} color="#94A3B8" sub="paused" />
-      </div>
-
-      {/* Rules */}
-      <div className="space-y-3">
-        {rules.map(rule => (
-          <div key={rule.id} className="glass rounded-2xl overflow-hidden">
-            <div className={`h-[2px] ${rule.enabled ? '' : 'opacity-30'}`}
-              style={{ background: rule.enabled ? 'linear-gradient(90deg,#F46C00,#FB471F)' : '#94A3B8' }} />
-            <div className="px-5 py-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full" style={{ background: rule.enabled ? '#10B981' : '#CBD5E1' }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <p className="text-sm font-bold text-slate-700">{rule.name}</p>
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.6rem] font-bold capitalize ${CATEGORY_BADGE[rule.category]}`}>
-                      {rule.category}
-                    </span>
-                  </div>
-                  <p className="text-[0.72rem] text-slate-500 leading-relaxed">{rule.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[0.62rem] font-semibold text-slate-600">
-                      <Clock className="h-2.5 w-2.5 text-slate-400" />{rule.trigger}
-                    </span>
-                    {rule.actions.map(a => (
-                      <span key={a} className="inline-flex rounded-full bg-[#F46C00]/8 border border-[#F46C00]/20 px-2.5 py-1 text-[0.62rem] font-semibold text-[#F46C00]">{a}</span>
-                    ))}
-                  </div>
-                </div>
-                <button type="button" onClick={() => toggle(rule.id)} className="flex-shrink-0">
-                  {rule.enabled
-                    ? <ToggleRight className="h-8 w-8 text-emerald-500" />
-                    : <ToggleLeft  className="h-8 w-8 text-slate-300" />
-                  }
-                </button>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex gap-4 text-[0.62rem] text-slate-400">
-                  <span>Last triggered: <strong className="text-slate-600">{relativeTime(rule.lastTriggered)}</strong></span>
-                  <span>Total runs: <strong className="text-slate-600">{rule.triggerCount}</strong></span>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setExpanded(e => e === rule.id ? null : rule.id)}
-                    className="flex items-center gap-1 rounded-full border border-slate-200 glass px-3 py-1 text-[0.62rem] font-semibold text-slate-500 water-glow-sm">
-                    {expanded === rule.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    {expanded === rule.id ? 'Less' : 'Details'}
-                  </button>
-                  <button type="button" onClick={() => runTest(rule.id)} disabled={!rule.enabled}
-                    className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[0.62rem] font-bold text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-40 water-glow-sm">
-                    <Play className="h-2.5 w-2.5" />Test Run
-                  </button>
-                </div>
-              </div>
-              {expanded === rule.id && (
-                <div className="mt-3 border-t border-slate-100/60 pt-3 text-[0.68rem] text-slate-500 space-y-1">
-                  <p><strong className="text-slate-600">Trigger:</strong> {rule.trigger}</p>
-                  <p><strong className="text-slate-600">Actions:</strong> {rule.actions.join(' → ')}</p>
-                  <p><strong className="text-slate-600">Category:</strong> {rule.category}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="glass rounded-2xl p-4 text-center">
-        <p className="text-xs text-slate-500 mb-2">Need a custom rule? Build it in the full Automation Engine.</p>
-        <button type="button" className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white water-glow"
-          style={{ background: 'linear-gradient(135deg,#F46C00,#FB471F)' }}>
-          <Plus className="h-3.5 w-3.5" />Open Automation Engine
-        </button>
-      </div>
     </div>
   )
 }
@@ -1475,7 +1294,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'devices',    label: 'Devices',    icon: <Monitor    className="h-3.5 w-3.5" /> },
   { id: 'compliance', label: 'Compliance', icon: <ShieldCheck className="h-3.5 w-3.5" /> },
   { id: 'security',   label: 'Security',   icon: <Shield     className="h-3.5 w-3.5" /> },
-  { id: 'automation', label: 'Automation', icon: <Zap        className="h-3.5 w-3.5" /> },
   { id: 'reports',    label: 'Reports',    icon: <BarChart2  className="h-3.5 w-3.5" /> },
   { id: 'entra',      label: 'Entra ID',   icon: <KeyRound   className="h-3.5 w-3.5 text-[#0078D4]" /> },
   { id: 'entra_groups', label: 'Entra ID Groups', icon: <FileSpreadsheet className="h-3.5 w-3.5 text-[#6366F1]" /> },
@@ -1620,7 +1438,6 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
             }`}
             style={tab === t.id ? { boxShadow: '0 0 0 1px rgba(14,165,233,0.2), 0 4px 12px rgba(14,165,233,0.1)' } : {}}>
             {t.icon}{t.label}
-            {t.id === 'automation' && <span className="rounded-full px-1.5 py-0.5 text-[0.5rem] font-black" style={{ background: 'rgba(244,108,0,0.1)', color: '#F46C00', border: '1px solid rgba(244,108,0,0.2)' }}>5</span>}
           </button>
         ))}
       </div>
@@ -1638,7 +1455,6 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
       )}
       {tab === 'compliance' && <ComplianceTab devices={devices} />}
       {tab === 'security'   && <ComplianceTab devices={devices} />}
-      {tab === 'automation' && <AutomationTab />}
       {tab === 'reports'    && <ReportsTab    devices={devices} />}
       {tab === 'entra'      && <EntraIDTab />}
       {tab === 'entra_groups' && <EntraGroupsReportTab />}

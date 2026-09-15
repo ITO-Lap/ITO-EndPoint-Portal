@@ -10,7 +10,7 @@
 │                                                                       │
 │  ┌──────────┐  ┌────────────────────────────────────────────────┐   │
 │  │ Sidebar  │  │                  Main Content                   │   │
-│  │ (nav)    │  │  Dashboard · Device Lookup · Users · Settings   │   │
+│  │ (nav)    │  │  Dashboard · Mac/Intune Devices · Users · ...   │   │
 │  └──────────┘  └──────────────────┬─────────────────────────────┘   │
 │                                   │  src/api/index.ts                │
 └───────────────────────────────────┼─────────────────────────────────┘
@@ -21,10 +21,10 @@
                     │                                │
                     │  /api/devices                  │
                     │  /api/integrations             │
-                    │  /api/runbooks                 │
+                    │  /api/intelligence             │
+                    │  /api/copilot                  │
                     │  /api/notifications            │
-                    │  /api/activity                 │
-                    │  /api/ai                       │
+                    │  /api/entra, /api/jira, ...    │
                     └───────────┬───────────────────┘
                                 │
           ┌─────────────────────┐
@@ -34,12 +34,16 @@
   │ Intune        │   │  (API key; Windows,       │
   │ (Graph API)   │   │  cross-platform, macOS)   │
   └───────────────┘   └──────────────────────────┘
-          ▼ (any route: POST /api/ai/*)
+          ▼ (server/src/services/openai.ts — used from /api/intelligence and /api/copilot)
   ┌───────────────┐
   │ OpenAI API    │
   │ gpt-4o-mini   │
   └───────────────┘
 ```
+
+There is no login screen — the app always renders as Global Admin with no auth gate (`src/App.tsx`
+mounts the dashboard directly). The sign-in screen was deliberately removed; don't re-add it as a
+"fix."
 
 ---
 
@@ -47,43 +51,42 @@
 
 ```
 1. Browser loads React SPA (Vite dev server or built dist/)
-2. AuthGate checks localStorage for 'ito_auth' key
-3. If not authenticated → renders SignInPage
-4. On sign-in → stores role in localStorage, renders AppContent
-5. AppContent mounts:
-   - useStats()        → GET /api/devices/stats      (live counts)
-   - useActivity()     → GET /api/activity            (recent events)
-   - useNotifications()→ GET /api/notifications       (badge count)
-6. Stats arrive → stat cards update from mock → live values
+2. AppContent mounts directly (no auth gate):
+   - useStats()             → GET /api/devices/stats        (live counts)
+   - useNotifications()     → GET /api/notifications        (badge count)
+   - useIntegrationStatus() → GET /api/integrations/status  (source health)
+3. Stats arrive → stat cards update from mock → live values
 ```
 
 ---
 
-## Request flow — device search
+## Request flow — device stats/search
 
 ```
-User types device name → Header search input
-→ handleSearch() in App.tsx
-→ api.fetchDevices(query) → GET /api/devices?q=<query>
+Header search / Dashboard load
+→ api.fetchDevices(query) / api.fetchStats() → GET /api/devices?q=<query> / GET /api/devices/stats
   [server] → tries real MDM sources first (if configured)
            → falls back to mock data if all sources fail
 → apiDeviceToDeviceData() maps server shape → frontend DeviceData
 → setSelectedDevice() updates Dashboard view
-→ activePage switches to 'Dashboard' automatically
 ```
 
 ---
 
-## Request flow — AI analysis
+## Request flow — AI-generated content
 
 ```
-Dashboard renders device with open issue
-→ User clicks "Analyze with AI" (Settings page enables OpenAI)
-→ POST /api/ai/analyze { deviceId }
-  [server] → requireOpenAI() guard — 503 if no OPENAI_API_KEY
-           → analyzeDevice(device) → OpenAI gpt-4o-mini
-           → structured JSON response { summary, rootCause, recommendation, steps... }
-→ Frontend renders AI analysis card
+Risk Scoring / Compliance Intelligence page loads
+→ POST /api/intelligence/summary (or /explain, /risk-scores)
+  [server] → falls back to a non-AI summary if OpenAI isn't configured
+           → otherwise calls server/src/services/openai.ts → OpenAI gpt-4o-mini
+           → structured JSON response
+→ Frontend renders the AI narrative/summary card
+
+Endpoint Operations Copilot chat turn
+→ POST /api/copilot/... → tool-calling loop against gpt-4o-mini (server/src/services/copilotTools.ts)
+→ Write tools (e.g. create_jira_ticket) return a pending action, only executed after the user
+  confirms via POST /api/copilot/actions/:id/confirm
 ```
 
 ---
@@ -111,31 +114,30 @@ There is **no global state library** (no Redux, Zustand, etc.). State is managed
 | Mechanism | Used for |
 |---|---|
 | `useState` | Local component state (modals, search input) |
-| `useLocalStorage` | Persistent state (active page, auth, role) |
-| `useStats` / `useActivity` / `useNotifications` | Remote data with polling |
+| `useLocalStorage` | Persistent state (active page, copilot panel open/closed) |
+| `useStats` / `useNotifications` / `useIntegrationStatus` | Remote data with polling |
 | Props drilling | Parent → child data passing |
 | Server `integrationStore` | Runtime credential and fetch result cache |
 
 ---
 
-## Mock data fallback
+## Empty-state behavior — `/api/devices`
 
-Every route on the server falls back gracefully:
+`fetchAllDevices()` in `server/src/routes/devices.ts` no longer falls back to a static mock device
+list — that fallback (`mockDevices.ts`) was removed:
 
 ```
-GET /api/devices/stats
-  if (any MDM source configured) → aggregate real data
-  else                           → return mock stats (mockDevices count)
-
-GET /api/devices?q=query
-  if (Intune configured) → getIntuneDevices()
+GET /api/devices/stats, GET /api/devices?q=query
+  if (Intune configured)       → getIntuneDevices()
   if (ManageEngine configured) → getManageEngineDevices()
-  ...
-  if (nothing configured) → filter mockDevices
-  → response includes `mock: true` flag
+  if (nothing configured)      → devices: [] (empty, not synthetic)
+  → response always includes `mock: false`
 ```
 
-The frontend shows a "Mock Data" badge on the LiveDataBar when `stats.mock === true`.
+The frontend's LiveDataBar "Mock Data" badge (gated on `stats.mock === true`) is effectively dead
+for this endpoint since `mock` is now always `false`. Other, unrelated dashboards in the app (e.g.
+Entra Intelligence) still have their own independent demo/mock datasets that are unaffected by this
+— see the individual feature docs in `07-features/` for what's demo-backed elsewhere.
 
 ---
 
@@ -145,22 +147,21 @@ The frontend shows a "Mock Data" badge on the LiveDataBar when `stats.mock === t
 App.tsx
  ├── api/index.ts          (HTTP client)
  ├── data/dashboardData.ts (mock data + search helpers)
- ├── hooks/useStats.ts     → api.fetchStats()
- ├── hooks/useActivity.ts  → api.fetchActivity()
- ├── hooks/useNotifications.ts → api.fetchNotifications()
+ ├── hooks/useStats.ts             → api.fetchStats()
+ ├── hooks/useNotifications.ts     → api.fetchNotifications()
+ ├── hooks/useIntegrationStatus.ts → api.fetchIntegrationStatus()
  └── components/
-     ├── layout/Header.tsx      (search, notifications, profile)
+     ├── layout/Header.tsx      (search, notifications, profile menu, copilot toggle)
      ├── layout/Sidebar.tsx     (navigation)
      ├── dashboard/DashboardContent.tsx
      │    ├── dashboard/StatCard.tsx
      │    ├── dashboard/ComplianceDonut.tsx
      │    ├── dashboard/IssueCategories.tsx
-     │    ├── dashboard/RecentActivity.tsx
      │    ├── dashboard/LiveDataBar.tsx
      │    └── devices/DeviceSummary.tsx
      │         └── devices/ComplianceDetails.tsx
-     ├── devices/DeviceLookupPage.tsx
      ├── runbooks/RunbookCard.tsx + RunbookModal.tsx
+     ├── copilot/CopilotPanel.tsx   (Endpoint Operations Copilot)
      ├── settings/SettingsPage.tsx
-     └── auth/SignInPage.tsx
+     └── pages/*.tsx  (Mac/Intune Devices, Users, Automation, Entra Intelligence, etc.)
 ```

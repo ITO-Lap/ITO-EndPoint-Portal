@@ -1,6 +1,6 @@
 # Dashboard Feature
 
-The Dashboard is the landing page after sign-in. It provides a real-time compliance overview of the entire device fleet.
+The Dashboard is the app's landing page (there is no sign-in step). It provides a real-time compliance overview of the entire device fleet.
 
 ---
 
@@ -24,13 +24,14 @@ The Dashboard is the landing page after sign-in. It provides a real-time complia
 │  │ (identity, compliance, issue, next steps, security)    │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                              │
-│  ┌────────────────────┐  ┌──────────────────────────────┐  │
-│  │ Runbook Card       │  │ Recent Activity              │  │
-│  │ (recommended for   │  │ (last 6 events, View All)    │  │
-│  │  selected device)  │  │                              │  │
-│  └────────────────────┘  └──────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ Runbook Card (recommended for selected device)          │ │
+│  └────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+(The Recent Activity feed shown here in earlier versions was removed in the differentiation refactor
+— there is no `RecentActivity`/`ActivityListModal` component or `/api/activity` route anymore.)
 
 ---
 
@@ -43,14 +44,16 @@ The Dashboard is the landing page after sign-in. It provides a real-time complia
 | Issue categories | Static (`dashboardData.ts`) | On load |
 | Device summary | Selected device state | On search/select |
 | Runbook card | Derived from selected device | On device change |
-| Recent activity | `GET /api/activity` | Every 60s |
 | LiveDataBar | Stats response + countdown | Every 1s (countdown) |
 
 ---
 
-## Live data vs mock data
+## Live data vs empty state
 
-When no MDM is configured, stats come from counting `mockDevices`. The `mock: true` flag in the API response triggers a "Mock Data" badge on the LiveDataBar. Everything still works — the badge simply communicates that data isn't live.
+`GET /api/devices/stats` no longer falls back to synthetic mock devices — when no MDM source is
+configured, stats reflect zero devices (`mock` is always `false` in the response now). The
+LiveDataBar's "Mock Data" badge logic still exists but is effectively unused for this endpoint;
+connect Intune or ManageEngine in Settings → Integrations to see real data.
 
 ---
 
@@ -80,12 +83,11 @@ Values come from `liveComplianceSegments` in `App.tsx`, derived from `stats` whe
 
 ## Device summary panel
 
-Shows the **currently selected device**. The default device on first load is `LAPTOP-8F7G2Q1` from mock data.
+Shows the **currently selected device**. There is no device selected on first load (`selectedDevice` starts as `null` in `App.tsx`) — the panel appears once a device is searched or picked from the All Devices drawer.
 
 To change the selected device:
 - Use the **header search bar** — searches by name, email, or serial
-- Use the **Device Lookup page** → "View in Dashboard"
-- Click any device name in the **Recent Activity** feed
+- Use the **All Devices** drawer (opened from the dashboard) to pick a device directly
 
 The panel shows:
 - Identity (name, user, serial, platform, management source)
@@ -113,12 +115,6 @@ Clicking "View Steps" opens `RunbookModal`.
 
 ---
 
-## Recent activity
-
-Last 6 activity events from `GET /api/activity`. Each row shows device name, status badge, message, and time. "View All" opens `ActivityListModal` with the full list.
-
----
-
 ## LiveDataBar
 
 Thin bar at the top of the dashboard showing:
@@ -139,12 +135,10 @@ Thin bar at the top of the dashboard showing:
 | `src/components/dashboard/ComplianceDonut.tsx` | Donut chart |
 | `src/components/dashboard/IssueCategories.tsx` | Bar chart |
 | `src/components/dashboard/LiveDataBar.tsx` | Data freshness bar |
-| `src/components/dashboard/RecentActivity.tsx` | Activity feed |
-| `src/components/dashboard/ActivityListModal.tsx` | Full activity modal |
 | `src/components/devices/DeviceSummary.tsx` | Device detail panel |
 | `src/components/devices/ComplianceDetails.tsx` | Compliance rows |
+| `src/components/devices/AllDevicesDrawer.tsx` | All-devices picker drawer |
 | `src/components/runbooks/RunbookCard.tsx` | Runbook card |
 | `src/components/runbooks/RunbookModal.tsx` | Runbook steps modal |
 | `src/hooks/useStats.ts` | Stats polling hook |
-| `src/hooks/useActivity.ts` | Activity polling hook |
 | `src/data/dashboardData.ts` | Static data + helpers |
