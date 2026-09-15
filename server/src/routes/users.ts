@@ -194,10 +194,13 @@ router.get('/', asyncHandler(async (_req, res) => {
   res.json({ success: true, data: users })
 }))
 
-// GET /api/users/:id — sign-ins, roles, groups, apps, licenses, devices for a single user
-router.get('/:id', asyncHandler(async (req, res) => {
-  const email  = (req.query.email as string | undefined)?.toLowerCase()
-  const userId = req.params.id as string
+/** Core "User Intelligence" correlation logic (Entra sign-in/MFA/risk +
+ *  Intune/ManageEngine device compliance) for a single user — extracted so
+ *  GET /:id and the Copilot's get_user_intelligence tool
+ *  (server/src/services/copilotTools.ts) share one implementation instead of
+ *  duplicating the UUID-vs-UPN dispatch and device-correlation logic. */
+export async function getUserIntelligence(userId: string, email?: string) {
+  const lookupEmailArg = email?.toLowerCase()
 
   // UUID = Entra object ID; anything else (e.g. UPN/email) = Intune-derived
   const isEntraObjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
@@ -214,7 +217,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
     : { signIns: [], roles: [], groups: [], apps: [], licenses: [] }
 
   const allDevices  = deviceResult.status === 'fulfilled' ? deviceResult.value.devices : []
-  const lookupEmail = email ?? (!isEntraObjectId ? userId : undefined)
+  const lookupEmail = lookupEmailArg ?? (!isEntraObjectId ? userId.toLowerCase() : undefined)
   const userDevices = lookupEmail
     ? allDevices.filter(d => d.user?.toLowerCase() === lookupEmail)
     : []
@@ -236,7 +239,15 @@ router.get('/:id', asyncHandler(async (req, res) => {
     deviceId:         d.id,
   }))
 
-  res.json({ success: true, data: { ...details, devices } })
+  return { ...details, devices }
+}
+
+// GET /api/users/:id — sign-ins, roles, groups, apps, licenses, devices for a single user
+router.get('/:id', asyncHandler(async (req, res) => {
+  const email  = req.query.email as string | undefined
+  const userId = req.params.id as string
+  const data = await getUserIntelligence(userId, email)
+  res.json({ success: true, data })
 }))
 
 export default router

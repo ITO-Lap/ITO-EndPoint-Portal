@@ -493,6 +493,9 @@ export const api = {
   markAllRead: () => patch<ApiNotification[]>('/api/notifications/read-all'),
   markRead: (id: string) => patch<ApiNotification>(`/api/notifications/${id}/read`),
 
+  fetchDeviceById: (id: string) =>
+    get<ApiDevice>(`/api/devices/${encodeURIComponent(id)}`),
+
   fetchDeviceApps: (id: string) =>
     get<AppStatus[]>(`/api/devices/${id}/apps`),
 

@@ -102,6 +102,7 @@ docs/                       All project documentation (start here)
 | Add a stat card | `src/data/dashboardData.ts` → `statCards` |
 | Add mock device | `src/data/dashboardData.ts` → `mockDevices` |
 | Change AI prompt | `server/src/services/openai.ts` → `analyzeDevice()` |
+| Add/modify a Copilot tool | `server/src/services/copilotTools.ts`, routes in `server/src/routes/copilot.ts`, panel UI in `src/components/copilot/CopilotPanel.tsx` |
 | Add API endpoint | `server/src/routes/` → new router, mount in `server/src/index.ts` |
 | Add a new integration | `server/src/services/` + `server/src/store/integrationStore.ts` |
 | Change theme/colors | `src/index.css` (Tailwind config) |

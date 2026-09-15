@@ -27,6 +27,7 @@ import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { SecurityPoliciesPage } from './pages/SecurityPoliciesPage'
+import { CopilotPanel } from './components/copilot/CopilotPanel'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useNotifications } from './hooks/useNotifications'
@@ -120,6 +121,7 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
   const [selectedSource, setSelectedSource] = useState<ConnectedSource | null>(null)
   const [selectedIntelUser, setSelectedIntelUser] = useState<AppUser | null>(null)
+  const [copilotOpen, setCopilotOpen] = useLocalStorage('copilot-panel-open', false)
   const { notify } = useToast()
 
   // Reset scroll position whenever the active page changes — the app has no
@@ -255,6 +257,8 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
               viewerRole={viewerRole}
               displayName={displayName}
               userEmail={userEmail}
+              copilotOpen={copilotOpen}
+              onToggleCopilot={() => setCopilotOpen(prev => !prev)}
             />
             <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
               <div className="mx-auto w-full max-w-[1600px]">
@@ -357,6 +361,13 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
         open={selectedSource !== null}
         source={selectedSource}
         onClose={() => setSelectedSource(null)}
+      />
+
+      <CopilotPanel
+        viewerRole={viewerRole as UserToolRole}
+        userEmail={userEmail}
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
       />
     </div>
   )

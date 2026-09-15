@@ -12,7 +12,7 @@ const router = Router()
 // Per-device app-inventory fetch is the only network cost of a scan — devices
 // already carry `apps` when bundled (mock data); otherwise lazy-fetch from
 // the device's own connector, same dispatch used by GET /api/devices/:id/apps.
-async function getAppsFor(device: Device): Promise<AppStatus[]> {
+export async function getAppsFor(device: Device): Promise<AppStatus[]> {
   if (device.apps && device.apps.length > 0) return device.apps
   if (isIntuneConfigured() && device.managementSource === 'Microsoft Intune') return getIntuneDeviceApps(device.id)
   if (isManageEngineConfigured() && device.managementSource === 'ManageEngine') return getManageEngineDeviceApps(device.id)

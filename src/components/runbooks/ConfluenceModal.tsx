@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Search, BookOpen, ExternalLink, Plus, RefreshCw, Check } from 'lucide-react'
 import { api } from '../../api'
-import type { ConfluencePage, ApiDevice } from '../../api'
+import type { ConfluencePage } from '../../api'
 
 interface Props {
-  device:    ApiDevice
+  // Only the display name is rendered here — callers pass whatever real
+  // device/asset context they have (full ApiDevice or a lighter record).
+  device:    { deviceName: string }
   attached:  ConfluencePage[]
   onClose:   () => void
   onAttach:  (page: ConfluencePage) => void

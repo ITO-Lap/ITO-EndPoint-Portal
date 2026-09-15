@@ -64,7 +64,7 @@ const executionsQuerySchema = z.object({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function fetchLiveDevices(): Promise<Device[]> {
+export async function fetchLiveDevices(): Promise<Device[]> {
   const results = await Promise.allSettled([
     getManageEngineDevices().catch(() => [] as Device[]),
     getIntuneDevices().catch(() => [] as Device[]),

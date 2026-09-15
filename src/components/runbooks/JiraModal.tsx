@@ -1,15 +1,24 @@
 import { useState } from 'react'
 import { X, ExternalLink, Ticket, Loader2, CheckCircle2 } from 'lucide-react'
 import { api } from '../../api'
-import type { JiraIssue, JiraIssueInput, ApiDevice, DeviceAnalysis } from '../../api'
+import type { JiraIssue, JiraIssueInput, ApiDevice } from '../../api'
 
 const PRIORITY_MAP: Record<string, JiraIssueInput['priority']> = {
   Critical: 'Critical', High: 'High', Medium: 'Medium', Low: 'Low',
 }
 
+// Narrower than the (now-defunct) DeviceAnalysis type — only the fields this
+// modal actually renders into the ticket description. Callers can build this
+// from any real AI-derived context (e.g. risk-scoring factors/action items).
+export interface JiraAiContext {
+  rootCause:      string
+  recommendation: string
+  steps:          string[]
+}
+
 interface Props {
   device:    ApiDevice
-  ai?:       DeviceAnalysis | null
+  ai?:       JiraAiContext | null
   onClose:   () => void
   onCreated: (ticket: JiraIssue) => void
 }

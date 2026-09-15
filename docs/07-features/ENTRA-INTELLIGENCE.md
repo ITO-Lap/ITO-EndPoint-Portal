@@ -155,12 +155,6 @@ Chat panel with sample prompts. In demo mode, returns pre-built analytical respo
 | File | Purpose |
 |---|---|
 | `src/components/entra/EntraIntelligenceDashboard.tsx` | Main dashboard orchestrator |
-| `src/components/entra/EntraOverviewCards.tsx` | 13 KPI cards |
-| `src/components/entra/EntraDeviceInventoryTable.tsx` | Device table |
-| `src/components/entra/EntraUserRiskTable.tsx` | Risky users table |
-| `src/components/entra/EntraRelationshipExplorer.tsx` | Relationship graph |
-| `src/components/entra/EntraHelpdeskPanel.tsx` | Helpdesk lookup |
-| `src/components/entra/EntraAiCopilotPanel.tsx` | AI chat panel |
 | `src/data/entraData.ts` | Mock/demo data + all TypeScript types |
 | `server/src/routes/entra.ts` | Express router |
 | `server/src/services/entraIntelligence.ts` | Business logic + Graph API calls |

@@ -122,7 +122,7 @@ function tenantId(): string {
  *  kept the same here even though this now fans out to 3 APIs per request,
  *  since each source is independently rate-limited and the per-request cost
  *  of a 31-day window has already proven workable for the Intune-only case. */
-function liveBrowseMaxDays(): number {
+export function liveBrowseMaxDays(): number {
   return Math.max(1, Number(process.env.ROLE_ACTIVITY_LIVE_BROWSE_MAX_DAYS ?? 31))
 }
 
@@ -170,7 +170,7 @@ router.get('/filter-options', requireAuditRole('Audit Reader'), (_req, res) => {
 
 const SORT_FIELDS = ['occurredAt', 'source', 'actor', 'operation', 'target'] as const
 
-const listQuerySchema = z.object({
+export const listQuerySchema = z.object({
   startUtc: z.string().datetime().optional(),
   endUtc: z.string().datetime().optional(),
   source: z.enum(ROLE_ACTIVITY_SOURCES).optional(),
@@ -220,9 +220,24 @@ function compareEvents(a: RoleActivityEvent, b: RoleActivityEvent, field: (typeo
   return direction === 'asc' ? cmp : -cmp
 }
 
-// GET /api/role-activity/events
-router.get('/events', requireAuditRole('Audit Reader'), asyncHandler(async (req, res) => {
-  const parsed = listQuerySchema.parse(req.query)
+export interface RoleActivityEventsResult {
+  data: RoleActivityEventOut[]
+  pagination: { page: number; pageSize: number; total: number }
+  summary: { totalEvents: number; uniqueActors: number; bySource: Record<string, number> }
+  range: { startUtc: string; endUtc: string }
+  sourceErrors?: Partial<Record<RoleActivitySource, string>>
+  sourceNotes?: Partial<Record<RoleActivitySource, string>>
+  correlationId: string
+}
+
+/** Single source of truth for the live 3-source role-activity merge — used
+ *  by GET /events below and by the Copilot's get_role_activity tool
+ *  (server/src/services/copilotTools.ts), so both go through the exact same
+ *  fetch/filter/sort/paginate logic instead of duplicating it. */
+export async function getRoleActivityEventsLive(
+  parsed: z.infer<typeof listQuerySchema>,
+  actor: { email: string; appRole: string },
+): Promise<RoleActivityEventsResult> {
   const correlationId = randomUUID()
 
   const endUtc = parsed.endUtc ? new Date(parsed.endUtc) : new Date()
@@ -284,7 +299,7 @@ router.get('/events', requireAuditRole('Audit Reader'), asyncHandler(async (req,
 
   const hasSourceErrors = Object.keys(sourceErrors).length > 0
   await recordAppTrail({
-    tenantId: tenantId(), actorEmail: req.auditActor!.email, actorRole: req.auditActor!.appRole,
+    tenantId: tenantId(), actorEmail: actor.email, actorRole: actor.appRole,
     action: 'VIEW_EVENTS', rangeStartUtc: range.startUtc, rangeEndUtc: range.endUtc,
     timezone: parsed.timezone,
     filters: { source: parsed.source, actor: parsed.actor, operation: parsed.operation, target: parsed.target, search: parsed.search },
@@ -293,8 +308,7 @@ router.get('/events', requireAuditRole('Audit Reader'), asyncHandler(async (req,
     correlationId,
   })
 
-  res.json({
-    success: true,
+  return {
     data: page,
     pagination: { page: parsed.page, pageSize: parsed.pageSize, total: totalEvents },
     summary: { totalEvents, uniqueActors, bySource },
@@ -302,7 +316,14 @@ router.get('/events', requireAuditRole('Audit Reader'), asyncHandler(async (req,
     ...(Object.keys(sourceErrors).length > 0 ? { sourceErrors } : {}),
     ...(Object.keys(sourceNotes).length > 0 ? { sourceNotes } : {}),
     correlationId,
-  })
+  }
+}
+
+// GET /api/role-activity/events
+router.get('/events', requireAuditRole('Audit Reader'), asyncHandler(async (req, res) => {
+  const parsed = listQuerySchema.parse(req.query)
+  const result = await getRoleActivityEventsLive(parsed, { email: req.auditActor!.email, appRole: req.auditActor!.appRole })
+  res.json({ success: true, ...result })
 }))
 
 export default router

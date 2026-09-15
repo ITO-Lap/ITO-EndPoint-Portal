@@ -335,6 +335,59 @@ CREATE TABLE IF NOT EXISTS security_policy_group_cache (
   cached_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ─── Endpoint Operations Copilot ───────────────────────────────────────────────
+-- Chat-based AI assistant (OpenAI gpt-4o-mini tool-calling) over the read
+-- services already exposed elsewhere in this app, plus two gated write
+-- actions (Jira ticket creation, automation-rule test-mode trigger) that
+-- always go through an explicit user-confirmation step before executing.
+-- See server/src/services/copilotEngine.ts and copilotTools.ts.
+--
+-- Degrades gracefully without DATABASE_URL: chat still works one-shot (no
+-- persistence, ephemeral conversationId), and pending actions live in an
+-- in-process Map for the life of the server so confirm/reject still work.
+-- When DATABASE_URL IS set, everything below is persisted and the in-memory
+-- map is kept in sync as a fast execution path (same pattern as every other
+-- DB-optional feature in this schema).
+
+CREATE TABLE IF NOT EXISTS copilot_conversations (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_email   TEXT NOT NULL,
+  title        TEXT NOT NULL DEFAULT 'New conversation',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_copilot_conversations_user ON copilot_conversations(user_email, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS copilot_messages (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  conversation_id UUID NOT NULL REFERENCES copilot_conversations(id) ON DELETE CASCADE,
+  role            TEXT NOT NULL,          -- user | assistant
+  content         TEXT NOT NULL,
+  tool_calls      JSONB NOT NULL DEFAULT '[]',  -- redacted tool-call names/args/results for this turn
+  citations       JSONB NOT NULL DEFAULT '[]',  -- CopilotCitation[]
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_copilot_messages_conversation ON copilot_messages(conversation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS copilot_pending_actions (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  conversation_id UUID NOT NULL REFERENCES copilot_conversations(id) ON DELETE CASCADE,
+  message_id      UUID REFERENCES copilot_messages(id) ON DELETE SET NULL,
+  tool_name       TEXT NOT NULL,          -- create_jira_ticket | trigger_automation_rule
+  tool_args       JSONB NOT NULL DEFAULT '{}',
+  status          TEXT NOT NULL DEFAULT 'pending',  -- pending | executed | rejected | failed
+  requested_by    TEXT NOT NULL,
+  confirmed_by    TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  confirmed_at    TIMESTAMPTZ,
+  result          JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_copilot_pending_actions_conversation ON copilot_pending_actions(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_copilot_pending_actions_status       ON copilot_pending_actions(status);
+
 -- Immutability of intune_audit_app_trail is enforced at the application layer:
 -- server/src/routes/roleActivity.ts (and, historically, the now-removed
 -- intuneAuditLogs.ts) only ever INSERTs into this table, no route exposes

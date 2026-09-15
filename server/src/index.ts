@@ -21,6 +21,7 @@ import securityInventoryRouter from './routes/securityInventory.js'
 import roleActivityRouter from './routes/roleActivity.js'
 import intuneScriptsConfigRouter from './routes/intuneScriptsConfig.js'
 import securityPoliciesRouter from './routes/securityPolicies.js'
+import copilotRouter from './routes/copilot.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 import { isConfigured } from './store/integrationStore.js'
 import path from 'node:path'
@@ -86,6 +87,7 @@ app.use('/api/security-inventory', apiLimiter, securityInventoryRouter)
 app.use('/api/role-activity',      apiLimiter, roleActivityRouter)
 app.use('/api/intune-scripts-config', apiLimiter, intuneScriptsConfigRouter)
 app.use('/api/security-policies',  apiLimiter, securityPoliciesRouter)
+app.use('/api/copilot',            apiLimiter, copilotRouter)
 
 // ── Serve the built frontend (single-process deployment) ───────────────────────
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,

@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Menu, Search, Settings } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, Settings, Sparkles } from 'lucide-react'
 import { ZinniaIcon } from '../ui/ZinniaLogo'
 import { useRef, useState, useEffect } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -18,6 +18,8 @@ interface HeaderProps {
   viewerRole?: string
   displayName?: string
   userEmail?: string
+  copilotOpen?: boolean
+  onToggleCopilot?: () => void
 }
 
 export function Header({
@@ -26,6 +28,7 @@ export function Header({
   onMarkAllNotificationsRead, searchLoading = false,
   onProfileNav, viewerRole = 'Global Admin',
   displayName, userEmail,
+  copilotOpen = false, onToggleCopilot,
 }: HeaderProps) {
   const [searchInput, setSearchInput]     = useState(searchValue)
   const [profileOpen, setProfileOpen]     = useState(false)
@@ -115,6 +118,20 @@ export function Header({
 
         {/* Right controls */}
         <div className="flex items-center gap-2 flex-shrink-0">
+
+          {/* Endpoint Operations Copilot toggle */}
+          {viewerRole !== 'End User' && (
+            <button
+              type="button"
+              onClick={onToggleCopilot}
+              aria-label="Toggle Endpoint Operations Copilot"
+              aria-pressed={copilotOpen}
+              className="relative grid h-8 w-8 place-items-center rounded-xl water-glow text-slate-500"
+              style={{ background: 'rgba(255,255,255,0.70)', border: `1px solid ${copilotOpen ? 'rgba(244,108,0,0.45)' : 'rgba(148,163,184,0.25)'}` }}
+            >
+              <Sparkles className="h-3.5 w-3.5" style={{ color: copilotOpen ? '#F46C00' : undefined }} />
+            </button>
+          )}
 
           {/* Notifications */}
           <div ref={notifRef} className="relative">

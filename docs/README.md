@@ -56,6 +56,7 @@ docs/
 - [Jira & Confluence](04-integrations/JIRA.md)
 
 ### Feature deep dives
+- [Endpoint Operations Copilot](07-features/AI-COPILOT.md) — global chat-based AI assistant with tool-calling over real data + confirmed write actions ← **New**
 - [Dashboard](07-features/DASHBOARD.md)
 - [Device Lookup](07-features/DEVICE-LOOKUP.md)
 - [Mac Devices (ManageEngine)](07-features/MAC-DEVICES.md)

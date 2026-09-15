@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Brain, RefreshCw, XCircle, ChevronDown, ChevronRight, AlertTriangle, Shield } from 'lucide-react'
+import { Brain, RefreshCw, XCircle, ChevronDown, ChevronRight, AlertTriangle, Shield, Ticket, BookOpen, Loader2 } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { RiskScore } from '../api/intelligence'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
+import { api } from '../api'
+import type { ApiDevice, ConfluencePage } from '../api'
+import { JiraModal } from '../components/runbooks/JiraModal'
+import { ConfluenceModal } from '../components/runbooks/ConfluenceModal'
 
 const PAGE_SIZE = 25
 
@@ -22,6 +26,31 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [filter, setFilter]     = useState<string>('all')
   const [limit, setLimit]       = useState(50)
+
+  // Escalation integrations (Jira ticket creation, Confluence article linking)
+  const [integrations, setIntegrations] = useState<{ jira: boolean; confluence: boolean } | null>(null)
+  const [jiraTarget, setJiraTarget]         = useState<{ score: RiskScore; device: ApiDevice } | null>(null)
+  const [jiraLoadingId, setJiraLoadingId]   = useState<string | null>(null)
+  const [jiraError, setJiraError]           = useState<string | null>(null)
+  const [confluenceTarget, setConfluenceTarget] = useState<RiskScore | null>(null)
+  const [attachedPages, setAttachedPages]   = useState<Record<string, ConfluencePage[]>>({})
+
+  useEffect(() => {
+    api.jiraStatus().then(setIntegrations).catch(() => setIntegrations({ jira: false, confluence: false }))
+  }, [])
+
+  const openJiraModal = async (score: RiskScore) => {
+    setJiraError(null)
+    setJiraLoadingId(score.deviceId)
+    try {
+      const device = await api.fetchDeviceById(score.deviceId)
+      setJiraTarget({ score, device })
+    } catch {
+      setJiraError(`Could not load device details for ${score.deviceName} — try again.`)
+    } finally {
+      setJiraLoadingId(null)
+    }
+  }
 
   const load = async (lim = limit) => {
     setLoading(true); setError(null)
@@ -183,6 +212,43 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
                           </div>
                         </div>
                       )}
+
+                      {/* Escalation actions — real Jira ticket / Confluence link, gated on configured integrations */}
+                      {(integrations?.jira || integrations?.confluence) && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/70 mt-1">
+                          {integrations?.jira && (score.riskLevel === 'critical' || score.riskLevel === 'high') && (
+                            <button
+                              type="button"
+                              onClick={() => openJiraModal(score)}
+                              disabled={jiraLoadingId === score.deviceId}
+                              className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 transition disabled:opacity-50"
+                            >
+                              {jiraLoadingId === score.deviceId
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Ticket className="h-3.5 w-3.5" />}
+                              Create Jira Ticket
+                            </button>
+                          )}
+                          {integrations?.confluence && (
+                            <button
+                              type="button"
+                              onClick={() => setConfluenceTarget(score)}
+                              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                            >
+                              <BookOpen className="h-3.5 w-3.5" />
+                              Attach to Confluence
+                              {(attachedPages[score.deviceId]?.length ?? 0) > 0 && (
+                                <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">
+                                  {attachedPages[score.deviceId].length}
+                                </span>
+                              )}
+                            </button>
+                          )}
+                          {jiraError && jiraLoadingId === null && (
+                            <span className="text-xs text-red-600">{jiraError}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -192,6 +258,35 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
 
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />
         </>
+      )}
+
+      {jiraTarget && (
+        <JiraModal
+          device={jiraTarget.device}
+          ai={{
+            rootCause:      jiraTarget.score.factors.map(f => `${f.category}: ${f.description}`).join('\n') || 'No specific risk factors flagged.',
+            recommendation: jiraTarget.score.aiSummary,
+            steps:          jiraTarget.score.actionItems,
+          }}
+          onClose={() => setJiraTarget(null)}
+          onCreated={() => {}}
+        />
+      )}
+
+      {confluenceTarget && (
+        <ConfluenceModal
+          device={{ deviceName: confluenceTarget.deviceName }}
+          attached={attachedPages[confluenceTarget.deviceId] ?? []}
+          onClose={() => setConfluenceTarget(null)}
+          onAttach={(page) => setAttachedPages(prev => ({
+            ...prev,
+            [confluenceTarget.deviceId]: [...(prev[confluenceTarget.deviceId] ?? []), page],
+          }))}
+          onDetach={(pageId) => setAttachedPages(prev => ({
+            ...prev,
+            [confluenceTarget.deviceId]: (prev[confluenceTarget.deviceId] ?? []).filter(p => p.id !== pageId),
+          }))}
+        />
       )}
     </div>
   )
