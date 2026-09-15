@@ -1,9 +1,10 @@
 /**
  * Microsoft Entra / Intune Resource Intelligence Dashboard
  *
- * Data source priority:
- *   1. Live Microsoft Graph API (when Entra ID credentials are configured in Settings → Integrations)
- *   2. Demo mock data (when no credentials — clearly labelled)
+ * Live Microsoft Graph API data only (when Entra ID credentials are
+ * configured in Settings → Integrations). No mock/demo data is ever
+ * rendered — when Entra isn't configured, or a fetch fails, or Graph
+ * returns zero devices, a distinct empty state is shown instead.
  *
  * The component fetches from /api/entra/* on mount and on every Refresh click.
  * Sub-components (table, charts) receive typed props — no static imports from entraData.ts.
@@ -11,13 +12,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  RefreshCw, Network, AlertCircle,
+  RefreshCw, Network,
   Monitor, Activity,
-  ChevronDown, Loader2, AlertTriangle,
+  ChevronDown, Loader2, AlertTriangle, PlugZap,
 } from 'lucide-react'
 import { api } from '../../api'
 import type { EntraDevice } from '../../data/entraData'
-import { ENTRA_DEVICES as MOCK_DEVICES } from '../../data/entraData'
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
@@ -134,28 +134,33 @@ function StaleDevicesTable({ devices }: { devices: EntraDevice[] }) {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export function EntraIntelligenceDashboard() {
-  const [devices,        setDevices]        = useState<EntraDevice[]>(MOCK_DEVICES)
-
+  const [devices,        setDevices]        = useState<EntraDevice[]>([])
+  // null = not yet known (still loading / errored before first successful check)
+  const [configured,     setConfigured]     = useState<boolean | null>(null)
   const [loading,      setLoading]      = useState(true)
-  const [isLive,       setIsLive]       = useState(false)
   const [error,        setError]        = useState<string | null>(null)
-  const [lastUpdated,  setLastUpdated]  = useState(new Date())
+  const [lastUpdated,  setLastUpdated]  = useState<Date | null>(null)
   const [refreshing,   setRefreshing]   = useState(false)
 
   const fetchAll = useCallback(async () => {
     setError(null)
     try {
-      // Devices — still needed for the Platform Distribution and Stale Devices widgets
-      const rawDevices = await api.fetchEntraDevices({ limit: 100 }).catch(() => null)
-      if (rawDevices && rawDevices.length > 0) {
+      const overview = await api.fetchEntraOverview()
+      setConfigured(overview.configured)
+
+      if (overview.configured) {
+        // Devices — still needed for the Platform Distribution and Stale Devices widgets
+        const rawDevices = await api.fetchEntraDevices({ limit: 100 })
         setDevices(rawDevices as unknown as EntraDevice[])
-        setIsLive(true)
+      } else {
+        setDevices([])
       }
 
       setLastUpdated(new Date())
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load Entra data'
       setError(msg)
+      setDevices([])
     } finally {
       setLoading(false)
     }
@@ -168,6 +173,8 @@ export function EntraIntelligenceDashboard() {
     await fetchAll()
     setRefreshing(false)
   }
+
+  const isLive = configured === true && !error
 
   return (
     <div className="min-h-full w-full bg-[#0d1117] text-slate-100 rounded-2xl overflow-hidden">
@@ -185,44 +192,52 @@ export function EntraIntelligenceDashboard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {loading && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
-          <span className="text-[0.62rem] text-slate-500">
-            Updated: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
+          {lastUpdated && (
+            <span className="text-[0.62rem] text-slate-500">
+              Updated: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
           <button type="button" onClick={handleRefresh} disabled={loading || refreshing}
             className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-blue-500/50 hover:text-blue-300 transition disabled:opacity-50">
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin text-blue-400' : ''}`} />
             Refresh
           </button>
-          <div className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 ${
-            isLive
-              ? 'border-emerald-500/30 bg-emerald-500/10'
-              : 'border-amber-500/30 bg-amber-500/10'
-          }`}>
-            <div className={`h-2 w-2 rounded-full animate-pulse ${isLive ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-            <span className={`text-[0.68rem] font-bold ${isLive ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {isLive ? 'Live · Microsoft Graph' : 'Demo data'}
-            </span>
-          </div>
+          {!loading && (
+            <div className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 ${
+              isLive
+                ? 'border-emerald-500/30 bg-emerald-500/10'
+                : 'border-slate-600/40 bg-slate-700/20'
+            }`}>
+              <div className={`h-2 w-2 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+              <span className={`text-[0.68rem] font-bold ${isLive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {error ? 'Error' : isLive ? 'Live · Microsoft Graph' : 'Not configured'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ── Error banner ── */}
-      {error && (
+      {error && !loading && (
         <div className="mx-5 mt-4 flex items-center gap-2.5 rounded-xl border border-red-500/30 bg-red-500/8 px-4 py-3">
           <AlertTriangle className="h-4 w-4 text-red-400 flex-shrink-0" />
           <p className="text-xs text-red-300">
-            <strong>Data fetch error:</strong> {error} — Showing last known / demo data.
+            <strong>Data fetch error:</strong> {error}
           </p>
+          <button type="button" onClick={handleRefresh}
+            className="ml-auto flex-shrink-0 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[0.65rem] font-semibold text-red-300 hover:bg-red-500/20 transition">
+            Retry
+          </button>
         </div>
       )}
 
-      {/* ── Demo mode banner ── */}
-      {!isLive && !loading && !error && (
-        <div className="mx-5 mt-4 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-3">
-          <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0" />
-          <p className="text-xs text-amber-300">
-            <strong>Demo mode:</strong> Showing synthetic device data.{' '}
-            Connect real Entra ID credentials in{' '}
+      {/* ── Not-configured banner ── */}
+      {!loading && !error && configured === false && (
+        <div className="mx-5 mt-4 flex items-center gap-2.5 rounded-xl border border-slate-600/40 bg-slate-800/40 px-4 py-3">
+          <PlugZap className="h-4 w-4 text-slate-400 flex-shrink-0" />
+          <p className="text-xs text-slate-300">
+            <strong>Not configured:</strong> Microsoft Entra ID credentials aren't set up.{' '}
+            Connect them in{' '}
             <span className="underline cursor-pointer">Settings → Integrations → Microsoft Entra ID</span>{' '}
             to see live platform distribution and stale check-in data from Microsoft Graph.
           </p>
@@ -249,19 +264,48 @@ export function EntraIntelligenceDashboard() {
 
       <div className="p-5 space-y-5">
 
-        {/* ── Platform Distribution ── */}
-        <Section title="Devices by Platform" icon={Monitor} color="text-blue-400">
-          <PlatformDistribution devices={devices} />
-        </Section>
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+          </div>
+        ) : !isLive ? (
+          /* ── Not configured / error — no widgets, no fabricated content ── */
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-700/60 bg-slate-900/60 py-16 text-center">
+            <div className="rounded-2xl bg-slate-800 p-4 border border-slate-700"><PlugZap className="h-6 w-6 text-slate-500" /></div>
+            <p className="text-sm font-bold text-slate-300">{error ? 'Unable to load Entra data' : 'No live data available'}</p>
+            <p className="text-xs text-slate-500 max-w-xs">
+              {error
+                ? 'Check the connection to Microsoft Graph and try again.'
+                : 'Connect Microsoft Entra ID credentials in Settings → Integrations to see device and compliance data here.'}
+            </p>
+          </div>
+        ) : devices.length === 0 ? (
+          /* ── Configured, connected, but Graph returned no devices ── */
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-700/60 bg-slate-900/60 py-16 text-center">
+            <div className="rounded-2xl bg-slate-800 p-4 border border-slate-700"><Monitor className="h-6 w-6 text-slate-500" /></div>
+            <p className="text-sm font-bold text-slate-300">No device data</p>
+            <p className="text-xs text-slate-500 max-w-xs">
+              Connected to Microsoft Graph, but no managed devices were returned. Verify the
+              DeviceManagementManagedDevices.Read.All permission is granted in Azure.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* ── Platform Distribution ── */}
+            <Section title="Devices by Platform" icon={Monitor} color="text-blue-400">
+              <PlatformDistribution devices={devices} />
+            </Section>
 
-        {/* ── Stale Devices ── */}
-        <Section title="Devices with Stale Check-in" icon={Activity} color="text-amber-400"
-          action={<span className="text-[0.65rem] text-amber-400 font-bold">{devices.filter(d => d.daysSinceCheckIn > 7).length} stale</span>}>
-          <StaleDevicesTable devices={devices} />
-        </Section>
+            {/* ── Stale Devices ── */}
+            <Section title="Devices with Stale Check-in" icon={Activity} color="text-amber-400"
+              action={<span className="text-[0.65rem] text-amber-400 font-bold">{devices.filter(d => d.daysSinceCheckIn > 7).length} stale</span>}>
+              <StaleDevicesTable devices={devices} />
+            </Section>
+          </>
+        )}
 
         <div className="text-center text-[0.62rem] text-slate-600 pt-2 border-t border-slate-800">
-          ITO Endpoint · Microsoft Entra Integration · {isLive ? 'Live Microsoft Graph data' : 'Demo mode — configure credentials in Settings'}
+          ITO Endpoint · Microsoft Entra Integration · {isLive ? 'Live Microsoft Graph data' : 'Not configured'}
         </div>
       </div>
     </div>

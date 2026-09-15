@@ -2,7 +2,12 @@
  * Entra Intelligence Service — Microsoft Graph Integration
  *
  * Calls Microsoft Graph API when Entra credentials are configured.
- * Falls back to mock data only when NO credentials are set.
+ * Never falls back to mock/demo data — when Entra isn't configured, every
+ * function returns a `configured: false` empty result so the frontend can
+ * render a clear "not configured" state. When credentials exist but a Graph
+ * call fails, the error is thrown (propagated via asyncHandler) so the
+ * frontend shows a real error state instead of silently substituting
+ * synthetic content.
  *
  * Required Graph App Permissions (Application — not Delegated):
  *   User.Read.All                              ← users list
@@ -19,10 +24,6 @@
 
 import { getEntraConfig }  from '../store/integrationStore.js'
 import { getEntraData }    from './entra.js'
-import {
-  mockEntraOverview, mockEntraDevices, mockEntraUsers,
-  mockEntraGroups, mockEntraSecurity,
-} from '../data/entra.js'
 
 const isConfigured = () => !!getEntraConfig()
 
@@ -160,59 +161,58 @@ async function fetchRiskyUsers(token: string): Promise<GraphRiskyUser[]> {
 
 // ── Overview ──────────────────────────────────────────────────────────────────
 
-export async function getEntraOverview() {
-  if (!isConfigured()) {
-    console.log('[EntraIntelligence] No credentials — returning mock overview')
-    return { ...mockEntraOverview, _source: 'mock' }
-  }
+export interface EntraOverview {
+  configured:                boolean
+  totalDevices:              number
+  compliantDevices:          number
+  nonCompliantDevices:       number
+  inactiveDevices:           number
+  totalUsers:                number
+  devicesMissingEncryption:  number
+  highRiskUsers:             number
+}
 
-  try {
-    const token = await getToken()
-    const [devices, riskyUsers, entraData] = await Promise.all([
-      fetchDevices(token),
-      fetchRiskyUsers(token),
-      getEntraData().catch(() => null),
-    ])
+const EMPTY_OVERVIEW: EntraOverview = {
+  configured: false, totalDevices: 0, compliantDevices: 0, nonCompliantDevices: 0,
+  inactiveDevices: 0, totalUsers: 0, devicesMissingEncryption: 0, highRiskUsers: 0,
+}
 
-    const compliant    = devices.filter(d => d.complianceState === 'compliant').length
-    const nonCompliant = devices.filter(d => d.complianceState === 'noncompliant').length
-    const inactive     = devices.filter(d => daysSince(d.lastSyncDateTime) > 7).length
-    const missingEnc   = devices.filter(d => !d.isEncrypted).length
+export async function getEntraOverview(): Promise<EntraOverview> {
+  if (!isConfigured()) return { ...EMPTY_OVERVIEW }
 
-    return {
-      totalDevices:             devices.length,
-      compliantDevices:         compliant,
-      nonCompliantDevices:      nonCompliant,
-      inactiveDevices:          inactive,
-      totalUsers:               entraData?.users.length ?? mockEntraOverview.totalUsers,
-      totalGroups:              mockEntraOverview.totalGroups,
-      failedPolicies:           mockEntraOverview.failedPolicies,
-      appInstallFailures:       mockEntraOverview.appInstallFailures,
-      devicesMissingEncryption: missingEnc,
-      devicesMissingDefender:   mockEntraOverview.devicesMissingDefender,
-      pendingReboot:            mockEntraOverview.pendingReboot,
-      highRiskUsers:            riskyUsers.filter(u => u.riskLevel === 'high').length,
-      openTickets:              mockEntraOverview.openTickets,
-      _source:                  'live',
-    }
-  } catch (e) {
-    console.error('[EntraIntelligence] getEntraOverview error:', (e as Error).message)
-    return { ...mockEntraOverview, _source: 'mock' }
+  const token = await getToken()
+  const [devices, riskyUsers, entraData] = await Promise.all([
+    fetchDevices(token),
+    fetchRiskyUsers(token),
+    getEntraData().catch(() => null),
+  ])
+
+  const compliant    = devices.filter(d => d.complianceState === 'compliant').length
+  const nonCompliant = devices.filter(d => d.complianceState === 'noncompliant').length
+  const inactive     = devices.filter(d => daysSince(d.lastSyncDateTime) > 7).length
+  const missingEnc   = devices.filter(d => !d.isEncrypted).length
+
+  return {
+    configured:               true,
+    totalDevices:             devices.length,
+    compliantDevices:         compliant,
+    nonCompliantDevices:      nonCompliant,
+    inactiveDevices:          inactive,
+    totalUsers:               entraData?.users.length ?? 0,
+    devicesMissingEncryption: missingEnc,
+    highRiskUsers:            riskyUsers.filter(u => u.riskLevel === 'high').length,
   }
 }
 
 // ── Devices ───────────────────────────────────────────────────────────────────
 
 export async function getEntraDevices(params?: { compliance?: string; os?: string; limit?: number }) {
-  if (!isConfigured()) {
-    return applyFilters(mockEntraDevices, params)
-  }
+  if (!isConfigured()) return []
 
-  try {
-    const token   = await getToken()
-    const raw     = await fetchDevices(token)
+  const token   = await getToken()
+  const raw     = await fetchDevices(token)
 
-    const mapped = raw.map(d => ({
+  const mapped = raw.map(d => ({
       id:               d.id,
       deviceName:       d.deviceName || 'Unknown Device',
       primaryUser:      (d.userPrincipalName ?? '').split('@')[0] || 'Unknown',
@@ -245,11 +245,7 @@ export async function getEntraDevices(params?: { compliance?: string; os?: strin
       ],
     }))
 
-    return applyFilters(mapped, params)
-  } catch (e) {
-    console.error('[EntraIntelligence] getEntraDevices error:', (e as Error).message)
-    return applyFilters(mockEntraDevices, params)
-  }
+  return applyFilters(mapped, params)
 }
 
 function applyFilters<T extends { complianceState: string; os: string }>(
@@ -265,70 +261,61 @@ function applyFilters<T extends { complianceState: string; os: string }>(
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export async function getEntraUsers(params?: { riskLevel?: string }) {
-  if (!isConfigured()) {
-    let users = mockEntraUsers
-    if (params?.riskLevel) users = users.filter(u => u.riskLevel === params.riskLevel)
-    return users
-  }
+  if (!isConfigured()) return []
 
-  try {
-    const token = await getToken()
-    const [entraData, riskyUsers] = await Promise.all([
-      getEntraData().catch(() => null),
-      fetchRiskyUsers(token),
-    ])
+  const token = await getToken()
+  const [entraData, riskyUsers] = await Promise.all([
+    getEntraData().catch(() => null),
+    fetchRiskyUsers(token),
+  ])
 
-    const riskyMap = new Map(riskyUsers.map(r => [(r.userPrincipalName ?? '').toLowerCase(), r]))
-    const rawUsers = entraData?.users ?? []
+  const riskyMap = new Map(riskyUsers.map(r => [(r.userPrincipalName ?? '').toLowerCase(), r]))
+  const rawUsers = entraData?.users ?? []
 
-    const mapped = rawUsers.map(u => {
-      const risky = riskyMap.get((u.userPrincipalName ?? '').toLowerCase())
-      return {
-        id:             u.id,
-        displayName:    u.displayName,
-        upn:            u.userPrincipalName,
-        department:     u.department ?? 'Unknown',
-        jobTitle:       '',
-        riskLevel:      risky ? mapRisk(risky.riskLevel) : 'None' as const,
-        riskFactors:    risky?.riskDetail ? [risky.riskDetail.replace(/([A-Z])/g, ' $1').trim()] : [],
-        assignedDevices: [] as string[],
-        groups:          [] as string[],
-        mfaStatus:       'Enabled' as const,
-        lastSignIn:      u.signInActivity?.lastSignInDateTime ?? '',
-        accountStatus:   u.accountEnabled ? 'Active' : 'Disabled',
-      }
-    })
+  const mapped = rawUsers.map(u => {
+    const risky = riskyMap.get((u.userPrincipalName ?? '').toLowerCase())
+    return {
+      id:             u.id,
+      displayName:    u.displayName,
+      upn:            u.userPrincipalName,
+      department:     u.department ?? 'Unknown',
+      jobTitle:       '',
+      riskLevel:      risky ? mapRisk(risky.riskLevel) : 'None' as const,
+      riskFactors:    risky?.riskDetail ? [risky.riskDetail.replace(/([A-Z])/g, ' $1').trim()] : [],
+      assignedDevices: [] as string[],
+      groups:          [] as string[],
+      // Real per-user MFA registration status requires the
+      // UserAuthenticationMethod.Read.All permission and an additional
+      // Graph call this service does not yet make — 'Unknown' rather than
+      // a fabricated 'Enabled'/'Disabled' guess.
+      mfaStatus:       'Unknown' as const,
+      lastSignIn:      u.signInActivity?.lastSignInDateTime ?? '',
+      accountStatus:   u.accountEnabled ? 'Active' : 'Disabled',
+    }
+  })
 
-    let result = mapped as typeof mockEntraUsers
-    if (params?.riskLevel) result = result.filter(u => u.riskLevel === params.riskLevel)
-    console.log(`[EntraIntelligence] ✓ Returned ${result.length} users`)
-    return result
-  } catch (e) {
-    console.error('[EntraIntelligence] getEntraUsers error:', (e as Error).message)
-    return mockEntraUsers
-  }
+  let result = mapped
+  if (params?.riskLevel) result = result.filter(u => u.riskLevel === params.riskLevel)
+  console.log(`[EntraIntelligence] ✓ Returned ${result.length} users`)
+  return result
 }
 
 // ── Groups ────────────────────────────────────────────────────────────────────
 
 export async function getEntraGroups() {
-  if (!isConfigured()) return mockEntraGroups
-  try {
-    const token  = await getToken()
-    const groups = await gGetAll<{ id: string; displayName: string; description: string; groupTypes: string[]; securityEnabled: boolean }>(
-      token,
-      '/groups?$select=id,displayName,description,groupTypes,securityEnabled&$top=500',
-    )
-    return groups.map(g => ({
-      id: g.id, displayName: g.displayName, description: g.description ?? '',
-      memberCount: 0,
-      type: g.groupTypes?.includes('Unified') ? 'Microsoft 365' : g.securityEnabled ? 'Security' : 'Distribution',
-      assignedPolicies: [] as string[],
-    }))
-  } catch (e) {
-    console.warn('[EntraIntelligence] groups fetch failed:', (e as Error).message)
-    return mockEntraGroups
-  }
+  if (!isConfigured()) return []
+
+  const token  = await getToken()
+  const groups = await gGetAll<{ id: string; displayName: string; description: string; groupTypes: string[]; securityEnabled: boolean }>(
+    token,
+    '/groups?$select=id,displayName,description,groupTypes,securityEnabled&$top=500',
+  )
+  return groups.map(g => ({
+    id: g.id, displayName: g.displayName, description: g.description ?? '',
+    memberCount: 0,
+    type: g.groupTypes?.includes('Unified') ? 'Microsoft 365' : g.securityEnabled ? 'Security' : 'Distribution',
+    assignedPolicies: [] as string[],
+  }))
 }
 
 // ── Group typeahead search (matches any word in the display name, not just prefix) ──
@@ -339,13 +326,7 @@ export async function searchEntraGroups(query: string): Promise<EntraGroupSugges
   const q = query.trim()
   if (!q) return []
 
-  if (!isConfigured()) {
-    const lc = q.toLowerCase()
-    return mockEntraGroups
-      .filter(g => g.displayName.toLowerCase().includes(lc))
-      .slice(0, 15)
-      .map(g => ({ id: g.id, displayName: g.displayName }))
-  }
+  if (!isConfigured()) return []
 
   try {
     const token = await getToken()
@@ -474,24 +455,36 @@ export async function getEntraGroupMemberReport(displayName: string, osFilter?: 
 
 // ── Security ──────────────────────────────────────────────────────────────────
 
-export async function getEntraSecurity() {
-  if (!isConfigured()) return mockEntraSecurity
-  try {
-    const token      = await getToken()
-    const riskyUsers = await fetchRiskyUsers(token)
-    return {
-      ...mockEntraSecurity,
-      highRiskUsers: riskyUsers.filter(u => u.riskLevel === 'high').length,
-    }
-  } catch {
-    return mockEntraSecurity
+export interface EntraSecurity {
+  configured:               boolean
+  highRiskUsers:            number
+  mfaNotEnabled:            number
+  conditionalAccessBlocked: number
+  staleDevicesOverThreshold: number
+  devicesWithoutDefender:   number
+}
+
+const EMPTY_SECURITY: EntraSecurity = {
+  configured: false, highRiskUsers: 0, mfaNotEnabled: 0,
+  conditionalAccessBlocked: 0, staleDevicesOverThreshold: 0, devicesWithoutDefender: 0,
+}
+
+export async function getEntraSecurity(): Promise<EntraSecurity> {
+  if (!isConfigured()) return { ...EMPTY_SECURITY }
+
+  const token      = await getToken()
+  const riskyUsers = await fetchRiskyUsers(token)
+  return {
+    ...EMPTY_SECURITY,
+    configured:    true,
+    highRiskUsers: riskyUsers.filter(u => u.riskLevel === 'high').length,
   }
 }
 
 // ── Device Actions ────────────────────────────────────────────────────────────
 
 export async function syncDevice(deviceId: string) {
-  if (!isConfigured()) return { success: true, message: `Sync queued for ${deviceId} (demo mode)` }
+  if (!isConfigured()) return { success: false, message: 'Entra ID is not configured — add Entra credentials in Settings to sync devices' }
   try {
     const token = await getToken()
     const res   = await fetch(
@@ -507,12 +500,7 @@ export async function syncDevice(deviceId: string) {
 
 export async function diagnoseDevice(deviceId: string) {
   if (!isConfigured()) {
-    const device = mockEntraDevices.find(d => d.id === deviceId)
-    const issues: string[] = []
-    if (device?.encryptionState === 'Not Encrypted') issues.push('Disk encryption not enabled')
-    if (device?.defenderState   === 'Inactive')      issues.push('Defender reporting as inactive')
-    if ((device?.daysSinceCheckIn ?? 0) > 7)         issues.push(`Stale — ${device?.daysSinceCheckIn}d since check-in`)
-    return { summary: issues.length ? `${issues.length} issue(s) found` : 'Device appears healthy', issues }
+    return { summary: 'Diagnosis unavailable', issues: ['Entra ID is not configured — add Entra credentials in Settings to run device diagnostics'] }
   }
   try {
     const token  = await getToken()

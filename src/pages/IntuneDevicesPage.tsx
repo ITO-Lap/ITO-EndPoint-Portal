@@ -681,7 +681,7 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
 interface EUser  { id: string; displayName: string; upn: string; department: string; riskLevel: string; lastSignIn: string; accountStatus: string; mfaStatus: string }
 interface EDev   { id: string; deviceName: string; primaryUser: string; os: string; osVersion: string; complianceState: string; encryptionState: string; joinType: string; lastCheckIn: string; daysSinceCheckIn: number; openIssues: string[] }
 interface EGroup { id: string; displayName: string; description: string; memberCount: number; type: string }
-interface EOvr   { totalDevices: number; compliantDevices: number; nonCompliantDevices: number; inactiveDevices: number; totalUsers: number; highRiskUsers: number; devicesMissingEncryption: number }
+interface EOvr   { configured: boolean; totalDevices: number; compliantDevices: number; nonCompliantDevices: number; inactiveDevices: number; totalUsers: number; highRiskUsers: number; devicesMissingEncryption: number }
 
 function riskBadge(r: string) {
   if (r === 'High')   return 'bg-red-50 text-red-700 border-red-200'
@@ -733,9 +733,9 @@ function EntraIDTab() {
       api.fetchEntraGroups(),
     ]).then(([ov, us, dv, gr]) => {
       if (ov.status === 'fulfilled') {
-        const o = ov.value as Record<string, unknown>
-        setOverview(o as unknown as EOvr)
-        setIsLive(o['_source'] === 'live')
+        const o = ov.value as unknown as EOvr
+        setOverview(o)
+        setIsLive(o.configured === true)
       }
       if (us.status === 'fulfilled') setUsers((us.value as EUser[]) ?? [])
       if (dv.status === 'fulfilled') setDevices((dv.value as EDev[]) ?? [])
@@ -762,7 +762,7 @@ function EntraIDTab() {
         <div className="flex items-center gap-2 flex-wrap">
           {isLive
             ? <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[0.65rem] font-bold text-emerald-700"><Activity className="h-3 w-3" />Live · Microsoft Graph API</span>
-            : <span className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[0.65rem] font-bold text-amber-700"><Info className="h-3 w-3" />Demo data — configure Entra ID credentials in Settings</span>
+            : <span className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[0.65rem] font-bold text-amber-700"><Info className="h-3 w-3" />Not configured — add Entra ID credentials in Settings</span>
           }
           {loadError && <span className="flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2.5 py-1 text-[0.65rem] font-semibold text-red-600 max-w-xs truncate"><AlertCircle className="h-3 w-3 flex-shrink-0" />{loadError}</span>}
         </div>
@@ -878,7 +878,9 @@ function EntraIDTab() {
                         <td className="px-4 py-2.5">
                           {u.mfaStatus === 'Enabled'
                             ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700"><CheckCheck className="h-2.5 w-2.5" />MFA On</span>
-                            : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600"><ShieldBan className="h-2.5 w-2.5" />None</span>}
+                            : u.mfaStatus === 'Disabled'
+                            ? <span className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600"><ShieldBan className="h-2.5 w-2.5" />None</span>
+                            : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[0.6rem] font-bold text-slate-500">Unknown</span>}
                         </td>
                         <td className="px-4 py-2.5">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${u.accountStatus === 'Active' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>

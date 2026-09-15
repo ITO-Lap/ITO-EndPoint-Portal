@@ -35,6 +35,28 @@ export interface ApiStats {
   mock: boolean
 }
 
+// Mirror of server/src/services/entraIntelligence.ts EntraOverview/EntraSecurity —
+// `configured: false` means Entra ID credentials aren't set up (not an error).
+export interface EntraOverview {
+  configured:               boolean
+  totalDevices:             number
+  compliantDevices:         number
+  nonCompliantDevices:      number
+  inactiveDevices:          number
+  totalUsers:               number
+  devicesMissingEncryption: number
+  highRiskUsers:            number
+}
+
+export interface EntraSecurity {
+  configured:                boolean
+  highRiskUsers:             number
+  mfaNotEnabled:             number
+  conditionalAccessBlocked:  number
+  staleDevicesOverThreshold: number
+  devicesWithoutDefender:    number
+}
+
 export interface EntraGroupSuggestion { id: string; displayName: string }
 
 // Mirror of server/src/services/entraIntelligence.ts EntraGroupReportRow/Result
@@ -593,7 +615,7 @@ export const api = {
   // ── Entra Intelligence ──────────────────────────────────────────────────────
 
   fetchEntraOverview: () =>
-    get<Record<string, number>>('/api/entra/overview'),
+    get<EntraOverview>('/api/entra/overview'),
 
   fetchEntraDevices: (params?: { compliance?: string; os?: string; limit?: number }) => {
     const qs = new URLSearchParams()
@@ -644,7 +666,7 @@ export const api = {
   },
 
   fetchEntraSecurity: () =>
-    get<Record<string, number>>('/api/entra/security'),
+    get<EntraSecurity>('/api/entra/security'),
 
   syncEntraDevice: (deviceId: string) =>
     post<{ success: boolean; message: string }>(`/api/entra/devices/${encodeURIComponent(deviceId)}/sync`, {}),
