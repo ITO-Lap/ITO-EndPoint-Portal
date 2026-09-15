@@ -2,7 +2,7 @@
 
 > **Location:** Mac Devices → Fleet Reports tab  
 > **Audience:** macOS Admins · IT Managers · Compliance Officers · CIOs  
-> **Data source:** Live Kandji API when configured; demo data otherwise
+> **Data source:** Live ManageEngine API when configured; demo data otherwise
 
 ---
 

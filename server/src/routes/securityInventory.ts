@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { fetchAllDevices } from './devices.js'
 import { getIntuneDeviceApps, isIntuneConfigured } from '../services/intune.js'
-import { getKandjiDeviceApps, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDeviceApps, isManageEngineConfigured } from '../services/manageEngine.js'
 import { scanFleet, buildPlatformCoverage, listDevicesMissingAgent } from '../security-agents/service.js'
 import type { AppStatus, Device } from '../types.js'
@@ -15,7 +14,6 @@ const router = Router()
 // the device's own connector, same dispatch used by GET /api/devices/:id/apps.
 async function getAppsFor(device: Device): Promise<AppStatus[]> {
   if (device.apps && device.apps.length > 0) return device.apps
-  if (isKandjiConfigured() && device.managementSource === 'Kandji') return getKandjiDeviceApps(device.id)
   if (isIntuneConfigured() && device.managementSource === 'Microsoft Intune') return getIntuneDeviceApps(device.id)
   if (isManageEngineConfigured() && device.managementSource === 'ManageEngine') return getManageEngineDeviceApps(device.id)
   return []

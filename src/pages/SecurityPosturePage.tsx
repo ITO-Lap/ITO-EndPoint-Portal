@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Shield, HardDrive, Flame, Download, UserCheck, ClipboardCheck,
   AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Minus,
-  Clock, Target, Globe, Monitor, Apple, Server,
+  Clock, Target, Globe, Monitor, Server,
   X, Info, Wrench, ChevronDown,
 } from 'lucide-react'
 import { EndpointProtectionCoverage } from '../components/security/EndpointProtectionCoverage'
@@ -12,7 +12,7 @@ import { EndpointProtectionCoverage } from '../components/security/EndpointProte
 const PILLAR_REMEDIATION: Record<string, string[]> = {
   encryption: [
     'Identify non-encrypted devices in your MDM console under Compliance → Encryption.',
-    'Push a BitLocker (Windows) or FileVault (macOS) enforcement policy via Intune or Kandji.',
+    'Push a BitLocker (Windows) or FileVault (macOS) enforcement policy via Intune or ManageEngine.',
     'Set a compliance policy that marks devices without encryption as Non-Compliant.',
     'For Windows: Settings → Update & Security → Device Encryption → Turn On.',
     'For macOS: System Preferences → Privacy & Security → FileVault → Turn On.',
@@ -26,11 +26,11 @@ const PILLAR_REMEDIATION: Record<string, string[]> = {
     'Store recovery keys in Entra ID — enable "Save BitLocker recovery key to Azure AD" in policy.',
   ],
   filevault: [
-    'In Kandji, create or update a Filevault library item and enable enforcement.',
-    'Assign the Blueprint containing the FileVault item to the device.',
+    'In ManageEngine, create or update a FileVault configuration profile and enable enforcement.',
+    'Assign the profile containing the FileVault item to the device.',
     'The user will see a prompt on next login — they must enter their password to enable.',
-    'Verify in Kandji: Devices → [Device] → Library → FileVault status.',
-    'Escrow the recovery key: confirm personal recovery key is synced to Kandji.',
+    'Verify in ManageEngine: Devices → [Device] → Profiles → FileVault status.',
+    'Escrow the recovery key: confirm personal recovery key is synced to ManageEngine.',
   ],
   edr: [
     'Open your EDR console (CrowdStrike Falcon / Microsoft Defender) and filter for inactive sensors.',
@@ -41,7 +41,7 @@ const PILLAR_REMEDIATION: Record<string, string[]> = {
   ],
   crowdstrike: [
     'In Falcon, go to Hosts → Host Management and filter Status = Reduced Functionality.',
-    'Re-deploy Falcon sensor via Kandji (Library → Managed Software) or Intune (App deployment).',
+    'Re-deploy Falcon sensor via ManageEngine (Software Repository → Managed Software) or Intune (App deployment).',
     'Verify sensor version is current — update via Sensor Update policies in Falcon.',
     'Check prevention policy assignment — ensure devices are in an enforced policy group.',
   ],
@@ -52,17 +52,17 @@ const PILLAR_REMEDIATION: Record<string, string[]> = {
     'Run: Start-Service -Name WinDefend in an elevated PowerShell session if Defender was manually disabled.',
   ],
   firewall: [
-    'Create or update an Endpoint Security → Firewall policy in Intune (Windows) or Kandji (macOS).',
+    'Create or update an Endpoint Security → Firewall policy in Intune (Windows) or ManageEngine (macOS).',
     'Assign the policy to non-compliant devices.',
     'For Windows: Configure Windows Defender Firewall via Group Policy or Intune → Domain/Private/Public profiles.',
-    'For macOS: Set Application Firewall to On in the Kandji Firewall library item.',
+    'For macOS: Set Application Firewall to On in the ManageEngine Firewall configuration profile.',
     'Set compliance rule: Firewall must be enabled → mark devices without it as Non-Compliant.',
   ],
   patching: [
     'Open your MDM patch report and filter for devices with critical updates outstanding.',
-    'Force-push critical patches immediately via Intune (Software Updates) or Kandji (Auto-update enforcement).',
+    'Force-push critical patches immediately via Intune (Software Updates) or ManageEngine (Auto-update enforcement).',
     'For Intune (Windows): Configure Windows Update for Business → set deadline policies for critical updates.',
-    'For Kandji (macOS): Enable macOS update enforcement in Blueprint settings.',
+    'For ManageEngine (macOS): Enable macOS update enforcement in the configuration profile settings.',
     'Notify device owners whose machines require a restart to complete patching.',
     'Re-run the patch compliance report in 24 hours to confirm coverage improvement.',
   ],
@@ -74,7 +74,7 @@ const PILLAR_REMEDIATION: Record<string, string[]> = {
     'After grace period, set CA policy to Block for non-MFA-enrolled users.',
   ],
   compliance: [
-    'Review compliance policy failures in Intune: Devices → Monitor → Device Compliance or Kandji: Devices → Compliance.',
+    'Review compliance policy failures in Intune: Devices → Monitor → Device Compliance or ManageEngine: Devices → Compliance.',
     'Identify the most common failing policies and prioritize those for remediation.',
     'Force MDM check-in for devices that haven\'t synced recently: Intune → [Device] → Sync.',
     'Re-assign failed policies to the affected device groups.',
@@ -84,13 +84,13 @@ const PILLAR_REMEDIATION: Record<string, string[]> = {
 
 function getPillarSteps(pillarId: string): string[] {
   return PILLAR_REMEDIATION[pillarId]
-    ?? PILLAR_REMEDIATION[pillarId.replace(/^me_|^win|^aad|^mac|^okta|^intune|^kandji/, '')]
+    ?? PILLAR_REMEDIATION[pillarId.replace(/^me_|^win|^aad|^mac|^okta|^intune/, '')]
     ?? PILLAR_REMEDIATION['compliance']
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type MDMSource = 'all' | 'intune' | 'kandji' | 'manageengine'
+type MDMSource = 'all' | 'intune' | 'manageengine'
 
 interface Pillar {
   id: string
@@ -202,55 +202,29 @@ const SOURCE_CONFIGS: Record<MDMSource, SourceConfig> = {
     ],
   },
 
-  kandji: {
-    id: 'kandji',
-    label: 'Kandji',
-    shortLabel: 'Kandji',
-    icon: Apple,
-    deviceCount: 178,
-    platform: 'macOS',
-    lastAssessed: 'May 12, 2026 at 08:45 AM',
-    pillars: [
-      { id: 'filevault',   label: 'FileVault',          score: 94, passing: 167, failing: 11, trend: '+1%',  positive: true,  color: 'emerald', icon: HardDrive,      description: 'FileVault full-disk encryption',         weight: 0.20 },
-      { id: 'crowdstrike', label: 'EDR / CrowdStrike',  score: 96, passing: 171, failing: 7,  trend: '+1%',  positive: true,  color: 'blue',    icon: Shield,         description: 'CrowdStrike Falcon agent active',        weight: 0.22 },
-      { id: 'macfw',       label: 'macOS Firewall',     score: 98, passing: 174, failing: 4,  trend: '→ 0%', positive: true,  color: 'sky',     icon: Flame,          description: 'macOS Application Firewall enabled',    weight: 0.15 },
-      { id: 'macupdate',   label: 'macOS Updates',      score: 81, passing: 144, failing: 34, trend: '-1%',  positive: false, color: 'amber',   icon: Download,       description: 'Critical macOS patches applied',         weight: 0.22 },
-      { id: 'oktamfa',     label: 'Okta / MFA',        score: 92, passing: 164, failing: 14, trend: '+6%',  positive: true,  color: 'violet',  icon: UserCheck,      description: 'Okta MFA enrolled for all users',       weight: 0.11 },
-      { id: 'kandjicomp',  label: 'Kandji Compliance',  score: 93, passing: 165, failing: 13, trend: '+3%',  positive: true,  color: 'green',   icon: ClipboardCheck, description: 'Blueprints & policies compliant',        weight: 0.10 },
-    ],
-    risks: [
-      { severity: 'High',   title: '34 Macs pending critical macOS security update',      pillar: 'Patching',   count: 34 },
-      { severity: 'High',   title: '14 users without Okta MFA enrolled',                  pillar: 'Identity',   count: 14 },
-      { severity: 'Medium', title: '11 Macs with FileVault disabled (exceptions)',         pillar: 'Encryption', count: 11 },
-      { severity: 'Medium', title: '7 endpoints with CrowdStrike agent offline',           pillar: 'EDR',        count: 7  },
-      { severity: 'Low',    title: '4 Macs with macOS Application Firewall disabled',     pillar: 'Firewall',   count: 4  },
-      { severity: 'Low',    title: '3 Macs not checked in to Kandji for >14 days',        pillar: 'MDM',        count: 3  },
-    ],
-  },
-
   manageengine: {
     id: 'manageengine',
     label: 'ManageEngine',
     shortLabel: 'ME',
     icon: Server,
-    deviceCount: 57,
-    platform: 'Mixed',
+    deviceCount: 235,
+    platform: 'Mixed (Windows & macOS)',
     lastAssessed: 'May 11, 2026 at 06:30 PM',
     pillars: [
-      { id: 'me_encrypt', label: 'Disk Encryption', score: 78, passing: 44, failing: 13, trend: '+1%',  positive: true,  color: 'amber',  icon: HardDrive,      description: 'Full-disk encryption coverage',          weight: 0.20 },
-      { id: 'me_av',      label: 'AV Protection',   score: 89, passing: 51, failing: 6,  trend: '+2%',  positive: true,  color: 'blue',   icon: Shield,         description: 'Antivirus & endpoint protection',        weight: 0.22 },
-      { id: 'me_fw',      label: 'Host Firewall',   score: 91, passing: 52, failing: 5,  trend: '→ 0%', positive: true,  color: 'sky',    icon: Flame,          description: 'Host-based firewall enforcement',        weight: 0.15 },
-      { id: 'me_patch',   label: 'OS Patching',     score: 71, passing: 41, failing: 16, trend: '-3%',  positive: false, color: 'amber',  icon: Download,       description: 'Patches via ManageEngine UEM',           weight: 0.22 },
-      { id: 'me_mfa',     label: 'MFA Enrollment',  score: 84, passing: 48, failing: 9,  trend: '+3%',  positive: true,  color: 'violet', icon: UserCheck,      description: 'Multi-factor authentication enrolled',   weight: 0.11 },
-      { id: 'me_comp',    label: 'MDM Compliance',  score: 88, passing: 50, failing: 7,  trend: '+1%',  positive: true,  color: 'green',  icon: ClipboardCheck, description: 'ManageEngine UEM policy compliance',     weight: 0.10 },
+      { id: 'me_encrypt', label: 'Disk Encryption', score: 90, passing: 211, failing: 24, trend: '+1%',  positive: true,  color: 'amber',  icon: HardDrive,      description: 'Full-disk encryption coverage (BitLocker & FileVault)', weight: 0.20 },
+      { id: 'me_av',      label: 'EDR / AV Protection', score: 94, passing: 222, failing: 13, trend: '+2%',  positive: true,  color: 'blue',   icon: Shield,         description: 'Antivirus & endpoint protection active', weight: 0.22 },
+      { id: 'me_fw',      label: 'Host Firewall',   score: 96, passing: 226, failing: 9,  trend: '→ 0%', positive: true,  color: 'sky',    icon: Flame,          description: 'Host-based firewall enforcement',        weight: 0.15 },
+      { id: 'me_patch',   label: 'OS Patching',     score: 79, passing: 185, failing: 50, trend: '-3%',  positive: false, color: 'amber',  icon: Download,       description: 'Patches via ManageEngine UEM',           weight: 0.22 },
+      { id: 'me_mfa',     label: 'MFA Enrollment',  score: 90, passing: 212, failing: 23, trend: '+3%',  positive: true,  color: 'violet', icon: UserCheck,      description: 'Multi-factor authentication enrolled',   weight: 0.11 },
+      { id: 'me_comp',    label: 'MDM Compliance',  score: 91, passing: 215, failing: 20, trend: '+1%',  positive: true,  color: 'green',  icon: ClipboardCheck, description: 'ManageEngine UEM policy compliance',     weight: 0.10 },
     ],
     risks: [
-      { severity: 'Critical', title: '16 mixed-OS devices missing critical security patches', pillar: 'Patching',   count: 16 },
-      { severity: 'High',     title: '13 devices without full-disk encryption enabled',       pillar: 'Encryption', count: 13 },
-      { severity: 'High',     title: '9 users without MFA configured in directory',           pillar: 'Identity',   count: 9  },
-      { severity: 'Medium',   title: '6 devices with antivirus protection inactive',          pillar: 'AV',         count: 6  },
-      { severity: 'Medium',   title: '5 devices with host firewall disabled',                 pillar: 'Firewall',   count: 5  },
-      { severity: 'Low',      title: '4 devices overdue for agent check-in (>10 days)',       pillar: 'MDM',        count: 4  },
+      { severity: 'Critical', title: '50 devices missing critical OS patches',                pillar: 'Patching',   count: 50 },
+      { severity: 'High',     title: '24 devices without full-disk encryption enabled',       pillar: 'Encryption', count: 24 },
+      { severity: 'High',     title: '23 users without MFA enrolled',                         pillar: 'Identity',   count: 23 },
+      { severity: 'Medium',   title: '13 endpoints with EDR / antivirus protection inactive', pillar: 'AV',         count: 13 },
+      { severity: 'Medium',   title: '9 devices with host firewall disabled',                 pillar: 'Firewall',   count: 9  },
+      { severity: 'Low',      title: '7 devices overdue for MDM check-in (>10 days)',         pillar: 'MDM',        count: 7  },
     ],
   },
 }
@@ -268,7 +242,6 @@ function sourceTabStyle(src: MDMSource, isActive: boolean): { tab: string; count
   switch (src) {
     case 'all':          return { tab: 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm', count: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400' }
     case 'intune':       return { tab: 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm', count: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400' }
-    case 'kandji':       return { tab: 'border-slate-500 bg-slate-100 text-slate-800 shadow-sm',   count: 'bg-slate-200 text-slate-700',   dot: 'bg-slate-500' }
     case 'manageengine': return { tab: 'border-lime-500 bg-lime-50 text-lime-700 shadow-sm',       count: 'bg-lime-100 text-lime-700',     dot: 'bg-lime-500'   }
   }
 }
@@ -506,7 +479,7 @@ function PillarDetailPanel({ pillar, onClose }: { pillar: Pillar; onClose: () =>
 
 // ─── Source Tab Bar ─────────────────────────────────────────────────────────────
 
-const SOURCES: MDMSource[] = ['all', 'intune', 'kandji', 'manageengine']
+const SOURCES: MDMSource[] = ['all', 'intune', 'manageengine']
 
 function SourceTabBar({ active, onChange }: { active: MDMSource; onChange: (s: MDMSource) => void }) {
   return (
@@ -566,7 +539,6 @@ export function SecurityPosturePage() {
   // Per-source accent for non-all sources
   const sourcePlatformBadge =
     activeSource === 'intune'       ? 'bg-orange-50 border-orange-200 text-orange-700' :
-    activeSource === 'kandji'       ? 'bg-slate-100 border-slate-200 text-slate-700'   :
     activeSource === 'manageengine' ? 'bg-lime-50 border-lime-200 text-lime-700'       : ''
 
   return (
@@ -596,7 +568,7 @@ export function SecurityPosturePage() {
       <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
         <Info className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
         <p className="text-[0.68rem] text-amber-800 leading-snug">
-          <span className="font-bold">Baseline estimates</span> — scores are derived from your fleet configuration. Kandji and Entra ID are connected for live data; Intune and ManageEngine figures are estimated from mock device data. Connect all integrations in Settings for fully live posture tracking.
+          <span className="font-bold">Baseline estimates</span> — scores are derived from your fleet configuration. Entra ID is connected for live data; Intune and ManageEngine figures are estimated from mock device data. Connect all integrations in Settings for fully live posture tracking.
         </p>
       </div>
 

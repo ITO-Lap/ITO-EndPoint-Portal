@@ -16,7 +16,6 @@ import {
   type DiagnosticDevice,
 } from '../data/mockDiagnostics.js'
 import { getIntuneDevices, isIntuneConfigured } from '../services/intune.js'
-import { getKandjiDevices, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import type { Device } from '../types.js'
 
@@ -28,20 +27,19 @@ let cachedDiagDevices: DiagnosticDevice[] = []
 let cachedRealDevices: Map<string, Device> = new Map()
 
 async function fetchAllDevices(): Promise<{ devices: DiagnosticDevice[]; real: Map<string, Device>; mock: boolean }> {
-  const anyConfigured = isIntuneConfigured() || isKandjiConfigured() || isManageEngineConfigured()
+  const anyConfigured = isIntuneConfigured() || isManageEngineConfigured()
 
   if (!anyConfigured) {
     return { devices: MOCK_DIAGNOSTIC_DEVICES, real: new Map(), mock: true }
   }
 
-  const [intuneRes, kandjiRes, meRes] = await Promise.allSettled([
+  const [intuneRes, meRes] = await Promise.allSettled([
     isIntuneConfigured()       ? getIntuneDevices()       : Promise.resolve([] as Device[]),
-    isKandjiConfigured()       ? getKandjiDevices()       : Promise.resolve([] as Device[]),
     isManageEngineConfigured() ? getManageEngineDevices() : Promise.resolve([] as Device[]),
   ])
 
   const allReal: Device[] = []
-  for (const r of [intuneRes, kandjiRes, meRes]) {
+  for (const r of [intuneRes, meRes]) {
     if (r.status === 'fulfilled') allReal.push(...r.value)
   }
 

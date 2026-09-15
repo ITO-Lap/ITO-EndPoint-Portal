@@ -296,8 +296,8 @@ function formatPolicyState(state: string): string {
 
 // Real per-policy compliance + configuration-profile evaluation state for one device.
 // Encodes state as a "— Compliant"/"— Non-Compliant" suffix on each name so the
-// existing appliedPolicies: string[] shape (shared with Kandji's plain blueprint
-// names) doesn't need a breaking type change — DeviceDetailPanel parses the suffix.
+// existing appliedPolicies: string[] shape (shared with ManageEngine's plain
+// profile names) doesn't need a breaking type change — DeviceDetailPanel parses the suffix.
 export async function getIntuneDevicePolicies(deviceId: string, cfg?: RuntimeIntuneConfig): Promise<string[]> {
   const config = cfg ?? getIntuneConfig()
   if (!config) throw new Error('Intune credentials not configured')

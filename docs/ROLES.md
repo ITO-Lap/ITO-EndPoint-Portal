@@ -27,7 +27,7 @@ The highest privilege level. Intended for IT Operations leads and platform owner
 **What they can do:**
 - Full access to every dashboard, page, and settings section
 - Create, modify, and delete compliance policies
-- Connect, configure, and disconnect all integrations (Intune, Kandji, ManageEngine, OpenAI)
+- Connect, configure, and disconnect all integrations (Intune, ManageEngine, OpenAI)
 - View, copy, and rotate API keys
 - Manage all user accounts and assign roles
 - Trigger and configure automated runbooks

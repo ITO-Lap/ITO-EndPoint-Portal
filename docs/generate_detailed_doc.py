@@ -78,7 +78,7 @@ def cover_banner():
     p2.runs[0].font.size = Pt(13); p2.runs[0].font.color.rgb = RGBColor(0xA8,0xC4,0xF0)
     p3 = c.add_paragraph(
         "Comprehensive guide covering every module, connector, feature comparison, "
-        "and advantage analysis — Kandji · Intune · ManageEngine · Entra ID · IRU")
+        "and advantage analysis — Intune · ManageEngine · Entra ID · IRU")
     p3.runs[0].font.size = Pt(10); p3.runs[0].font.color.rgb = RGBColor(0xA8,0xC4,0xF0)
     doc.add_paragraph()
 
@@ -189,14 +189,14 @@ cover_banner()
 # ── SECTION 1: ENDPOINT MANAGEMENT ───────────────────────────────────────────
 section_bar("Section 1 — Endpoint Management", BLUE)
 body("The Endpoint Management section aggregates device data from all connected MDM sources "
-     "(Kandji, Microsoft Intune, ManageEngine). Each connector surfaces its own device inventory, "
+     "(Microsoft Intune, ManageEngine). Each connector surfaces its own device inventory, "
      "compliance state, security controls, and automation rules — all accessible from a unified sidebar.", space_after=8)
 
-# ── 1.1 Mac Devices (Kandji) ──────────────────────────────────────────────────
-sub_section("1.1  Mac Devices — Kandji Connector", BLUE)
-body("The Mac Devices page is powered by the Kandji MDM integration. It is the primary hub for "
-     "managing all Apple macOS devices across the fleet — from device compliance and app enforcement "
-     "to blueprint policies and fleet-wide reporting.")
+# ── 1.1 Mac Devices (ManageEngine) ────────────────────────────────────────────
+sub_section("1.1  Mac Devices — ManageEngine Connector", BLUE)
+body("The Mac Devices page is powered by the ManageEngine MDM integration. It is the primary hub for "
+     "managing all Apple macOS devices across the fleet — from device compliance and app inventory "
+     "to configuration profiles and fleet-wide reporting.")
 
 h3("Tabs & Features")
 
@@ -209,7 +209,7 @@ for i, (f, d) in enumerate([
     ("User",              "Assigned user — name and email"),
     ("Model",             "Hardware model (MacBook Pro, MacBook Air, Mac mini, Mac Studio, iMac, Mac Pro)"),
     ("macOS Version",     "Current OS version installed on device"),
-    ("Blueprint / Policy","Kandji blueprint or configuration profile applied to the device"),
+    ("Policy / Profile",  "ManageEngine configuration profile applied to the device"),
     ("Last Check-in",     "Relative timestamp with colour dot: green=today, lime=1-2d, amber=3-6d, red=7+d"),
     ("FileVault",         "Encryption status badge — Encrypted / Not Encrypted / Unknown"),
     ("Compliance",        "Compliant / Warning / Non-Compliant badge with source-specific logic"),
@@ -222,21 +222,18 @@ for i, (f, d) in enumerate([
 
 doc.add_paragraph()
 h3("Tab 2 — Applications", BLUE)
-body("Tracks every app in the Kandji library across two sub-views: Inventory (installed on devices) "
-     "and Library (configured enforcement policies).")
+body("Shows the real per-device installed application inventory reported by ManageEngine "
+     "(there is no separate app-library/blueprint catalog — ManageEngine exposes installed apps "
+     "and policy/profile strings per device, not a central enforcement library).")
 t2 = feature_table("Column / Filter", "Detail", BLUE)
 for i, (f, d) in enumerate([
-    ("App Name",          "Display name of the application or script"),
-    ("Category",          "Auto App · VPP App · Custom App · Profile · Script · Web App"),
-    ("Enforcement",       "Install Automatically · Audit & Enforce · Self Service"),
-    ("Blueprint",         "Which Kandji blueprint enforces this app"),
-    ("Status",            "Active / Inactive deployment state"),
-    ("Category Filter",   "Filter by app type: Auto App, VPP, Custom, Profile, Script, Web"),
-    ("Status Filter",     "Show All / Active / Inactive apps"),
+    ("App Name",          "Display name of the installed application"),
+    ("Version",           "Installed version number"),
+    ("Bundle ID",         "macOS bundle identifier"),
+    ("Status",            "Installed / Failed / Pending deployment state"),
+    ("Search",            "Full text search across app name"),
+    ("Status Filter",     "Show All / Installed / Failed / Pending apps"),
     ("Export CSV",        "Download full app inventory as comma-separated file"),
-    ("View Script",       "Opens a modal showing the raw bash/script content"),
-    ("Download Script",   "Generates a pre-filled bash template for offline use"),
-    ("Add App Modal",     "Form: app name, category, enforcement type — persisted in localStorage"),
 ]): feature_row(t2, f, d, i)
 
 doc.add_paragraph()
@@ -247,18 +244,18 @@ for i, (f, d) in enumerate([
     ("FileVault",         "Full-disk encryption status — Encrypted / Not Encrypted"),
     ("EDR Agent",         "CrowdStrike Falcon agent presence and health"),
     ("Firewall",          "macOS Application Firewall enabled / disabled"),
-    ("Applied Policies",  "Count of Kandji profiles/blueprints applied to the device"),
+    ("Applied Policies",  "Count of ManageEngine profiles applied to the device"),
     ("Risk Score",        "Aggregated risk level: Low / Medium / High / Critical"),
     ("Last Check-in",     "Time since last MDM contact — used to determine staleness"),
 ]): feature_row(t3, f, d, i)
 
 doc.add_paragraph()
 h3("Tab 4 — Automation", BLUE)
-body("Kandji-specific automation rules that trigger on device events and route actions to Jira, Slack, or runbooks.")
+body("Mac fleet automation rules that trigger on device events and route actions to Jira, Slack, or runbooks.")
 for rule, desc in [
     ("FileVault Off Alert",      "Triggers when FileVault encryption is disabled — sends Slack + creates Jira ticket"),
-    ("Blueprint Drift Detection","Fires when a device's applied blueprint diverges from its assigned policy"),
-    ("Stale Device Quarantine",  "Quarantine alert after 30+ days without a Kandji check-in"),
+    ("Policy Drift Detection",   "Fires when a device's applied configuration profile diverges from its assigned policy"),
+    ("Stale Device Quarantine",  "Quarantine alert after 30+ days without a ManageEngine check-in"),
     ("CrowdStrike Health Alert", "Notifies if EDR agent goes offline or reports reduced functionality"),
     ("Weekly Mac Fleet Report",  "Scheduled rule generating a patch & compliance summary each Monday"),
 ]: bullet(f"{rule} — {desc}")
@@ -273,7 +270,6 @@ for report, desc in [
     ("macOS Version Mix",     "Version distribution with upgrade eligibility highlighted"),
     ("App Currency",          "App update state: Current / Update Available / Outdated / Failed"),
     ("Stale Devices",         "Devices by days-since-check-in bracket"),
-    ("Blueprint Policy Rate", "Percentage of devices with active blueprint assignments"),
     ("IRU Patch Report",      "Full Infrastructure & Remote Users patch report — see Section 1.3"),
     ("Fleet KPI Dashboard",   "18-metric KPI grid — see Mac Fleet Reports, Section 5.4"),
 ]: bullet(f"{report} — {desc}")
@@ -350,8 +346,8 @@ divider()
 # ── 1.3 IRU Patch Report ──────────────────────────────────────────────────────
 sub_section("1.3  IRU — Infrastructure & Remote Users Patch Report", PURPLE)
 body("IRU (Infrastructure & Remote Users) is a specialised macOS patch-compliance and "
-     "device-staleness reporting module built on Kandji data. It is not a separate connector — "
-     "it is a dedicated analytical report accessible from KandjiMacPage → Reports tab, "
+     "device-staleness reporting module built on ManageEngine data. It is not a separate connector — "
+     "it is a dedicated analytical report accessible from the Mac Devices page → Reports tab, "
      "and as a standalone full-page view.")
 
 h3("Purpose")
@@ -363,7 +359,7 @@ h3("Patch Tiers")
 t5 = feature_table("Tier", "Description & Action", PURPLE)
 for i, (tier, desc) in enumerate([
     ("Current (26.5)",          "Latest macOS Tahoe — no action required"),
-    ("Minor Patch (26.4 / 26.4.1)", "One incremental patch behind — deploy Kandji nudge to upgrade"),
+    ("Minor Patch (26.4 / 26.4.1)", "One incremental patch behind — deploy a ManageEngine nudge to upgrade"),
     ("Update Required (26.x)",  "Multiple minor versions behind — investigate dev/beta channel membership"),
     ("Sequoia (15.x)",          "Outdated major release — enforce upgrade path to 26.x immediately"),
     ("Sonoma (14.x)",           "2–3 releases behind — direct outreach required, force upgrade policy"),
@@ -402,7 +398,7 @@ for p, action in [
     ("P1", "Investigate abandoned devices against HR records — confirm offboarded vs lost"),
     ("P1", "Remediate EOL / severely outdated devices with direct user outreach and forced upgrade policy"),
     ("P2", "Push macOS Tahoe (26.x) upgrade to all Sequoia-era devices using region-aware rollout"),
-    ("P2", "Drive minor-patch devices from 26.4 to 26.5 using Kandji managed software update"),
+    ("P2", "Drive minor-patch devices from 26.4 to 26.5 using ManageEngine managed software update"),
     ("P3", "Ensure all untagged devices receive a region label for accurate regional reporting"),
     ("P3", "Evaluate early-channel (26.0 / 26.2) devices — likely developer or beta testers"),
     ("P4", "Establish a 14-day stale check-in SLA enforced by the Automation Engine"),
@@ -410,12 +406,12 @@ for p, action in [
 ]: bullet(f"[{p}] {action}")
 
 doc.add_paragraph()
-h3("IRU vs Standard Kandji Reports — Key Differences")
+h3("IRU vs Standard ManageEngine Reports — Key Differences")
 comparison_table(
-    ["Aspect", "IRU Patch Report", "Standard Kandji Reports Tab"],
+    ["Aspect", "IRU Patch Report", "Standard ManageEngine Reports Tab"],
     [
         ["Scope",        "macOS patch currency + device staleness only", "Broad fleet health across all metric types"],
-        ["Segmentation", "Regional breakdown (HQ / North / South / East / West / Remote)", "Model, OS version, blueprint-based"],
+        ["Segmentation", "Regional breakdown (HQ / North / South / East / West / Remote)", "Model, OS version, policy-based"],
         ["Stale Tracking","4-tier staleness register (Active → Stale → Critical → Abandoned)", "Basic last-check-in column"],
         ["Patch Tiers",  "6 named tiers with explicit risk and action per tier", "Binary: patched / not patched"],
         ["Recommendations","8 prioritised (P1-P4) admin action items", "None — data only"],
@@ -427,44 +423,44 @@ comparison_table(
 
 divider()
 
-# ── 1.4 Kandji vs Intune ───────────────────────────────────────────────────────
-sub_section("1.4  Kandji vs Intune — Feature & Advantage Comparison", GREEN)
-body("Both Kandji and Intune are MDM platforms, but they serve fundamentally different device "
+# ── 1.4 ManageEngine vs Intune ─────────────────────────────────────────────────
+sub_section("1.4  ManageEngine vs Intune — Feature & Advantage Comparison", GREEN)
+body("Both ManageEngine and Intune are MDM platforms, but they serve fundamentally different device "
      "ecosystems. Understanding where each excels helps IT teams decide policy priorities.")
 
 comparison_table(
-    ["Feature / Metric", "Kandji (Mac)", "Intune (Windows / Mobile)", "Winner"],
+    ["Feature / Metric", "ManageEngine (Mac)", "Intune (Windows / Mobile)", "Winner"],
     [
         ["Primary Platform",       "macOS (M-series & Intel)",  "Windows 10/11, iOS, Android", "Platform-specific"],
-        ["Disk Encryption",        "FileVault (94% pass rate)", "BitLocker (82% pass rate)",    "Kandji"],
-        ["EDR / Antivirus",        "CrowdStrike Falcon (96%)",  "Microsoft Defender (91%)",     "Kandji"],
-        ["Firewall Compliance",    "macOS Firewall (98%)",      "Windows Firewall (95%)",        "Kandji"],
-        ["OS Patch Compliance",    "macOS (81%)",               "Windows Update (68%)",          "Kandji"],
-        ["Identity / MFA",         "Okta MFA (92%)",            "Azure AD MFA (87%)",            "Kandji"],
-        ["Overall Compliance",     "93% avg",                   "90% avg",                       "Kandji"],
-        ["Policy Engine",          "Blueprints (per-group)",    "Compliance Policies (per-user)","Comparable"],
-        ["App Deployment",         "Auto App / VPP / Custom",   "Win32 / LOB / Store apps",      "Comparable"],
-        ["Patch Reporting",        "IRU (6-tier + regional)",   "Windows Update report (binary)","Kandji"],
+        ["Disk Encryption",        "FileVault (94% pass rate)", "BitLocker (82% pass rate)",    "ManageEngine"],
+        ["EDR / Antivirus",        "CrowdStrike Falcon (96%)",  "Microsoft Defender (91%)",     "ManageEngine"],
+        ["Firewall Compliance",    "macOS Firewall (98%)",      "Windows Firewall (95%)",        "ManageEngine"],
+        ["OS Patch Compliance",    "macOS (81%)",               "Windows Update (68%)",          "ManageEngine"],
+        ["Identity / MFA",         "Okta MFA (92%)",            "Azure AD MFA (87%)",            "ManageEngine"],
+        ["Overall Compliance",     "93% avg",                   "90% avg",                       "ManageEngine"],
+        ["Policy Engine",          "Configuration profiles (per-device)", "Compliance Policies (per-user)","Comparable"],
+        ["App Deployment",         "Per-device installed apps", "Win32 / LOB / Store apps",      "Comparable"],
+        ["Patch Reporting",        "IRU (6-tier + regional)",   "Windows Update report (binary)","ManageEngine"],
         ["Mobile Device Support",  "None (Mac only)",           "iOS + Android full MDM",        "Intune"],
         ["Windows Management",     "None",                      "Full GPO + Intune policy stack","Intune"],
         ["Cost Model",             "Per-device (Apple-focused)","Per-user (cross-platform)",     "Context-dependent"],
-        ["Graph API Integration",  "Kandji REST API",           "Microsoft Graph API (rich)",    "Intune"],
+        ["Graph API Integration",  "ManageEngine REST API",     "Microsoft Graph API (rich)",    "Intune"],
         ["Identity Provider",      "Okta / SAML",               "Azure AD / Entra ID",           "Context-dependent"],
     ],
     [5.5, 4, 4, 3]
 )
 
-advantage_box("Kandji Advantages over Intune", [
+advantage_box("ManageEngine Advantages over Intune", [
     "Higher compliance rates across all macOS security pillars (encryption, EDR, firewall, patch)",
     "Native Apple silicon optimisation — M1/M2/M3 support without legacy Windows agent overhead",
-    "Blueprint-based policy model maps directly to Apple's MDM framework — fewer edge cases",
+    "Per-device configuration profile model maps directly to Apple's MDM framework — fewer edge cases",
     "IRU Patch Report provides 6-tier patch segmentation vs Intune's binary compliant/non-compliant",
     "CrowdStrike Falcon integration beats Windows Defender on detection telemetry depth",
     "Okta MFA integration provides identity federation beyond Microsoft's ecosystem",
-    "Kandji check-in frequency is more reliable on macOS than Intune's Windows MDM sync cycle",
+    "ManageEngine check-in frequency is more reliable on macOS than Intune's Windows MDM sync cycle",
 ], GREEN)
 
-advantage_box("Intune Advantages over Kandji", [
+advantage_box("Intune Advantages over ManageEngine", [
     "Full Windows 10/11 management — GPO migration, software centre, Win32 app deployment",
     "iOS and Android MDM in one platform — eliminates need for a separate mobile MDM",
     "Microsoft Graph API is the richest identity + device data source in the ecosystem",
@@ -594,22 +590,22 @@ body("Organisation-wide security health dashboard with per-source pillar scoring
 
 h3("Source Tabs (Device Counts)")
 for src, count in [("All Sources", "447 devices"), ("Intune", "212 Windows devices"),
-                   ("Kandji", "178 macOS devices"), ("ManageEngine", "57 mixed-OS devices")]:
+                   ("ManageEngine", "235 mixed-OS devices (178 macOS + 57 other)")]:
     bullet(f"{src} — {count}")
 
 doc.add_paragraph()
 h3("Security Pillars per Source")
 comparison_table(
-    ["Pillar", "All Sources", "Intune (Windows)", "Kandji (macOS)", "ManageEngine"],
+    ["Pillar", "All Sources", "Intune (Windows)", "ManageEngine (macOS + cross-platform)"],
     [
-        ["Encryption / BitLocker / FileVault", "87%", "82% BitLocker", "94% FileVault", "78%"],
-        ["EDR / Antivirus",                    "93%", "91% Defender",  "96% CrowdStrike","89% AV"],
-        ["Firewall",                           "96%", "95% Win FW",    "98% macOS FW",   "91% Host FW"],
-        ["OS Patching",                        "74%", "68% Win Update","81% macOS Upd",  "71% ME Patch"],
-        ["Identity / MFA",                     "89%", "87% Azure MFA", "92% Okta MFA",   "84% MFA"],
-        ["MDM Compliance",                     "91%", "90% Intune",    "93% Kandji",     "88% ME"],
+        ["Encryption / BitLocker / FileVault", "87%", "82% BitLocker", "94% FileVault"],
+        ["EDR / Antivirus",                    "93%", "91% Defender",  "96% CrowdStrike"],
+        ["Firewall",                           "96%", "95% Win FW",    "98% macOS FW"],
+        ["OS Patching",                        "74%", "68% Win Update","81% macOS Upd"],
+        ["Identity / MFA",                     "89%", "87% Azure MFA", "92% Okta MFA"],
+        ["MDM Compliance",                     "91%", "90% Intune",    "93% ManageEngine"],
     ],
-    [5, 3, 4, 4, 3.5]
+    [5, 3, 4, 5]
 )
 
 h3("CIS Controls Coverage (Organisation-level)")
@@ -839,14 +835,14 @@ divider()
 sub_section("5.3  Diagnostics", AMBER)
 body("Health-check engine that validates integration connectivity and device-level control state.")
 for tab, desc in [
-    ("Infrastructure",  "Integration status per connector (Intune · Kandji · ManageEngine · Entra ID · Slack · Jira): connectivity, API latency, last successful sync"),
+    ("Infrastructure",  "Integration status per connector (Intune · ManageEngine · Entra ID · Slack · Jira): connectivity, API latency, last successful sync"),
     ("Device-level",    "Per-device diagnostic: disk encryption · OS patches · security controls (EDR, firewall) · network connectivity"),
     ("Fleet",           "Aggregated health: Healthy / Warning / Critical / Unknown counts per control category — confidence score per check"),
 ]: bullet(f"{tab} — {desc}")
 
 divider()
 sub_section("5.4  Mac Fleet Reports — 18+ KPI Dashboard", AMBER)
-body("Dedicated macOS fleet health dashboard powered by Kandji data, with AI insights, "
+body("Dedicated macOS fleet health dashboard powered by ManageEngine data, with AI insights, "
      "drill-down modals, and Excel export per KPI.")
 
 h3("AI Insights Feature")
@@ -889,7 +885,7 @@ sub_section("6.1  Settings", NAVY)
 comparison_table(
     ["Category", "What You Can Configure"],
     [
-        ["Integrations",          "Intune · Entra ID · Kandji · ManageEngine · Jira · Confluence · Slack — API credentials, connection status, test connection"],
+        ["Integrations",          "Intune · Entra ID · ManageEngine · Jira · Confluence · Slack — API credentials, connection status, test connection"],
         ["Notification Preferences","Alert thresholds by severity · Delivery channels (in-app / Slack / email) · Quiet hours"],
         ["Account Settings",      "User role assignment (Global Admin / IT Admin / Helpdesk / End User) · API key management · Session management"],
         ["Data & Privacy",        "Log retention policies · Data export · Compliance settings (GDPR / SOC 2 flags)"],

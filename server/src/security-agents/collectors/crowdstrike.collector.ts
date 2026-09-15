@@ -17,7 +17,7 @@ export class CrowdStrikeCollector implements ISecurityAgentCollector {
   getAgentInfo(device: Device, apps: AppStatus[]): SecurityAgentInfo {
     const app = findAppByNamePattern(apps, NAME_PATTERN)
     if (!app) {
-      // Some connectors (e.g. Kandji) surface Falcon detection via a profile
+      // Some connectors surface Falcon detection via a profile
       // name mapped onto Device.antivirusStatus rather than an installed-app
       // record — treat that as installed-but-unverified (Warning), never
       // fabricate a version/health we don't have.

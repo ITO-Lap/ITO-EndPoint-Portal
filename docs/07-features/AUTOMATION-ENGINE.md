@@ -87,7 +87,7 @@ Multiple actions can be chained per rule, executed in sequence.
 
 Each rule can be scoped by:
 - **Platform:** Windows / macOS / Linux / All
-- **MDM Source:** Intune / Kandji / ManageEngine / All
+- **MDM Source:** Intune / ManageEngine / All
 - **Severity:** Low / Medium / High / Critical / All
 - **Compliance State:** Non-Compliant / Warning / All
 

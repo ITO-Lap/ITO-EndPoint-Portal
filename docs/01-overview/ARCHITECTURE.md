@@ -27,13 +27,13 @@
                     │  /api/ai                       │
                     └───────────┬───────────────────┘
                                 │
-          ┌─────────────────────┼──────────────────────┐
-          ▼                     ▼                       ▼
-  ┌───────────────┐   ┌──────────────────┐   ┌──────────────────┐
-  │ Microsoft     │   │    Kandji MDM    │   │  ManageEngine    │
-  │ Intune        │   │  (Bearer token)  │   │  (API key)       │
-  │ (Graph API)   │   └──────────────────┘   └──────────────────┘
-  └───────────────┘
+          ┌─────────────────────┐
+          ▼                     ▼
+  ┌───────────────┐   ┌──────────────────────────┐
+  │ Microsoft     │   │  ManageEngine             │
+  │ Intune        │   │  (API key; Windows,       │
+  │ (Graph API)   │   │  cross-platform, macOS)   │
+  └───────────────┘   └──────────────────────────┘
           ▼ (any route: POST /api/ai/*)
   ┌───────────────┐
   │ OpenAI API    │
@@ -91,12 +91,12 @@ Dashboard renders device with open issue
 ## Integration credential flow
 
 ```
-Settings page → user fills in Intune/Kandji/ManageEngine credentials
+Settings page → user fills in Intune/ManageEngine credentials
 → POST /api/integrations/:id/credentials { fields: {...} }
-  [server] → setIntuneConfig() / setKandjiConfig() / setManageEngineConfig()
+  [server] → setIntuneConfig() / setManageEngineConfig()
            → stored in integrationStore (in-memory, resets on server restart)
 → POST /api/integrations/:id/sync
-  [server] → calls getIntuneDevices() / getKandjiDevices() / getManageEngineDevices()
+  [server] → calls getIntuneDevices() / getManageEngineDevices()
            → records fetch result with deviceCount + latencyMs
 → GET /api/integrations/status
   [server] → returns per-source health snapshot
@@ -129,7 +129,7 @@ GET /api/devices/stats
 
 GET /api/devices?q=query
   if (Intune configured) → getIntuneDevices()
-  if (Kandji configured) → getKandjiDevices()
+  if (ManageEngine configured) → getManageEngineDevices()
   ...
   if (nothing configured) → filter mockDevices
   → response includes `mock: true` flag

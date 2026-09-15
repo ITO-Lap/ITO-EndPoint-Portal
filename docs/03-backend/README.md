@@ -33,8 +33,7 @@ server/src/
 │
 ├── services/
 │   ├── intune.ts               Microsoft Graph API client
-│   ├── kandji.ts               Kandji REST API client
-│   ├── manageEngine.ts         ManageEngine REST API client
+│   ├── manageEngine.ts         ManageEngine REST API client (Windows, cross-platform, and macOS devices)
 │   └── openai.ts               OpenAI client (device analysis + chat)
 │
 ├── middleware/

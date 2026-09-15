@@ -50,8 +50,7 @@ docs/
 - [Intune Audit Logs](04-integrations/INTUNE-AUDIT-LOGS.md)
 - [Intune Scripts & Configurations](04-integrations/INTUNE-SCRIPTS-CONFIGURATIONS.md)
 - [Security Policies](04-integrations/SECURITY-POLICIES.md) ← **New**
-- [Kandji (macOS MDM)](04-integrations/KANDJI.md)
-- [ManageEngine](04-integrations/MANAGEENGINE.md)
+- [ManageEngine (macOS + cross-platform MDM)](04-integrations/MANAGEENGINE.md)
 - [Microsoft Entra ID](04-integrations/ENTRA.md)
 - [Slack](04-integrations/SLACK.md)
 - [Jira & Confluence](04-integrations/JIRA.md)
@@ -59,7 +58,7 @@ docs/
 ### Feature deep dives
 - [Dashboard](07-features/DASHBOARD.md)
 - [Device Lookup](07-features/DEVICE-LOOKUP.md)
-- [Mac Devices (Kandji)](07-features/MAC-DEVICES.md)
+- [Mac Devices (ManageEngine)](07-features/MAC-DEVICES.md)
 - [Mac Fleet Reports](07-features/MAC-FLEET-REPORTS.md) ← **New**
 - [Intune / Windows / ManageEngine Pages](07-features/ENDPOINT-PAGES.md) ← **New**
 - [Automation Engine](07-features/AUTOMATION-ENGINE.md) ← **New**
@@ -79,7 +78,7 @@ docs/
 |---|---|
 | **Type** | Enterprise IT endpoint management dashboard |
 | **Users** | Global Admin · IT Admin · Helpdesk |
-| **MDM Sources** | Microsoft Intune · Kandji · ManageEngine |
+| **MDM Sources** | Microsoft Intune · ManageEngine |
 | **Identity** | Microsoft Entra ID (Azure AD) |
 | **Comms** | Slack (audit logs + notifications) |
 | **ITSM** | Jira · Confluence |
@@ -97,7 +96,7 @@ docs/
 | Page | Route key | Description |
 |---|---|---|
 | Device Lookup | `Device Lookup` | Cross-MDM device search + drill-down |
-| Mac Devices | `Mac Devices` | Kandji macOS fleet — devices, apps, security, automation, reports, IRU patch, fleet reports |
+| Mac Devices | `Mac Devices` | ManageEngine macOS fleet — devices, apps, security, automation, reports, IRU patch, fleet reports |
 | Intune Devices | `Intune Devices` | Microsoft Intune Windows/cross-platform device dashboard |
 | Windows Devices | `Windows Devices` | All Windows devices across Intune + ManageEngine |
 | ManageEngine Devices | `ManageEngine Devices` | ManageEngine endpoint + patch management |

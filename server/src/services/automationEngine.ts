@@ -98,7 +98,6 @@ function deviceMatchesConditions(device: Device, conditions: AutomationRule['con
     const src = device.managementSource.toLowerCase()
     const want = conditions.source.toLowerCase()
     if (want === 'intune'        && !src.includes('intune'))        return false
-    if (want === 'kandji'        && !src.includes('kandji'))        return false
     if (want === 'manageengine'  && !src.includes('manageengine'))  return false
   }
 
@@ -346,9 +345,9 @@ function generateFallbackScriptLocal(device: Device): string {
   const enc = (device.encryptionStatus ?? '').toLowerCase()
   if (device.platform === 'macOS') {
     if (enc === 'off' || enc === 'disabled') {
-      return `#!/bin/zsh\n# FileVault Remediation — ${device.deviceName}\nset -euo pipefail\necho "[INFO] Triggering FileVault enforcement..."\n/usr/bin/profiles -N 2>/dev/null || true\n/usr/local/bin/kandji run 2>/dev/null || true\necho "[DONE] MDM enforcement triggered."\nexit 0`
+      return `#!/bin/zsh\n# FileVault Remediation — ${device.deviceName}\nset -euo pipefail\necho "[INFO] Triggering FileVault enforcement..."\n/usr/bin/profiles -N 2>/dev/null || true\necho "[DONE] MDM enforcement triggered."\nexit 0`
     }
-    return `#!/bin/zsh\n# Compliance Remediation — ${device.deviceName}\nset -euo pipefail\necho "[INFO] Triggering Kandji compliance check..."\n/usr/local/bin/kandji run\necho "[DONE] Compliance check triggered."\nexit 0`
+    return `#!/bin/zsh\n# Compliance Remediation — ${device.deviceName}\nset -euo pipefail\necho "[INFO] Triggering MDM profile refresh..."\n/usr/bin/profiles -N\necho "[DONE] Compliance check triggered."\nexit 0`
   }
   return `# Compliance Remediation — ${device.deviceName}\n$ErrorActionPreference = "Stop"\nWrite-Output "[INFO] Triggering Intune sync on $env:COMPUTERNAME"\nStart-Process "C:\\Program Files (x86)\\Microsoft Intune Management Extension\\Microsoft.Management.Services.IntuneWindowsAgent.exe"\nWrite-Output "[DONE] Sync triggered."\nexit 0`
 }

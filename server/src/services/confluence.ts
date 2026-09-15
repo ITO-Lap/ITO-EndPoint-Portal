@@ -24,14 +24,14 @@ export interface ConfluencePage {
 }
 
 const MOCK_ARTICLES: ConfluencePage[] = [
-  { id: '1', title: 'FileVault Setup Guide for macOS',            space: 'IT',  url: '#', excerpt: 'Step-by-step guide to enable FileVault encryption on managed macOS devices using Kandji.', lastModified: '2026-04-01' },
+  { id: '1', title: 'FileVault Setup Guide for macOS',            space: 'IT',  url: '#', excerpt: 'Step-by-step guide to enable FileVault encryption on managed macOS devices using ManageEngine.', lastModified: '2026-04-01' },
   { id: '2', title: 'BitLocker Deployment via Intune',            space: 'IT',  url: '#', excerpt: 'How to enforce BitLocker encryption on Windows devices using Microsoft Intune compliance policies.', lastModified: '2026-03-20' },
   { id: '3', title: 'Endpoint Compliance Remediation Playbook',   space: 'SEC', url: '#', excerpt: 'Comprehensive guide for IT teams to remediate common compliance issues across managed endpoints.', lastModified: '2026-04-15' },
   { id: '4', title: 'macOS Security Hardening Checklist',         space: 'SEC', url: '#', excerpt: 'Security hardening steps for corporate macOS devices: firewall, SIP, Gatekeeper, and XProtect.', lastModified: '2026-03-10' },
   { id: '5', title: 'OS Update Management Best Practices',        space: 'IT',  url: '#', excerpt: 'Guidance on enforcing and monitoring OS updates across Windows and macOS device fleets.', lastModified: '2026-04-22' },
   { id: '6', title: 'Device Check-In Troubleshooting',            space: 'IT',  url: '#', excerpt: 'Diagnosing and resolving devices that fail to check in with MDM after enrollment.', lastModified: '2026-02-28' },
-  { id: '7', title: 'Antivirus Deployment and Verification',      space: 'SEC', url: '#', excerpt: 'Deploying, verifying, and remediating missing AV agents across Intune and Kandji managed devices.', lastModified: '2026-04-10' },
-  { id: '8', title: 'Compliance Policy Configuration Reference',   space: 'IT',  url: '#', excerpt: 'Reference guide for configuring compliance policies in Intune, Kandji, and ManageEngine.', lastModified: '2026-03-30' },
+  { id: '7', title: 'Antivirus Deployment and Verification',      space: 'SEC', url: '#', excerpt: 'Deploying, verifying, and remediating missing AV agents across Intune and ManageEngine managed devices.', lastModified: '2026-04-10' },
+  { id: '8', title: 'Compliance Policy Configuration Reference',   space: 'IT',  url: '#', excerpt: 'Reference guide for configuring compliance policies in Intune and ManageEngine.', lastModified: '2026-03-30' },
 ]
 
 export async function searchConfluencePages(query: string): Promise<ConfluencePage[]> {

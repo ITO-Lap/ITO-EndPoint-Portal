@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { RefreshCw, Wifi, WifiOff, Server, Cloud, Settings, Hash, BookOpen, MessageSquare, ExternalLink, X, AlertCircle, FileText, CheckCircle } from 'lucide-react'
+import { RefreshCw, Wifi, WifiOff, Server, Settings, Hash, BookOpen, MessageSquare, ExternalLink, X, AlertCircle, FileText, CheckCircle } from 'lucide-react'
 import { api } from '../../api'
 import type { JiraIssue, ConfluencePage } from '../../api'
 
 interface SourceCount {
   intune: number
-  kandji: number
   manageEngine: number
 }
 
@@ -43,18 +42,6 @@ const SOURCES: SourcePill[] = [
     pillText: 'text-orange-700',
     dotColor: 'bg-orange-500',
     navigateTo: 'Intune Devices',
-  },
-  {
-    id: 'kandji',
-    label: 'Kandji',
-    shortLabel: 'Kandji',
-    Icon: Cloud,
-    iconColor: 'text-lime-500',
-    pillBg: 'bg-lime-50',
-    pillBorder: 'border-lime-200',
-    pillText: 'text-lime-700',
-    dotColor: 'bg-lime-500',
-    navigateTo: 'Mac Devices',
   },
   {
     id: 'manageEngine',

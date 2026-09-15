@@ -30,7 +30,6 @@ Open `server/.env`. For a fully mocked dev experience, **leave everything blank*
 
 To enable a real integration, see the integration guides:
 - [Microsoft Intune](../04-integrations/INTUNE.md)
-- [Kandji](../04-integrations/KANDJI.md)
 - [ManageEngine](../04-integrations/MANAGEENGINE.md)
 - [OpenAI](../04-integrations/OPENAI.md)
 
@@ -49,7 +48,6 @@ You should see:
 [0] ➜  Local: http://localhost:5173/
 [1] Server listening on http://localhost:4000
 [1]   Intune:       — mock data
-[1]   Kandji:       — mock data
 [1]   ManageEngine: — mock data
 [1]   OpenAI:       — disabled
 ```

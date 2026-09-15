@@ -29,7 +29,7 @@ Your browser
   listening only on 127.0.0.1:4000 (not reachable from outside directly)
      │
      ├─ if it's a page request → sends back the React app
-     └─ if it's a /api/... request → talks to Intune/Kandji/Entra/OpenAI/Postgres
+     └─ if it's a /api/... request → talks to Intune/ManageEngine/Entra/OpenAI/Postgres
 ```
 
 Why put IIS in front at all, instead of just exposing the Node process
@@ -59,7 +59,7 @@ Windows Server that your infrastructure/security team will expect to see.
   right-click the Start button → *Windows Terminal (Admin)* or *Windows
   PowerShell (Admin)*.
 - Network/firewall access to that server (RDP, or you're sitting at it).
-- The credentials for whatever integrations you want live (Intune, Kandji,
+- The credentials for whatever integrations you want live (Intune,
   ManageEngine, Entra, OpenAI, Postgres) — same as local dev, see
   [`docs/04-integrations/`](../04-integrations/). Without them the app runs
   fine on mock data.

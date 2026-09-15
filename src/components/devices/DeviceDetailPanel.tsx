@@ -58,8 +58,6 @@ function ComplianceBadge({ state }: { state: string }) {
 function SourcePill({ src }: { src: string }) {
   if (src === 'Microsoft Intune')
     return <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-semibold text-orange-700">Microsoft Intune</span>
-  if (src === 'Kandji')
-    return <span className="inline-flex rounded-full bg-lime-50 border border-lime-200 px-2.5 py-0.5 text-xs font-semibold text-lime-700">Kandji</span>
   return   <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-semibold text-orange-700">ManageEngine</span>
 }
 
@@ -386,8 +384,8 @@ function AppsTab({ d }: { d: ApiDevice }) {
   const [appsLoading, setAppsLoading] = useState(false)
   const [search, setSearch] = useState('')
 
-  // Lazy-fetch from server — Kandji stores apps separately; for other sources
-  // the endpoint returns what's available (mock data or live API).
+  // Lazy-fetch from server — the endpoint returns what's available for the
+  // device's management source (mock data or live API).
   // Only skip if the device already has app data bundled in the sync payload.
   useEffect(() => {
     if (d.apps && d.apps.length > 0) return   // already have data — no round-trip needed
@@ -602,7 +600,7 @@ function AppsTab({ d }: { d: ApiDevice }) {
 
 // Real per-policy state is encoded as a "— <State>" suffix (see server's
 // getIntuneDevicePolicies) so this shape stays a plain string[] shared with
-// Kandji's blueprint names, which carry no per-policy state at all.
+// ManageEngine's applied-profile names, which carry no per-policy state at all.
 type PolicyVerdict = 'pass' | 'fail' | 'neutral'
 
 function parsePolicyState(policy: string): { name: string; verdict: PolicyVerdict } {
@@ -670,8 +668,8 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
             <p className="text-sm text-slate-400 italic py-2">No policy assignment data available for this device.</p>
           ) : policies.map((policy, i) => {
             const parsed = parsePolicyState(policy)
-            // Sources with no real per-policy state (e.g. Kandji blueprint names)
-            // fall back to the coarse device-level policyFailed fuzzy-match.
+            // Sources with no real per-policy state (e.g. ManageEngine applied
+            // profile names) fall back to the coarse device-level policyFailed fuzzy-match.
             const verdict: PolicyVerdict = parsed.verdict !== 'neutral' ? parsed.verdict :
               (d.policyFailed && d.policyFailed !== 'None' &&
                 d.policyFailed.split(';').some(p => parsed.name.startsWith(p.trim().split('–')[0]?.trim() ?? '')))

@@ -1,9 +1,9 @@
 # Mac Devices
 
-> **Platform:** Kandji MDM · macOS  
+> **Platform:** ManageEngine MDM · macOS  
 > **Navigation:** Endpoint Management → Mac Devices
 
-The **Mac Devices** module is the central command center for managing your entire macOS fleet through Kandji. It surfaces real-time device health, FileVault encryption status, EDR coverage, compliance state, and managed application inventory — all in a single, structured interface.
+The **Mac Devices** module is the central command center for managing your entire macOS fleet through ManageEngine. It surfaces real-time device health, FileVault encryption status, EDR coverage, compliance state, and managed application inventory — all in a single, structured interface.
 
 ---
 
@@ -11,18 +11,17 @@ The **Mac Devices** module is the central command center for managing your entir
 
 1. [Overview Dashboard](#1-overview-dashboard)
 2. [Devices Tab](#2-devices-tab)
-3. [App Library Tab](#3-app-library-tab)
-4. [Security Tab](#4-security-tab)
-5. [Automation Tab](#5-automation-tab)
-6. [Reports Tab](#6-reports-tab)
-7. [Device Detail Panel](#7-device-detail-panel)
-   - [Overview](#71-overview-tab)
-   - [Hardware](#72-hardware-tab)
-   - [Network](#73-network-tab)
-   - [Security](#74-security-tab-1)
-   - [Apps](#75-apps-tab)
-   - [Compliance](#76-compliance-tab)
-8. [Device Lookup (Cross-Platform)](#8-device-lookup)
+3. [Security Tab](#3-security-tab)
+4. [Automation Tab](#4-automation-tab)
+5. [Reports Tab](#5-reports-tab)
+6. [Device Detail Panel](#6-device-detail-panel)
+   - [Overview](#61-overview-tab)
+   - [Hardware](#62-hardware-tab)
+   - [Network](#63-network-tab)
+   - [Security](#64-security-tab-1)
+   - [Apps](#65-apps-tab)
+   - [Compliance](#66-compliance-tab)
+7. [Device Lookup (Cross-Platform)](#7-device-lookup)
 
 ---
 
@@ -36,7 +35,7 @@ When you navigate to **Mac Devices**, the page greets you with a live summary ba
 
 | KPI | Description |
 |-----|-------------|
-| **Total Macs** | Total number of macOS devices managed via Kandji |
+| **Total Macs** | Total number of macOS devices managed via ManageEngine |
 | **FileVault On** | Percentage of devices with full-disk encryption enabled |
 | **EDR Active** | Percentage of devices running an active EDR agent (e.g., CrowdStrike) |
 | **Compliant** | Count of devices passing all MDM compliance checks |
@@ -50,8 +49,8 @@ When you navigate to **Mac Devices**, the page greets you with a live summary ba
 |---------|----------|
 | **← Dashboard** | Returns to the main ITO Endpoint dashboard |
 | **+ Add Device** | Opens a form to manually enroll a new macOS device |
-| **Refresh** | Re-fetches live device data from Kandji API |
-| **Subtitle** | Displays the data source — "Managed by Kandji — device, application & security reports" |
+| **Refresh** | Re-fetches live device data from the ManageEngine API |
+| **Subtitle** | Displays the data source — "Managed by ManageEngine — device, application & security reports" |
 
 ---
 
@@ -101,7 +100,7 @@ Quick toggle filters across three states:
 | **User** | Assigned user email (truncated). "Unassigned" if no user is mapped |
 | **Model** | Hardware model name (e.g., MacBook Pro, MacBook Air) |
 | **macOS** | OS version running on the device |
-| **Blueprint / Policy** | Kandji Blueprint(s) applied. If multiple, shows the first + count badge |
+| **Policy / Profile** | ManageEngine configuration profile(s) applied. If multiple, shows the first + count badge |
 | **Last Check-in** | Timestamp of the device's most recent MDM check-in, with a recency indicator |
 | **FileVault** | Encryption status badge — **On** (green) or **Off** (red) |
 | **Compliance** | Overall compliance state badge |
@@ -126,74 +125,7 @@ The search bar above the table accepts free-text queries matching **device name*
 
 ---
 
-## 3. App Library Tab
-
-![App Library Tab](../screenshots/03-app-library-tab.png)
-
-The **App Library** tab provides full visibility into your Kandji-managed application estate. It has two sub-views:
-
-### Sub-Views
-
-| Sub-View | Description |
-|----------|-------------|
-| **Inventory** | All managed application deployments from your Kandji library |
-| **IRU Library** | Full list of Kandji library items including scripts, profiles, and web apps |
-
-### App Library Metrics
-
-Four summary cards appear at the top:
-
-| Metric | Description |
-|--------|-------------|
-| **Total Items** | Total number of managed library items |
-| **Active** | Items currently enforced on at least one blueprint |
-| **Inactive** | Items in the library but not assigned to any blueprint |
-| **Categories** | Count of distinct app categories in use |
-
-### App Table Columns
-
-| Column | Description |
-|--------|-------------|
-| **Name** | Application name with category icon |
-| **Category** | App type (see categories below) |
-| **Enforcement** | How the app is installed/run |
-| **Blueprint** | Which Kandji Blueprint the item is assigned to |
-| **Group ID** | Internal group/item identifier |
-| **Status** | Active or Inactive badge |
-| **Actions** | Download script template (.sh) or manage item |
-
-### App Categories
-
-| Category | Color | Description |
-|----------|-------|-------------|
-| **Auto App** | Orange | Automatically updating VPP apps |
-| **Custom App** | Amber | Custom .pkg or .dmg packages |
-| **VPP App** | Lime | Apps from Apple Business Manager |
-| **Script** | Slate | Bash, Zsh, or Python scripts |
-| **Profile** | Orange | MDM configuration profiles |
-| **Web App** | Slate | Browser web clips |
-| **Printer** | Slate | Printer configurations |
-
-### Enforcement Types
-
-| Type | Behavior |
-|------|----------|
-| **Continuous** | Re-installed or re-run on every check-in |
-| **Install Once** | Installed a single time; not re-installed if removed |
-| **Run Once** | Script or command runs once per device |
-| **No Enforcement** | Available in Self Service; not auto-deployed |
-
-### Filters & Actions
-
-- **Category filter chips** — narrow the table to a single app category
-- **All / Active / Inactive** toggle — filter by deployment status
-- **Search** — find apps by name
-- **Export CSV** — download the full app inventory as a CSV file
-- **+ Add App** — add a new library item to the Kandji Blueprint
-
----
-
-## 4. Security Tab
+## 3. Security Tab
 
 ![Security Tab](../screenshots/04-security-tab.png)
 
@@ -234,7 +166,7 @@ Clicking any gap chip filters the security table below to show only those device
 | **FileVault** | On / Off badge |
 | **EDR Agent** | EDR product name (e.g., CrowdStrike) with Active/Inactive status |
 | **Firewall** | Enabled / Disabled badge |
-| **Applied Policies** | Number of Kandji policies applied to the device |
+| **Applied Policies** | Number of ManageEngine policies applied to the device |
 | **Last Check-in** | Most recent MDM check-in timestamp |
 | **Risk** | Computed risk score (Secure / At Risk) |
 | **Actions** | Open Device Detail Panel |
@@ -251,7 +183,7 @@ The security table supports three toggle filters:
 
 ---
 
-## 5. Automation Tab
+## 4. Automation Tab
 
 The **Automation** tab is reserved for configuring device-level automation rules that trigger based on compliance state changes, check-in events, or policy failures. This integrates with the platform's broader Automation Rules engine.
 
@@ -259,7 +191,7 @@ The **Automation** tab is reserved for configuring device-level automation rules
 
 ---
 
-## 6. Reports Tab
+## 5. Reports Tab
 
 ![Reports Tab](../screenshots/05-reports-tab.png)
 
@@ -274,7 +206,6 @@ The **Reports** tab provides structured analytics across your Mac fleet, coverin
 | **macOS Updates** | OS version distribution and upgrade eligibility |
 | **App Currency** | Up-to-date vs. outdated managed applications |
 | **Stale Devices** | Devices that haven't checked in within a defined threshold |
-| **Blueprint & Policy** | Policy application rates per Kandji Blueprint |
 
 ### Full Page Reports
 
@@ -282,7 +213,7 @@ Two dedicated full-page report views are available directly from this tab:
 
 | Report | Description |
 |--------|-------------|
-| **IRU Patch Report** | Device-level patch status pulled from the Kandji IRU library |
+| **IRU Patch Report** | Device-level patch status pulled from ManageEngine |
 | **Fleet KPI Cards** | An 18-metric fleet health dashboard summarizing the full Mac estate |
 
 ### Report Controls
@@ -301,7 +232,7 @@ The default Fleet Growth report renders a month-by-month breakdown table with th
 | **Month** | Calendar month |
 | **Fleet Size** | Total enrolled Mac count for that month |
 | **New Devices** | Net new devices enrolled |
-| **New Apps** | New library items added |
+| **New Apps** | New managed application installs detected across the fleet |
 | **Compliance** | % compliant devices (color-coded bar) |
 | **FileVault** | % FileVault-on devices (color-coded bar) |
 | **EDR** | % EDR-active devices (color-coded bar) |
@@ -310,7 +241,7 @@ The default Fleet Growth report renders a month-by-month breakdown table with th
 
 ---
 
-## 7. Device Detail Panel
+## 6. Device Detail Panel
 
 The Device Detail Panel slides in from the right when you click on any device row in the Devices or Security tabs. It provides a comprehensive 6-tab deep-dive into a single device.
 
@@ -322,13 +253,13 @@ The Device Detail Panel slides in from the right when you click on any device ro
 | **Device icon** | Platform icon (Apple) |
 | **Device name** | Full device name (e.g., "Administrator's MacBook Pro") |
 | **Compliance badge** | Warning / Compliant / Non-Compliant |
-| **MDM source** | Kandji pill |
+| **MDM source** | ManageEngine pill |
 | **Model** | Specific hardware model (e.g., MacBook Pro 14-inch, 2024) |
 | **Last sync** | Timestamp of the most recent data sync |
 
 ---
 
-### 7.1 Overview Tab
+### 6.1 Overview Tab
 
 ![Device Panel — Overview](../screenshots/06-device-panel-overview.png)
 
@@ -342,7 +273,7 @@ The **Overview** tab presents the device's identity, enrollment details, and cur
 | **Ownership** | Corporate or Personal |
 | **Serial Number** | Device serial number |
 | **Enrollment Type** | MDM enrollment method (e.g., "MDM Enrolled") |
-| **Enrollment Date** | Date the device was first enrolled in Kandji |
+| **Enrollment Date** | Date the device was first enrolled in ManageEngine |
 | **Azure AD Registered** | Whether the device is registered in Microsoft Entra ID |
 
 #### Device Status
@@ -361,14 +292,14 @@ If a device has an active compliance issue, a highlighted banner appears at the 
 | Field | Description |
 |-------|-------------|
 | **Issue** | Human-readable description (e.g., "FileVault encryption not enabled") |
-| **Failed Policy** | The specific Kandji policy that failed (e.g., "Security — FileVault Policy") |
+| **Failed Policy** | The specific ManageEngine policy that failed (e.g., "Security — FileVault Policy") |
 | **Last Seen** | Timestamp of when the issue was last detected |
 | **Confidence** | Model confidence score for the issue detection (e.g., 80%) |
 | **Severity** | Medium / High / Critical |
 
 ---
 
-### 7.2 Hardware Tab
+### 6.2 Hardware Tab
 
 ![Device Panel — Hardware](../screenshots/07-device-panel-hardware.png)
 
@@ -394,11 +325,11 @@ The **Hardware** tab shows the physical and OS specification of the device.
 
 ---
 
-### 7.3 Network Tab
+### 6.3 Network Tab
 
 ![Device Panel — Network](../screenshots/08-device-panel-network.png)
 
-The **Network** tab displays network interface information as reported by Kandji.
+The **Network** tab displays network interface information as reported by ManageEngine.
 
 #### Network Interfaces
 
@@ -410,7 +341,7 @@ The **Network** tab displays network interface information as reported by Kandji
 
 ---
 
-### 7.4 Security Tab
+### 6.4 Security Tab
 
 ![Device Panel — Security](../screenshots/09-device-panel-security.png)
 
@@ -438,7 +369,7 @@ The **Security** tab provides a complete security posture view for the individua
 
 ---
 
-### 7.5 Apps Tab
+### 6.5 Apps Tab
 
 ![Device Panel — Apps](../screenshots/10-device-panel-apps.png)
 
@@ -468,7 +399,7 @@ The **Apps** tab lists every application installed on the device, with filtering
 
 ---
 
-### 7.6 Compliance Tab
+### 6.6 Compliance Tab
 
 ![Device Panel — Compliance](../screenshots/11-device-panel-compliance.png)
 
@@ -479,7 +410,7 @@ The **Compliance** tab provides the full compliance context for the device — w
 | Field | Description |
 |-------|-------------|
 | **State Badge** | Compliant / Warning / Non-Compliant |
-| **Source** | MDM source managing compliance (Kandji pill) |
+| **Source** | MDM source managing compliance (ManageEngine pill) |
 | **Last Compliance Check** | Timestamp with recency badge |
 | **Issue Source** | Which system raised the compliance issue |
 | **Failed Policy** | Specific policy name that failed |
@@ -487,17 +418,17 @@ The **Compliance** tab provides the full compliance context for the device — w
 
 #### Applied Policies
 
-Lists all Kandji policies (Blueprints) applied to the device. Each policy shows:
+Lists all ManageEngine policies applied to the device. Each policy shows:
 - Policy name badge (e.g., **PROD**)
 - Pass (green checkmark) or Fail (red X) status
 
 ---
 
-## 8. Device Lookup
+## 7. Device Lookup
 
 ![Device Lookup](../screenshots/12-device-lookup.png)
 
-**Device Lookup** is a cross-platform device browser that aggregates devices from all connected MDM sources (Kandji, Intune, ManageEngine) into a single unified view.
+**Device Lookup** is a cross-platform device browser that aggregates devices from all connected MDM sources (Intune, ManageEngine) into a single unified view.
 
 > Navigation: **Endpoint Management → Device Lookup**
 
@@ -520,7 +451,7 @@ A six-tile summary bar at the top of the page shows your aggregate security post
 |--------|---------|
 | **Search** | Device name, user, serial number |
 | **Platform** | All Platforms, macOS, Windows, Linux |
-| **Source** | All Sources, Microsoft Intune, Kandji, ManageEngine |
+| **Source** | All Sources, Microsoft Intune, ManageEngine |
 | **Risk Level** | All, Critical, High, Medium, Low |
 | **Compliance** | All, Compliant (emerald), Warning (amber), Non-Compliant (red) |
 
@@ -557,11 +488,11 @@ The table is paginated at 10 devices per page with numbered page controls. The f
 ## Related Documentation
 
 - [Device Detail Panel — Full Reference](device-detail-panel.md)
-- [Kandji Integration Setup](../04-integrations/kandji.md)
+- [ManageEngine Integration Setup](../04-integrations/MANAGEENGINE.md)
 - [Security Posture Page](security-posture.md)
 - [Automation Rules](automation-rules.md)
 - [Runbooks](runbooks.md)
 
 ---
 
-*Last updated: June 2026 · ITO Endpoint v2.0 · Managed by Kandji*
+*Last updated: June 2026 · ITO Endpoint v2.0 · Managed by ManageEngine*

@@ -309,8 +309,8 @@ export async function buildExportZip(entries: ExportEntry[]): Promise<Buffer> {
 }
 
 // ─── Bounded concurrency ──────────────────────────────────────────────────────
-// Copied (not imported/shared) to match this repo's existing convention —
-// see the identical helper in server/src/services/kandji.ts.
+// Copied (not imported/shared) to match this repo's existing convention of
+// keeping bounded-concurrency helpers local to each service file.
 export async function pLimit<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
   const results: T[] = new Array(tasks.length)
   let idx = 0

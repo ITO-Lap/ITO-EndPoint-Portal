@@ -385,28 +385,6 @@ const INTEG_DEFS: IntegDef[] = [
     },
   },
   {
-    id: 'kandji',
-    name: 'Kandji',
-    icon: Cloud,
-    iconBg: 'bg-lime-100',
-    iconColor: 'text-lime-600',
-    category: 'MDM',
-    categoryColor: 'text-lime-700 bg-lime-50 border-lime-200',
-    description: 'Apple device management — automated compliance & zero-touch Mac, iPhone, and iPad enrollment',
-    docsHint: 'Kandji → Settings → Access → API Token. Select Device Read as the minimum scope required.',
-    defaultInterval: 'realtime',
-    defaultDevices: '2,361',
-    defaultLastSync: '8 min ago',
-    fields: [
-      { key: 'apiToken',  label: 'API Token',   hint: 'Settings → Access → API Token',   placeholder: 'Enter your Kandji API token', secret: true  },
-      { key: 'subdomain', label: 'Subdomain',   hint: 'Your Kandji org subdomain',        placeholder: 'yourorg',                    secret: false },
-    ],
-    defaults: {
-      apiToken:  '',
-      subdomain: 'zinnia',
-    },
-  },
-  {
     id: 'manageengine',
     name: 'ManageEngine',
     icon: Settings,
@@ -414,7 +392,7 @@ const INTEG_DEFS: IntegDef[] = [
     iconColor: 'text-orange-600',
     category: 'MDM',
     categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
-    description: 'ManageEngine MDM On-Demand (Endpoint Central Cloud) — cross-platform device inventory, policies, apps',
+    description: 'ManageEngine MDM On-Demand (Endpoint Central Cloud) — cross-platform (Windows & macOS) device inventory, policies, apps',
     docsHint: 'Zoho API Console → Self Client → generate a refresh token with MDMOnDemand.MDMInventory.READ scope.',
     defaultInterval: 'realtime',
     defaultDevices: '640',
@@ -572,7 +550,6 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
   switch (def.id) {
     case 'intune':       return f['endpoint']?.value || 'zinnia.onmicrosoft.com'
     case 'entra':        return `Tenant: ${(f['tenantId']?.value || '').slice(0, 8) || 'not set'}…`
-    case 'kandji':       return `${f['subdomain']?.value || 'zinnia'}.kandji.io`
     case 'manageengine': return f['apiDomain']?.value || 'mdm.manageengine.com'
     case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : 'auditlogs:read · channels:read'
     case 'openai':       return `Model: ${f['model']?.value || 'gpt-4o-mini'}${f['orgId']?.value ? ' · ' + f['orgId'].value : ''}`

@@ -5,7 +5,7 @@ export interface Device {
   serialNumber: string
   platform: 'Windows' | 'macOS' | 'Linux' | 'Android' | 'iOS'
   osVersion: string
-  managementSource: 'Microsoft Intune' | 'Kandji' | 'ManageEngine'
+  managementSource: 'Microsoft Intune' | 'ManageEngine'
   lastCheckIn: string
   complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
   encryptionStatus: string
@@ -75,7 +75,7 @@ export interface AppStatus {
 
 export interface LapsInfo {
   enabled: boolean
-  source?: string          // "Microsoft LAPS (Entra)" | "Legacy LAPS" | "Kandji Managed" | "Not Configured"
+  source?: string          // "Microsoft LAPS (Entra)" | "Legacy LAPS" | "Not Configured"
   accountName?: string     // "LocalAdmin" | "Administrator"
   passwordLastRotated?: string
   passwordExpiresAt?: string
@@ -127,7 +127,6 @@ export interface DashboardStats {
   mac: number
   sources: {
     intune: number
-    kandji: number
     manageEngine: number
   }
   issueCategories: Array<{ label: string; value: number }>
@@ -181,7 +180,7 @@ export interface AutomationRule {
   }
   conditions: {
     platform: 'Windows' | 'macOS' | 'Linux' | 'all'
-    source: 'intune' | 'kandji' | 'manageengine' | 'all'
+    source: 'intune' | 'manageengine' | 'all'
     severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'all'
     complianceState: 'Non-Compliant' | 'Warning' | 'all'
   }

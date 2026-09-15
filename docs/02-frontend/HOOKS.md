@@ -43,7 +43,7 @@ const { stats, countdown, lastUpdated, refresh } = useStats()
 **ApiStats shape:**
 ```ts
 { total, compliant, nonCompliant, warning, windows, mac,
-  sources: { intune, kandji, manageEngine }, mock: boolean }
+  sources: { intune, manageEngine }, mock: boolean }
 ```
 
 **To change the refresh interval:** modify `REFRESH_INTERVAL_MS` in `useStats.ts`.
@@ -89,7 +89,7 @@ Polls `/api/integrations/status` to show live integration health in the Settings
 const { integrations, loading, error, refetch } = useIntegrationStatus()
 ```
 
-**Returns:** array of `IntegrationStatusItem` — one per source (intune, kandji, manageengine, openai).
+**Returns:** array of `IntegrationStatusItem` — one per source (intune, manageengine, openai).
 
 ---
 

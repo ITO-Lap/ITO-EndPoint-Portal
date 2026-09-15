@@ -9,11 +9,6 @@ export interface RuntimeIntuneConfig {
   endpoint?: string
 }
 
-export interface RuntimeKandjiConfig {
-  apiToken: string
-  subdomain: string
-}
-
 export interface RuntimeManageEngineConfig {
   clientId: string
   clientSecret: string
@@ -48,7 +43,6 @@ export interface IntegrationFetchResult {
 
 interface PersistedCredentials {
   intune?:       RuntimeIntuneConfig
-  kandji?:       RuntimeKandjiConfig
   manageengine?: RuntimeManageEngineConfig
   openai?:       RuntimeOpenAIConfig
   entra?:        RuntimeEntraConfig
@@ -58,7 +52,6 @@ interface PersistedCredentials {
 interface Store extends PersistedCredentials {
   fetchResults: {
     intune: IntegrationFetchResult | null
-    kandji: IntegrationFetchResult | null
     manageengine: IntegrationFetchResult | null
     entra: IntegrationFetchResult | null
     slack: IntegrationFetchResult | null
@@ -82,7 +75,6 @@ function loadPersistedCredentials(): PersistedCredentials {
 function persistCredentials(): void {
   const snapshot: PersistedCredentials = {}
   if (store.intune)       snapshot.intune       = store.intune
-  if (store.kandji)       snapshot.kandji       = store.kandji
   if (store.manageengine) snapshot.manageengine = store.manageengine
   if (store.openai)       snapshot.openai       = store.openai
   if (store.entra)        snapshot.entra        = store.entra
@@ -100,13 +92,12 @@ const persisted = loadPersistedCredentials()
 
 const store: Store = {
   ...persisted,
-  fetchResults: { intune: null, kandji: null, manageengine: null, entra: null, slack: null },
+  fetchResults: { intune: null, manageengine: null, entra: null, slack: null },
 }
 
 // ─ Credential setters ────────────────────────────────────────────────────────
 
 export function setIntuneConfig(c: RuntimeIntuneConfig) { store.intune = c; persistCredentials() }
-export function setKandjiConfig(c: RuntimeKandjiConfig) { store.kandji = c; persistCredentials() }
 export function setManageEngineConfig(c: RuntimeManageEngineConfig) { store.manageengine = c; persistCredentials() }
 export function setOpenAIConfig(c: RuntimeOpenAIConfig) { store.openai = c; persistCredentials() }
 export function setEntraConfig(c: RuntimeEntraConfig) { store.entra = c; persistCredentials() }
@@ -123,21 +114,6 @@ export function getIntuneConfig(): RuntimeIntuneConfig | undefined {
       clientId,
       clientSecret,
       ...(process.env.INTUNE_ENDPOINT ? { endpoint: process.env.INTUNE_ENDPOINT } : {}),
-    }
-  }
-  return undefined
-}
-
-export function getKandjiConfig(): RuntimeKandjiConfig | undefined {
-  if (store.kandji) return store.kandji
-  const { KANDJI_API_TOKEN: apiToken, KANDJI_API_URL } = process.env
-  if (apiToken && KANDJI_API_URL) {
-    try {
-      const subdomain = new URL(KANDJI_API_URL).hostname.split('.').at(0)
-      if (!subdomain) return undefined
-      return { apiToken, subdomain }
-    } catch {
-      return undefined
     }
   }
   return undefined
@@ -190,24 +166,23 @@ export function getSlackConfig(): RuntimeSlackConfig | undefined {
 // ─ Fetch result cache ────────────────────────────────────────────────────────
 
 export function recordFetchResult(
-  source: 'intune' | 'kandji' | 'manageengine' | 'entra' | 'slack',
+  source: 'intune' | 'manageengine' | 'entra' | 'slack',
   result: IntegrationFetchResult,
 ) {
   store.fetchResults[source] = result
 }
 
 export function getFetchResult(
-  source: 'intune' | 'kandji' | 'manageengine' | 'entra' | 'slack',
+  source: 'intune' | 'manageengine' | 'entra' | 'slack',
 ): IntegrationFetchResult | null {
   return store.fetchResults[source]
 }
 
 // ─ Configured check ──────────────────────────────────────────────────────────
 
-export function isConfigured(source: 'intune' | 'kandji' | 'manageengine' | 'openai' | 'entra' | 'slack'): boolean {
+export function isConfigured(source: 'intune' | 'manageengine' | 'openai' | 'entra' | 'slack'): boolean {
   switch (source) {
     case 'intune':       return !!getIntuneConfig()
-    case 'kandji':       return !!getKandjiConfig()
     case 'manageengine': return !!getManageEngineConfig()
     case 'openai':       return !!getOpenAIConfig()
     case 'entra':        return !!getEntraConfig()

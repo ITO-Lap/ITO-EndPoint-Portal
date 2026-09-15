@@ -12,7 +12,7 @@ interface RunbookData {
   runbookLink: string    // Display label for the link
   steps: string[]        // Ordered remediation steps
   escalation: string     // "Yes" | "No" — whether this needs escalation
-  automation: string     // "Yes (Intune)" | "Partial (Kandji)" | "N/A"
+  automation: string     // "Yes (Intune)" | "Partial (ManageEngine)" | "N/A"
 }
 ```
 
@@ -87,8 +87,8 @@ The `automation` field indicates what level of automation is possible:
 | Value | Meaning |
 |---|---|
 | `"Yes (Intune)"` | Can be fully automated via Intune policy push |
-| `"Yes (Kandji)"` | Can be automated via Kandji blueprint |
-| `"Partial (Kandji)"` | Partially automated; some manual steps required |
+| `"Yes (ManageEngine)"` | Can be automated via a ManageEngine configuration profile |
+| `"Partial (ManageEngine)"` | Partially automated; some manual steps required |
 | `"N/A"` | No automation available — manual execution only |
 
 ---

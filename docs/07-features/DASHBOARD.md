@@ -11,7 +11,7 @@ The Dashboard is the landing page after sign-in. It provides a real-time complia
 │ LiveDataBar — refresh countdown, last updated, source counts │
 ├──────────┬──────────┬──────────┬──────────┬─────────────────┤
 │ Total    │ Compliant│Non-Comp. │Mac       │ Open Issues     │
-│ Devices  │ Devices  │          │(Kandji)  │                 │
+│ Devices  │ Devices  │          │(MgE)     │                 │
 ├──────────┴──────────┴──────────┴──────────┴─────────────────┤
 │                                                              │
 │  ┌────────────────────┐  ┌──────────────────────────────┐  │
@@ -63,7 +63,7 @@ Five stat cards, updated from live `ApiStats`:
 | Total Devices | `stats.total` |
 | Compliant Devices | `stats.compliant` |
 | Non-Compliant | `stats.nonCompliant` |
-| Mac Devices (Kandji) | `stats.mac` |
+| Mac Devices (ManageEngine) | `stats.mac` |
 | Open Issues | `stats.nonCompliant + stats.warning` |
 
 **To add a stat card:** see [Quick Mods](../06-development/QUICK-MODS.md#add-a-new-stat-card).
@@ -125,7 +125,7 @@ Thin bar at the top of the dashboard showing:
 - Countdown in seconds to next auto-refresh
 - "Refresh now" button
 - Last updated timestamp
-- Per-source device counts (Intune · Kandji · ManageEngine)
+- Per-source device counts (Intune · ManageEngine)
 - "Mock Data" badge when no live sources are connected
 
 ---

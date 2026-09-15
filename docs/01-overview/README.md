@@ -6,8 +6,8 @@
 
 ## Problem it solves
 
-IT teams managing hundreds or thousands of devices across multiple platforms (Windows via Intune, Macs via Kandji, cross-platform via ManageEngine) traditionally had to:
-- Log into 3+ separate admin portals
+IT teams managing hundreds or thousands of devices across multiple platforms (Windows via Intune, Macs and cross-platform via ManageEngine) traditionally had to:
+- Log into 2+ separate admin portals
 - Manually correlate compliance data across sources
 - Write remediation instructions from scratch for each incident
 
@@ -76,7 +76,6 @@ ITO Endpoint AI Copilot
 | Source | Protocol | Auth method |
 |---|---|---|
 | Microsoft Intune | Microsoft Graph REST API | OAuth2 client credentials |
-| Kandji | Kandji REST API | Bearer token |
 | ManageEngine | REST API | API key |
 | OpenAI | OpenAI Chat Completions | API key |
 

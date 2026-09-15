@@ -11,7 +11,7 @@ import {
   buildAutomationRuleFallback,
   isOpenAIConfigured,
 } from '../services/openai.js'
-import { getKandjiDevices } from '../services/kandji.js'
+import { getManageEngineDevices } from '../services/manageEngine.js'
 import { getIntuneDevices } from '../services/intune.js'
 import type { AutomationRule, AutomationExecution, Device } from '../types.js'
 
@@ -31,7 +31,7 @@ const triggerSchema = z.object({
 
 const conditionsSchema = z.object({
   platform:       z.enum(['Windows', 'macOS', 'Linux', 'all']).default('all'),
-  source:         z.enum(['intune', 'kandji', 'manageengine', 'all']).default('all'),
+  source:         z.enum(['intune', 'manageengine', 'all']).default('all'),
   severity:       z.enum(['Low', 'Medium', 'High', 'Critical', 'all']).default('all'),
   complianceState: z.enum(['Non-Compliant', 'Warning', 'all']).default('all'),
 })
@@ -66,7 +66,7 @@ const executionsQuerySchema = z.object({
 
 async function fetchLiveDevices(): Promise<Device[]> {
   const results = await Promise.allSettled([
-    getKandjiDevices().catch(() => [] as Device[]),
+    getManageEngineDevices().catch(() => [] as Device[]),
     getIntuneDevices().catch(() => [] as Device[]),
   ])
   return results.flatMap(r => r.status === 'fulfilled' ? r.value : [])

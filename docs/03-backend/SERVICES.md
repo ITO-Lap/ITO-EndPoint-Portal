@@ -47,36 +47,11 @@ isIntuneConfigured(): boolean
 
 ---
 
-## `services/kandji.ts` — Kandji MDM
-
-Fetches device records from the **Kandji REST API** using a subdomain + bearer token.
-
-### Endpoints used
-
-```
-GET https://{subdomain}.api.kandji.io/api/v1/devices
-  Authorization: Bearer {apiToken}
-```
-
-### Data mapping
-
-`mapKandjiDevice(d)` maps Kandji device fields to the shared `Device` type:
-- `mdm_enabled` → compliance state inference
-- `filevault_enabled` → `'FileVault On' | 'FileVault Off'`
-- `blueprint_name` → used as policy reference
-
-### Exports
-
-```ts
-getKandjiDevices(cfg?: RuntimeKandjiConfig): Promise<Device[]>
-isKandjiConfigured(): boolean
-```
-
----
-
 ## `services/manageEngine.ts` — ManageEngine Endpoint Central
 
-Fetches device records from the **ManageEngine REST API** using an API key.
+Fetches device records from the **ManageEngine REST API** using an API key. This is also the macOS
+device source for the Mac Devices module — `mapPlatform()` detects macOS from the device's
+model/`product_name`, so there's no separate macOS-only service.
 
 ### Endpoints used
 
@@ -127,7 +102,7 @@ Freeform chat with an IT assistant system prompt. When `deviceContext` is provid
 
 **Model settings:** `temperature: 0.3`, `max_tokens: 500`
 
-**System prompt:** Specialises the model in Intune, Kandji, ManageEngine. Instructs it to be concise and action-oriented.
+**System prompt:** Specialises the model in Intune and ManageEngine. Instructs it to be concise and action-oriented.
 
 ### `isOpenAIConfigured(): boolean`
 
@@ -156,13 +131,11 @@ Runtime credential and fetch result cache. Not a database — resets on server r
 ```ts
 // Store credentials (called from routes/integrations.ts)
 setIntuneConfig({ tenantId, clientId, clientSecret })
-setKandjiConfig({ apiToken, subdomain })
 setManageEngineConfig({ apiKey, serverUrl })
 setOpenAIConfig({ apiKey, orgId, model })
 
 // Read credentials (env vars take precedence over runtime store)
 getIntuneConfig()       // → RuntimeIntuneConfig | undefined
-getKandjiConfig()       // → RuntimeKandjiConfig | undefined
 getManageEngineConfig() // → RuntimeManageEngineConfig | undefined
 getOpenAIConfig()       // → RuntimeOpenAIConfig | undefined
 
@@ -172,7 +145,7 @@ isConfigured('openai')       // → boolean
 
 // Cache fetch results
 recordFetchResult('intune', { deviceCount, lastFetchAt, latencyMs, error })
-getFetchResult('kandji')     // → IntegrationFetchResult | null
+getFetchResult('manageEngine') // → IntegrationFetchResult | null
 ```
 
 Credentials are read from **env vars first**, then runtime store. So `.env` credentials always win.

@@ -30,7 +30,7 @@ export interface ApiStats {
   warning: number
   windows: number
   mac: number
-  sources: { intune: number; kandji: number; manageEngine: number }
+  sources: { intune: number; manageEngine: number }
   issueCategories: Array<{ label: string; value: number }>
   mock: boolean
 }
@@ -72,7 +72,7 @@ export interface ApiDevice {
   serialNumber: string
   platform: 'Windows' | 'macOS' | 'Linux'
   osVersion: string
-  managementSource: 'Microsoft Intune' | 'Kandji' | 'ManageEngine'
+  managementSource: 'Microsoft Intune' | 'ManageEngine'
   lastCheckIn: string
   complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
   encryptionStatus: string
@@ -162,16 +162,6 @@ export interface LapsInfo {
   accountName?: string
   passwordLastRotated?: string
   passwordExpiresAt?: string
-}
-
-export interface LibraryApp {
-  id: string
-  name: string
-  category: string
-  active: boolean
-  enforcement: string
-  blueprint?: string    // Kandji Blueprint this app belongs to
-  groupId?: string      // Kandji Group ID associated with this app
 }
 
 export interface ManageEngineAppLogEntry {
@@ -321,7 +311,7 @@ export interface MissingAgentDevice {
   deviceId: string
   deviceName: string
   primaryUser: string
-  connector: 'Microsoft Intune' | 'Kandji' | 'ManageEngine'
+  connector: 'Microsoft Intune' | 'ManageEngine'
   lastSync: string
 }
 
@@ -398,7 +388,7 @@ export interface AutomationRule {
   }
   conditions: {
     platform: 'Windows' | 'macOS' | 'Linux' | 'all'
-    source: 'intune' | 'kandji' | 'manageengine' | 'all'
+    source: 'intune' | 'manageengine' | 'all'
     severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'all'
     complianceState: 'Non-Compliant' | 'Warning' | 'all'
   }
@@ -542,7 +532,7 @@ export const api = {
     get<{ devices: ApiDevice[]; total: number; mock: boolean }>(`/api/devices${q ? `?q=${encodeURIComponent(q)}` : ''}`).then(r => r.devices),
   fetchAllDevicesRaw: (params?: {
     q?: string
-    source?: 'intune' | 'kandji' | 'manageengine' | 'all'
+    source?: 'intune' | 'manageengine' | 'all'
     compliance?: 'Compliant' | 'Non-Compliant' | 'Warning'
     platform?: 'Windows' | 'macOS' | 'Linux'
     limit?: number
@@ -567,9 +557,6 @@ export const api = {
   fetchDevicePolicies: (id: string) =>
     get<string[]>(`/api/devices/${id}/policies`),
 
-  fetchKandjiApps: () =>
-    get<LibraryApp[]>('/api/integrations/kandji/apps'),
-
   fetchManageEngineAppsInventory: () =>
     get<{ windows: ManageEngineAppEntry[]; macos: ManageEngineAppEntry[] }>('/api/integrations/manageengine/apps'),
 
@@ -579,22 +566,6 @@ export const api = {
     post<EndpointProtectionCoverageResult>('/api/security-inventory/scan', {}),
   fetchDevicesMissingAgent: (platform: 'Windows' | 'macOS', agent: 'zscaler' | 'crowdstrike') =>
     get<MissingAgentDevice[]>(`/api/security-inventory/missing?platform=${platform}&agent=${agent}`),
-
-  fetchKandjiSelfServiceCategories: () =>
-    get<{ id: string; name: string }[]>('/api/integrations/kandji/self-service/categories'),
-
-  fetchKandjiLibraryPathCoverage: () =>
-    get<{ results: { path: string; status: number; count: number; isJson: boolean }[]; working: { path: string }[] }>('/api/integrations/kandji/debug-library-paths'),
-
-  fetchKandjiLibraryItemStatus: (libraryItemId: string) =>
-    get<{ device_id: string; device_name: string; status: string; status_message?: string; last_audit_date?: string }[]>(
-      `/api/integrations/kandji/library-items/${encodeURIComponent(libraryItemId)}/status`
-    ),
-
-  fetchKandjiLibraryItemActivity: (libraryItemId: string) =>
-    get<{ id: string; action: string; actor_type: string; occurred_at: string; target_component?: string }[]>(
-      `/api/integrations/kandji/library-items/${encodeURIComponent(libraryItemId)}/activity`
-    ),
 
   // Reports
   listReports: () =>

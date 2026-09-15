@@ -17,7 +17,7 @@ import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
 import { OpenIssuesPage } from './components/issues/OpenIssuesPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 import { SecurityPosturePage } from './pages/SecurityPosturePage'
-import { KandjiMacPage } from './pages/KandjiMacPage'
+import { MacDevicesPage } from './pages/MacDevicesPage'
 import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
 import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
 import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
@@ -292,7 +292,7 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                     complianceSegments={liveComplianceSegments}
                     issueCategories={liveIssueCategories}
                     recentActivityItems={activityItems}
-                    sourceCounts={stats?.sources ?? { intune: 0, kandji: 0, manageEngine: 0 }}
+                    sourceCounts={stats?.sources ?? { intune: 0, manageEngine: 0 }}
                     countdown={countdown}
                     lastUpdated={lastUpdated}
                     onRefresh={refreshStats}
@@ -326,7 +326,7 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                     }}
                   />
                 ) : activePage === 'Mac Devices' ? (
-                  <KandjiMacPage
+                  <MacDevicesPage
                     onBack={() => setActivePage('Dashboard')}
                     onViewDevice={async (deviceName) => {
                       await handleDeviceSelect(deviceName)

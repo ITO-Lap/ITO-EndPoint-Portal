@@ -26,7 +26,7 @@ Search and list managed devices across all connected sources.
 | Param | Type | Description |
 |---|---|---|
 | `q` | string | Search query (device name, user email, serial) |
-| `source` | `intune \| kandji \| manageengine \| all` | Filter by MDM source |
+| `source` | `intune \| manageengine \| all` | Filter by MDM source |
 | `compliance` | `Compliant \| Non-Compliant \| Warning` | Filter by compliance state |
 | `platform` | `Windows \| macOS \| Linux` | Filter by OS platform |
 | `limit` | number | Max results (default: 200) |
@@ -63,7 +63,7 @@ Aggregated compliance counts for the stat cards and donut chart.
     "warning": 15,
     "windows": 180,
     "mac": 70,
-    "sources": { "intune": 180, "kandji": 70, "manageEngine": 0 },
+    "sources": { "intune": 180, "manageEngine": 70 },
     "mock": false
   }
 }
@@ -100,15 +100,12 @@ Per-source health snapshot.
 ### `POST /api/integrations/:id/credentials`
 Push runtime credentials from the Settings UI.
 
-**Path param:** `id` = `intune | kandji | manageengine | openai`
+**Path param:** `id` = `intune | manageengine | openai`
 
 **Request body:**
 ```json
 // Intune
 { "fields": { "tenantId": "...", "clientId": "...", "clientSecret": "..." } }
-
-// Kandji
-{ "fields": { "apiToken": "...", "subdomain": "myorg" } }
 
 // ManageEngine
 { "fields": { "apiKey": "...", "serverUrl": "https://me.myorg.com", "port": "8443" } }
@@ -129,7 +126,7 @@ Credentials are stored in memory only. They reset on server restart. For permane
 ### `POST /api/integrations/:id/sync`
 Force an immediate fresh data fetch from a single source.
 
-**Path param:** `id` = `intune | kandji | manageengine`
+**Path param:** `id` = `intune | manageengine`
 
 **Response:**
 ```json

@@ -9,7 +9,7 @@
 | Node.js | 20.x | `node --version` |
 | npm | 10.x | `npm --version` |
 
-No other tools required. All services (Intune, Kandji, ManageEngine, OpenAI) are mocked by default.
+No other tools required. All services (Intune, ManageEngine, OpenAI) are mocked by default.
 
 ---
 
@@ -66,11 +66,7 @@ INTUNE_CLIENT_ID=
 INTUNE_CLIENT_SECRET=
 INTUNE_ENDPOINT=          # Optional: override for Gov Cloud
 
-# Kandji
-KANDJI_API_URL=https://myorg.api.kandji.io
-KANDJI_API_TOKEN=
-
-# ManageEngine
+# ManageEngine (also the macOS device source for Mac Devices)
 MANAGEENGINE_URL=
 MANAGEENGINE_API_KEY=
 ```
@@ -113,7 +109,6 @@ When the server starts, it logs which integrations are configured:
 ```
 Server listening on http://localhost:4000
   Intune:       ✓ configured
-  Kandji:       — mock data
   ManageEngine: — mock data
   OpenAI:       ✓ configured
 ```

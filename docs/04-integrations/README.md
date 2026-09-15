@@ -10,8 +10,7 @@
 | Integration | Type | Guide | Required Env Vars |
 |---|---|---|---|
 | **Microsoft Intune** | MDM (Windows) | [INTUNE.md](INTUNE.md) | `INTUNE_TENANT_ID`, `INTUNE_CLIENT_ID`, `INTUNE_CLIENT_SECRET` |
-| **Kandji** | MDM (macOS) | [KANDJI.md](KANDJI.md) | `KANDJI_API_URL`, `KANDJI_API_TOKEN` |
-| **ManageEngine** | MDM (cross-platform) | [MANAGEENGINE.md](MANAGEENGINE.md) | `MANAGEENGINE_URL`, `MANAGEENGINE_API_KEY` |
+| **ManageEngine** | MDM (macOS + cross-platform) | [MANAGEENGINE.md](MANAGEENGINE.md) | `MANAGEENGINE_URL`, `MANAGEENGINE_API_KEY` |
 | **Microsoft Entra ID** | Identity / Directory | [ENTRA.md](ENTRA.md) | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` |
 | **Slack** | Communication | [SLACK.md](SLACK.md) | `SLACK_BOT_TOKEN` |
 | **Jira** | ITSM | [JIRA.md](JIRA.md) | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
@@ -39,10 +38,10 @@ Credentials pushed via Settings UI are stored in `server/.integration-credential
 
 ## Quick Start — Minimum Setup for Live Data
 
-**macOS fleet (Kandji):**
+**macOS fleet (ManageEngine):**
 ```env
-KANDJI_API_URL=https://yourorg.api.kandji.io
-KANDJI_API_TOKEN=your-token
+MANAGEENGINE_URL=https://yourorg.manageengine.com
+MANAGEENGINE_API_KEY=your-api-key
 ```
 
 **Windows fleet (Intune):**

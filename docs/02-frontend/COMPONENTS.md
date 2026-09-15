@@ -241,7 +241,7 @@ Slide-in drawer listing all devices for quick selection from the Dashboard.
 ---
 
 ### `SourceModal.tsx`
-Modal that shows connection status and details for a connected MDM source (Intune, Kandji, ManageEngine, OpenAI). Opened by clicking a source chip in the sidebar.
+Modal that shows connection status and details for a connected MDM source (Intune, ManageEngine, OpenAI). Opened by clicking a source chip in the sidebar.
 
 **Props:** `open: boolean`, `source: ConnectedSource | null`, `onClose: () => void`
 

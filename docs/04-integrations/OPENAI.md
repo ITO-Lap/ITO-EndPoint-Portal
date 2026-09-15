@@ -58,7 +58,7 @@ Sends a structured prompt to GPT-4o-mini with device details. The model returns:
 
 ### IT Assistant Chat (`POST /api/ai/chat`)
 
-Freeform Q&A with a system prompt specialised in Intune, Kandji, and ManageEngine. When a device is in context, its details are included in the prompt.
+Freeform Q&A with a system prompt specialised in Intune and ManageEngine. When a device is in context, its details are included in the prompt.
 
 **Model used:** `gpt-4o-mini`  
 **Temperature:** `0.3`  

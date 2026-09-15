@@ -67,7 +67,7 @@ Response includes `mock: true` when no MDM sources are configured.
 
 | Filter | Values |
 |---|---|
-| Source | All Sources · Microsoft Intune · Kandji · ManageEngine |
+| Source | All Sources · Microsoft Intune · ManageEngine |
 | Compliance | All States · Compliant · Warning · Non-Compliant |
 | Platform | All Platforms · Windows · macOS · Linux |
 

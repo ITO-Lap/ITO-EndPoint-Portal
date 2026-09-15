@@ -44,8 +44,7 @@
 | Service | Used for |
 |---|---|
 | **Microsoft Graph API** | Fetch managed device records from Intune |
-| **Kandji REST API** | Fetch managed device records from Kandji |
-| **ManageEngine REST API** | Fetch managed device records from ManageEngine |
+| **ManageEngine REST API** | Fetch managed device records from ManageEngine (Windows, cross-platform, and macOS) |
 | **OpenAI gpt-4o-mini** | Device compliance analysis + freeform IT assistant chat |
 
 ---

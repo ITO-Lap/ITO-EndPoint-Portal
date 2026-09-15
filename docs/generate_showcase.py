@@ -40,10 +40,10 @@ FOOTER  = ParagraphStyle("footer", fontSize=8,  textColor=GREY,
 MODULES = [
     # (group_title, colour, [ (icon_label, name, 3-line description) ])
     ("Endpoint Management", BLUE, [
-        ("MAC", "Mac Devices (Kandji)",
+        ("MAC", "Mac Devices (ManageEngine)",
          "Full Mac fleet manager with five tabs — Devices, Applications, Security, Automation, and Reports. "
-         "Searchable device table with blueprint assignments, FileVault status, macOS version, and per-device compliance. "
-         "App library tracks Auto App / VPP / Profile enforcements; reports cover fleet growth, patch compliance, and stale devices."),
+         "Searchable device table with configuration profile assignments, FileVault status, macOS version, and per-device compliance. "
+         "Applications tab tracks per-device installed apps; reports cover fleet growth, patch compliance, and stale devices."),
         ("WIN", "Intune Devices",
          "Microsoft Intune console with Devices, Compliance, Security, Automation, Reports, and Entra ID tabs. "
          "Filter Windows / Android / iOS endpoints by encryption state and compliance policy; monitor BitLocker, Defender, and MFA coverage. "
@@ -119,7 +119,7 @@ MODULES = [
     ]),
     ("Platform", NAVY, [
         ("SET", "Settings",
-         "Central configuration hub for Integrations (Intune, Entra, Kandji, ManageEngine, Jira, Confluence, Slack), notification preferences, and account management. "
+         "Central configuration hub for Integrations (Intune, Entra, ManageEngine, Jira, Confluence, Slack), notification preferences, and account management. "
          "Manage API credentials, connection status, alert thresholds, quiet hours, and data-retention policies from one place. "
          "Role-based access lets Global Admin / IT Admin / Helpdesk roles control what each user can view and action."),
         ("DOC", "Documentation",
@@ -144,7 +144,7 @@ def build():
     banner_data = [[
         Paragraph("ITO Endpoint AI Copilot", H_TITLE),
         Paragraph("Product Feature Showcase", H_SUB),
-        Paragraph("Enterprise IT endpoint management — connect Intune, Kandji &amp; ManageEngine; "
+        Paragraph("Enterprise IT endpoint management — connect Intune &amp; ManageEngine; "
                   "surface compliance, threats, and AI-powered remediation in one platform.", H_SUB),
     ]]
     banner = Table(banner_data, colWidths=[W])
@@ -239,10 +239,10 @@ def build():
     story.append(Spacer(1, 8))
     HRFlowable(width=W, thickness=0.5, color=colors.HexColor("#DBEAFE"))
     integrations = [
-        ["Microsoft Intune", "Kandji", "ManageEngine", "Entra ID / Azure AD",
+        ["Microsoft Intune", "ManageEngine", "Entra ID / Azure AD",
          "Jira", "Confluence", "Slack", "CrowdStrike / Defender"],
     ]
-    int_table = Table(integrations, colWidths=[W/8]*8)
+    int_table = Table(integrations, colWidths=[W/7]*7)
     int_table.setStyle(TableStyle([
         ("BACKGROUND",   (0,0),(-1,-1), colors.HexColor("#F0F7FF")),
         ("FONTNAME",     (0,0),(-1,-1), "Helvetica"),

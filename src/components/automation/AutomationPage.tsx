@@ -728,7 +728,7 @@ function AiBuildPanel({ onBuilt, onClose }: {
   const EXAMPLES = [
     'Alert me on Slack when any Mac has FileVault off and create a Jira ticket',
     'Run a remediation script on non-compliant Windows devices with High severity',
-    'Send a notification when any Kandji device has been offline for 3 days',
+    'Send a notification when any ManageEngine device has been offline for 3 days',
     'Generate a weekly fleet compliance report every Friday',
   ]
 
@@ -839,7 +839,7 @@ interface CreateRuleForm {
   enabled: boolean
   triggerType: AutomationTriggerType
   platform: 'Windows' | 'macOS' | 'Linux' | 'all'
-  source: 'intune' | 'kandji' | 'manageengine' | 'all'
+  source: 'intune' | 'manageengine' | 'all'
   severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'all'
   complianceState: 'Non-Compliant' | 'Warning' | 'all'
   actions: AutomationActionType[]
@@ -1012,7 +1012,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Platform',   key: 'platform',        options: ['all', 'Windows', 'macOS', 'Linux'] },
-                { label: 'Source',     key: 'source',          options: ['all', 'intune', 'kandji', 'manageengine'] },
+                { label: 'Source',     key: 'source',          options: ['all', 'intune', 'manageengine'] },
                 { label: 'Severity',   key: 'severity',        options: ['all', 'Low', 'Medium', 'High', 'Critical'] },
                 { label: 'State',      key: 'complianceState', options: ['all', 'Non-Compliant', 'Warning'] },
               ].map(field => (

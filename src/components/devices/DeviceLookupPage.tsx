@@ -472,10 +472,10 @@ function EventIcon({ type }: { type: SecurityEvent['type'] }) {
 
 function deriveAssignedPolicies(device: DeviceData): string[] {
   const base = ['Endpoint Compliance Baseline', 'Security Configuration Policy']
-  if (device.platform === 'macOS') base.push('FileVault Encryption Policy', 'Kandji Blueprint: Corporate Mac')
+  if (device.platform === 'macOS') base.push('FileVault Encryption Policy', 'ManageEngine Configuration Profile: Corporate Mac')
   else if (device.platform === 'Windows') base.push('BitLocker Encryption Policy', 'Windows Update Ring – Production')
   if (device.managementSource === 'Microsoft Intune') base.push('Intune Compliance Policy v2', 'Conditional Access – MFA Required')
-  if (device.managementSource === 'Kandji') base.push('Kandji Auto-Assign Blueprint')
+  if (device.managementSource === 'ManageEngine' && device.platform === 'macOS') base.push('ManageEngine Auto-Assign Profile')
   if (device.complianceState !== 'Compliant') base.push('Remediation Enforcement Policy')
   return base
 }

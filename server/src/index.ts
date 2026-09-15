@@ -115,7 +115,6 @@ app.use(errorHandler)
 const server = app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`)
   console.log(`  Intune:       ${isConfigured('intune')       ? '✓ configured' : '— not configured'}`)
-  console.log(`  Kandji:       ${isConfigured('kandji')       ? '✓ configured' : '— not configured'}`)
   console.log(`  ManageEngine: ${isConfigured('manageengine') ? '✓ configured' : '— not configured'}`)
   console.log(`  Entra ID:     ${isConfigured('entra')        ? '✓ configured' : '— not configured'}`)
   console.log(`  Slack:        ${isConfigured('slack')        ? '✓ configured' : '— not configured'}`)

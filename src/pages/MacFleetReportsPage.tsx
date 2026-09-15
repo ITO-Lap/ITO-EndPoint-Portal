@@ -451,7 +451,7 @@ export function MacFleetReportsPage({ onBack }: Props) {
           <Apple className="mx-auto h-10 w-10 text-slate-300 mb-4" />
           <p className="text-sm font-bold text-slate-600 mb-1">No macOS Devices Found</p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-            Connect Kandji, Intune, or ManageEngine in Settings → Integrations to populate this report with your macOS fleet data.
+            Connect Intune or ManageEngine in Settings → Integrations to populate this report with your macOS fleet data.
           </p>
         </div>
       )}

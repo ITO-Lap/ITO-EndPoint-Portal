@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies } from '../services/intune.js'
-import { getKandjiDevices, getKandjiDeviceApps, isKandjiConfigured } from '../services/kandji.js'
 import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
 import type { Device, DashboardStats } from '../types.js'
@@ -11,7 +10,7 @@ const router = Router()
 
 const listSchema = z.object({
   q:          z.string().optional(),
-  source:     z.enum(['intune', 'kandji', 'manageengine', 'all']).optional().default('all'),
+  source:     z.enum(['intune', 'manageengine', 'all']).optional().default('all'),
   compliance: z.enum(['Compliant', 'Non-Compliant', 'Warning']).optional(),
   platform:   z.enum(['Windows', 'macOS', 'Linux', 'Android', 'iOS']).optional(),
   limit:      z.coerce.number().int().min(1).max(10000).optional().default(100),
@@ -19,7 +18,6 @@ const listSchema = z.object({
 
 const sourceLabel: Record<string, Device['managementSource']> = {
   intune:       'Microsoft Intune',
-  kandji:       'Kandji',
   manageengine: 'ManageEngine',
 }
 
@@ -47,19 +45,17 @@ export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: bool
     return { devices: devicesCache.devices, mock: devicesCache.mock }
   }
 
-  const anyConfigured = isIntuneConfigured() || isKandjiConfigured() || isManageEngineConfigured()
+  const anyConfigured = isIntuneConfigured() || isManageEngineConfigured()
   if (!anyConfigured) return { devices: [], mock: false }
 
-  const [intuneResult, kandjiResult, meResult] = await Promise.allSettled([
+  const [intuneResult, meResult] = await Promise.allSettled([
     isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await getIntuneDevices();       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
-    isKandjiConfigured()       ? (async () => { const t0 = Date.now(); const d = await getKandjiDevices();       recordFetchResult('kandji',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
     isManageEngineConfigured() ? (async () => { const t0 = Date.now(); const d = await getManageEngineDevices(); recordFetchResult('manageengine', { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })() : Promise.resolve([]),
   ])
 
   const devices: Device[] = []
   const sources = [
     { result: intuneResult,  key: 'intune'        },
-    { result: kandjiResult,  key: 'kandji'        },
     { result: meResult,      key: 'manageengine'  },
   ] as const
 
@@ -133,7 +129,6 @@ router.get('/stats', asyncHandler(async (_req, res) => {
     mac:          devices.filter(d => d.platform === 'macOS').length,
     sources: {
       intune:       devices.filter(d => d.managementSource === 'Microsoft Intune').length,
-      kandji:       devices.filter(d => d.managementSource === 'Kandji').length,
       manageEngine: devices.filter(d => d.managementSource === 'ManageEngine').length,
     },
     issueCategories,
@@ -154,13 +149,6 @@ router.get('/:id/apps', asyncHandler(async (req, res) => {
   // If the device has apps bundled in its payload (mock data or pre-fetched), return immediately
   if (device?.apps && device.apps.length > 0) {
     res.json({ success: true, data: device.apps })
-    return
-  }
-
-  // For live Kandji devices, lazy-fetch from the Kandji API
-  if (isKandjiConfigured() && device?.managementSource === 'Kandji') {
-    const apps = await getKandjiDeviceApps(deviceId)
-    res.json({ success: true, data: apps })
     return
   }
 

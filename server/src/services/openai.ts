@@ -154,19 +154,19 @@ export function generateFallbackAnalysis(device: Device): DeviceAnalysis {
   if (category === 'mdm-sync') {
     if (platform === 'macOS') {
       return {
-        summary:          `${device.deviceName} has missed scheduled MDM check-ins — the Kandji agent may be unresponsive.`,
-        rootCause:        `The Kandji agent process has stopped, crashed, or the device has lost connectivity to Kandji endpoints. Extended offline periods can also cause missed check-ins.`,
-        recommendation:   'Restart the Kandji agent and verify the device can reach Kandji API endpoints.',
+        summary:          `${device.deviceName} has missed scheduled MDM check-ins — the ManageEngine MDM profile may be unresponsive.`,
+        rootCause:        `The device's MDM management profile has been removed, deregistered, or lost connectivity to ManageEngine endpoints. Extended offline periods can also cause missed check-ins.`,
+        recommendation:   'Force a profile re-check-in and verify the device can reach ManageEngine MDM endpoints.',
         suggestedRunbook: 'Restart MDM Agent',
         riskLevel:        'High',
         steps: [
           'Confirm the device is powered on and connected to the internet.',
-          'Restart the Kandji agent: open Terminal and run `sudo launchctl kickstart -k system/com.kandji.agent`.',
-          'Check agent logs: open Console.app and filter by "com.kandji" to identify recent errors.',
-          'Verify network access to Kandji: run `curl -I https://subdomain.api.kandji.io` from Terminal.',
-          'If the agent is missing or corrupted, re-enroll the device using the Kandji enrollment link.',
-          'Trigger a remote sync from Kandji Admin: Devices → [Device] → Actions → Send MDM Command.',
-          'Confirm the check-in timestamp updates in Kandji within 15 minutes.',
+          'Force an MDM profile re-check-in: open Terminal and run `sudo profiles renew -type enrollment` (or `sudo profiles -N` on older macOS).',
+          'Check for recent errors: open Console.app and filter by "mdmclient" to identify enrollment or check-in failures.',
+          'Verify network access to the ManageEngine MDM server: run `curl -I <ManageEngine server URL>` from Terminal.',
+          'If the enrollment profile is missing or corrupted, re-enroll the device using the ManageEngine enrollment link.',
+          'Trigger a remote sync from the ManageEngine console: Devices → [Device] → Actions → Refresh/Sync.',
+          'Confirm the check-in timestamp updates in ManageEngine within 15 minutes.',
         ],
       }
     }
@@ -267,7 +267,7 @@ export async function chatWithAI(message: string, deviceContext?: Device): Promi
   const ai = getClient()
 
   const system = `You are an expert enterprise IT endpoint management assistant helping IT administrators.
-You specialise in Microsoft Intune, Kandji, and ManageEngine environments.
+You specialise in Microsoft Intune and ManageEngine environments.
 Be concise, technical, and action-oriented. Prefer bullet points for steps.`
 
   const context = deviceContext
@@ -299,7 +299,7 @@ export interface AutomationRuleBlueprint {
   category:    'compliance' | 'security' | 'patching' | 'reporting' | 'drift'
   triggerType: 'device_non_compliant' | 'compliance_threshold' | 'device_offline' | 'new_enrollment' | 'scheduled' | 'risky_signin' | 'drift_detected' | 'encryption_off' | 'script_failure'
   platform:    'Windows' | 'macOS' | 'Linux' | 'all'
-  source:      'intune' | 'kandji' | 'manageengine' | 'all'
+  source:      'intune' | 'manageengine' | 'all'
   severity:    'Low' | 'Medium' | 'High' | 'Critical' | 'all'
   actions:     Array<'slack_notify' | 'create_jira' | 'execute_runbook' | 'execute_script' | 'generate_report' | 'send_notification'>
   reasoning:   string
@@ -315,7 +315,7 @@ Available trigger types: device_non_compliant, compliance_threshold, device_offl
 Available action types: slack_notify, create_jira, execute_runbook, execute_script, generate_report, send_notification
 Available categories: compliance, security, patching, reporting, drift
 Available platforms: Windows, macOS, Linux, all
-Available sources: intune, kandji, manageengine, all
+Available sources: intune, manageengine, all
 Available severities: Low, Medium, High, Critical, all
 
 Return ONLY valid JSON matching this exact shape:
@@ -353,7 +353,7 @@ export function buildAutomationRuleFallback(prompt: string): AutomationRuleBluep
   const isJira       = lower.includes('jira') || lower.includes('ticket') || lower.includes('incident')
   const isScript     = lower.includes('script') || lower.includes('run') || lower.includes('fix') || lower.includes('remediat')
   const isRunbook    = lower.includes('runbook') || lower.includes('playbook')
-  const isMac        = lower.includes('mac') || lower.includes('macos') || lower.includes('filevault') || lower.includes('kandji')
+  const isMac        = lower.includes('mac') || lower.includes('macos') || lower.includes('filevault')
   const isWindows    = lower.includes('windows') || lower.includes('bitlocker') || lower.includes('intune')
   const isEncrypt    = lower.includes('encrypt') || lower.includes('filevault') || lower.includes('bitlocker')
   const isPatch      = lower.includes('patch') || lower.includes('update') || lower.includes('os version')
@@ -384,7 +384,7 @@ export function buildAutomationRuleFallback(prompt: string): AutomationRuleBluep
     category,
     triggerType,
     platform,
-    source:      isMac ? 'kandji' : isWindows ? 'intune' : 'all',
+    source:      isMac ? 'manageengine' : isWindows ? 'intune' : 'all',
     severity,
     actions,
     reasoning:   'Parsed from natural language (AI unavailable — rule-based fallback)',
@@ -447,9 +447,8 @@ if echo "$STATUS" | grep -q "FileVault is On"; then
 fi
 
 echo "[ACTION] FileVault is not enabled. Triggering MDM enforcement..."
-# Signal Kandji to re-apply FileVault profile
+# Signal the MDM agent to re-apply the FileVault configuration profile
 /usr/bin/profiles -N 2>/dev/null || true
-/usr/local/bin/kandji run 2>/dev/null || true
 
 echo "[INFO] MDM enforcement triggered. FileVault activation will prompt user on next login."
 echo "[DONE] Script completed successfully."
@@ -463,14 +462,8 @@ set -euo pipefail
 echo "[INFO] Starting compliance remediation on $(hostname)..."
 echo "[INFO] Issue: ${device.primaryIssue || 'compliance policy failure'}"
 
-# Re-run Kandji compliance checks
-if command -v kandji &>/dev/null; then
-  echo "[ACTION] Triggering Kandji compliance check..."
-  /usr/local/bin/kandji run
-else
-  echo "[WARN] Kandji agent not found — triggering MDM profile refresh..."
-  /usr/bin/profiles -N
-fi
+echo "[ACTION] Triggering MDM profile refresh..."
+/usr/bin/profiles -N
 
 echo "[DONE] Remediation triggered. Check MDM console for updated status."
 exit 0`

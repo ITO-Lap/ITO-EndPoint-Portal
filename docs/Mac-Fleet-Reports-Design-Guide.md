@@ -704,7 +704,7 @@ Already EOL: 42 devices    30d: 23     90d: 89     180d: 156     1yr: 312
 
 ### Tag Parsing Logic
 
-Device tags in Kandji / MDM systems commonly use patterns like:
+Device tags in ManageEngine / MDM systems commonly use patterns like:
 
 ```
 location:nyc          →  New York City
@@ -1374,7 +1374,7 @@ TOTAL TIME: ~6 minutes
 
 ## 13. Component Specifications
 
-### Matching Enterprise MDM Products (Kandji, Jamf, Intune, NinjaOne)
+### Matching Enterprise MDM Products (ManageEngine, Jamf, Intune, NinjaOne)
 
 | Component | Specification |
 |---|---|
@@ -1382,7 +1382,7 @@ TOTAL TIME: ~6 minutes
 | Table row height | 44px default, 36px compact mode |
 | Table header | 11px uppercase, `#6B7280`, light gray bg `#F9FAFB` |
 | Status chip / badge | Pill shape, 6px radius, 12px font, category-specific colors (see §5) |
-| Severity bar | 8-segment horizontal bar, matching iru/Kandji pattern |
+| Severity bar | 8-segment horizontal bar, matching iru/ManageEngine pattern |
 | Chart colors | Primary: `#7C5CFC` purple; Severity: red `#EF4444`, orange `#F59E0B`, amber `#D97706`, green `#10B981` |
 | Filter panel | 280px wide, right-anchored slide-in, `z-index: 40` |
 | Active filter pill | Outlined, close `×` icon, purple border when applied |
@@ -1419,7 +1419,7 @@ TOTAL TIME: ~6 minutes
 Backend service that processes device tags on each sync:
 
 ```
-Input:  raw tags array from MDM/Kandji API
+Input:  raw tags array from MDM/ManageEngine API
         e.g., ["region:emea", "location:london", "office:london-hq", "department:finance"]
 
 Processing:

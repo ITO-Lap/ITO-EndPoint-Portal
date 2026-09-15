@@ -15,7 +15,7 @@ interface DeviceData {
   serialNumber: string        // e.g. "PF2X3B7"
   platform: string            // "Windows" | "macOS" | "Linux"
   osVersion: string           // e.g. "Windows 11 Pro 23H2"
-  managementSource: string    // "Microsoft Intune" | "Kandji" | "ManageEngine"
+  managementSource: string    // "Microsoft Intune" | "ManageEngine"
   lastCheckIn: string         // human-readable date string
   complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
   encryptionStatus: string    // "BitLocker On" | "BitLocker Off" | "FileVault On" | ...
@@ -80,7 +80,7 @@ interface RunbookData {
   runbookLink: string    // "View steps in runbook" (display label)
   steps: string[]        // ordered remediation steps
   escalation: string     // "Yes" | "No"
-  automation: string     // "Yes (Intune)" | "Partial (Kandji)" | "N/A"
+  automation: string     // "Yes (Intune)" | "Partial (ManageEngine)" | "N/A"
 }
 ```
 
@@ -130,7 +130,7 @@ interface ApiDevice {
   serialNumber: string
   platform: 'Windows' | 'macOS' | 'Linux'
   osVersion: string
-  managementSource: 'Microsoft Intune' | 'Kandji' | 'ManageEngine'
+  managementSource: 'Microsoft Intune' | 'ManageEngine'
   lastCheckIn: string
   complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
   encryptionStatus: string
@@ -200,7 +200,6 @@ interface ApiStats {
   mac: number
   sources: {
     intune: number
-    kandji: number
     manageEngine: number
   }
   mock: boolean     // true when returning mock data (no MDM configured)
@@ -279,7 +278,7 @@ Response from `GET /api/integrations/status` (one per source).
 
 ```ts
 interface IntegrationStatusItem {
-  id: string                 // "intune" | "kandji" | "manageengine" | "openai"
+  id: string                 // "intune" | "manageengine" | "openai"
   name: string               // "Microsoft Intune"
   configured: boolean
   deviceCount: number | null // null if never synced

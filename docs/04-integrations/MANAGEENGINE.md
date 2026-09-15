@@ -2,6 +2,8 @@
 
 Connects to **ManageEngine MDM On-Demand** (Endpoint Central Cloud) to fetch cross-platform device
 inventory, per-device security posture, installed applications, and applied configuration profiles.
+`mapPlatform()` detects macOS from the device's model/`product_name`, so ManageEngine is also the
+Mac Devices module's device source — there is no separate macOS-only MDM integration.
 
 > This is the **cloud** MDM product (Zoho OAuth2), not on-prem Endpoint Central's static-API-key
 > scheme — the two have completely different auth and endpoint shapes. If your org runs on-prem
@@ -57,7 +59,7 @@ shown as broken rows. Security detail is fetched per-device (batched, 8 concurre
 On-Demand tenants are typically small (tens–hundreds of devices), unlike Intune's often 1000s.
 
 Policy/app data is lazy-fetched per device (via `GET /api/devices/:id/apps` and
-`GET /api/devices/:id/policies`) the same way Intune and Kandji already work — opening a device's
+`GET /api/devices/:id/policies`) the same way Intune already works — opening a device's
 detail panel surfaces its real Applications and Compliance/Policy tabs.
 
 ---

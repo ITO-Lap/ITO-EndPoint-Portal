@@ -32,7 +32,7 @@ registerReport({
   name:        'Full Device Inventory',
   category:    'inventory',
   description: 'Complete snapshot of every managed endpoint across all connected sources.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'deviceName', dir: 'asc' },
   columns: [
@@ -93,7 +93,7 @@ registerReport({
   name:        'Non-Compliant Devices',
   category:    'compliance',
   description: 'All devices in a Non-Compliant or Warning state with the failing policy.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 180,
   defaultSort: { field: 'severity', dir: 'asc' },
   columns: [
@@ -144,7 +144,7 @@ registerReport({
   name:        'Compliance Summary by Source',
   category:    'compliance',
   description: 'Aggregated compliance rate per management source.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'complianceRate', dir: 'desc' },
   columns: [
@@ -156,7 +156,7 @@ registerReport({
     { key: 'complianceRate', label: 'Compliance Rate',   type: 'percent', width: 'md', align: 'right' },
   ],
   run({ devices }) {
-    const sources = ['Microsoft Intune', 'Kandji', 'ManageEngine'] as const
+    const sources = ['Microsoft Intune', 'ManageEngine'] as const
     const rows = sources.map(src => {
       const group = devices.filter(d => d.managementSource === src)
       if (group.length === 0) return null
@@ -190,7 +190,7 @@ registerReport({
   name:        'Stale Devices (30+ Days)',
   category:    'health',
   description: 'Devices that have not checked in for over 30 days — possible decommission candidates.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 600,
   defaultSort: { field: 'daysSinceCheckIn', dir: 'desc' },
   columns: [
@@ -242,7 +242,7 @@ registerReport({
   name:        'Encryption Status (BitLocker / FileVault)',
   category:    'security',
   description: 'Shows the disk encryption state for every managed device.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'encryptionStatus', dir: 'asc' },
   columns: [
@@ -289,7 +289,7 @@ registerReport({
   name:        'OS Version Distribution',
   category:    'inventory',
   description: 'Fleet-wide breakdown of OS versions across all platforms.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 600,
   defaultSort: { field: 'deviceCount', dir: 'desc' },
   columns: [
@@ -341,7 +341,7 @@ registerReport({
   name:        'Top Policy Failures',
   category:    'compliance',
   description: 'Most common policy failures aggregated across the fleet with affected device count.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'deviceCount', dir: 'desc' },
   columns: [
@@ -401,7 +401,7 @@ registerReport({
   name:        'Hardware Inventory',
   category:    'inventory',
   description: 'Model, processor, memory, and storage for every managed device.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 600,
   defaultSort: { field: 'deviceName', dir: 'asc' },
   columns: [
@@ -447,7 +447,7 @@ registerReport({
   name:        'User & Device Assignment',
   category:    'users',
   description: 'Maps every user to their assigned devices across all management sources.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'user', dir: 'asc' },
   columns: [
@@ -497,7 +497,7 @@ registerReport({
   name:        'Issue Severity Distribution',
   category:    'security',
   description: 'Breakdown of device issues by severity level across all sources.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'deviceCount', dir: 'desc' },
   columns: [
@@ -542,53 +542,6 @@ registerReport({
   },
 })
 
-// ── 11. Kandji Library Inventory ──────────────────────────────────────────────
-
-registerReport({
-  id:          'kandji-library-inventory',
-  name:        'Kandji Library Inventory',
-  category:    'software',
-  description: 'All items in the Kandji library — Auto Apps, VPP, Custom Apps, Scripts, Profiles, and more.',
-  sources:     ['kandji'],
-  cacheTtlSec: 600,
-  defaultSort: { field: 'name', dir: 'asc' },
-  columns: [
-    { key: 'name',        label: 'Name',        type: 'string', width: 'xl' },
-    { key: 'category',    label: 'Type',        type: 'badge',  width: 'md' },
-    { key: 'enforcement', label: 'Enforcement', type: 'string', width: 'md' },
-    { key: 'status',      label: 'Status',      type: 'badge',  width: 'sm' },
-    { key: 'id',          label: 'Library ID',  type: 'string', width: 'lg' },
-  ],
-  run({ kandjiApps }) {
-    if (!kandjiApps || kandjiApps.length === 0) {
-      return {
-        rows: [],
-        summary: [{ label: 'No Kandji Data', value: 'Configure Kandji credentials in Settings', color: 'amber' }],
-      }
-    }
-
-    const cats = groupCount(kandjiApps, a => a.category)
-    const summary: ReportSummaryCard[] = [
-      { label: 'Total Items',  value: kandjiApps.length, color: 'sky'    },
-      { label: 'Active',       value: kandjiApps.filter(a => a.active).length, color: 'green'  },
-      { label: 'Inactive',     value: kandjiApps.filter(a => !a.active).length, color: 'slate'  },
-      { label: 'Auto Apps',    value: cats.get('Auto App') ?? 0, color: 'sky'    },
-      { label: 'VPP Apps',     value: cats.get('VPP App')  ?? 0, color: 'violet' },
-      { label: 'Scripts',      value: cats.get('Script')   ?? 0, color: 'amber'  },
-    ]
-
-    const rows = kandjiApps.map(a => ({
-      name:        a.name,
-      category:    a.category,
-      enforcement: a.enforcement,
-      status:      a.active ? 'Active' : 'Inactive',
-      id:          a.id,
-    }))
-
-    return { rows, summary }
-  },
-})
-
 // ── 12. Management Source Distribution ───────────────────────────────────────
 
 registerReport({
@@ -596,7 +549,7 @@ registerReport({
   name:        'Management Source Distribution',
   category:    'inventory',
   description: 'Device count and compliance breakdown per connected management source.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 300,
   defaultSort: { field: 'total', dir: 'desc' },
   columns: [
@@ -643,7 +596,7 @@ registerReport({
   name:        'VIP Device Health',
   category:    'health',
   description: 'Compliance and risk status for high-priority users (VP, Director, C-Suite) whose devices need elevated attention.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 180,
   defaultSort: { field: 'riskScore', dir: 'desc' },
   columns: [
@@ -1500,7 +1453,7 @@ registerReport({
   name:        'Device Cleanup Recommendations',
   category:    'inventory',
   description: 'Identifies stale, duplicate, or orphaned devices that are candidates for unenrollment or reassignment.',
-  sources:     ['intune', 'kandji', 'manageengine'],
+  sources:     ['intune', 'manageengine'],
   cacheTtlSec: 600,
   defaultSort: { field: 'daysSinceCheckIn', dir: 'desc' },
   columns: [

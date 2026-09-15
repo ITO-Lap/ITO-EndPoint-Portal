@@ -103,8 +103,8 @@ def add_module_table(doc, items, accent_rgb):
 # ── Module data ───────────────────────────────────────────────────────────────
 MODULES = [
     ("Endpoint Management", BLUE, [
-        ("MAC", "Mac Devices (Kandji)",
-         "Full Mac fleet manager with five tabs — Devices, Applications, Security, Automation, and Reports. Searchable device table with blueprint assignments, FileVault status, macOS version, and per-device compliance. App library tracks Auto App / VPP / Profile enforcements; reports cover fleet growth, patch compliance, and stale devices."),
+        ("MAC", "Mac Devices (ManageEngine)",
+         "Full Mac fleet manager with five tabs — Devices, Applications, Security, Automation, and Reports. Searchable device table with configuration profile assignments, FileVault status, macOS version, and per-device compliance. Applications tab tracks per-device installed apps; reports cover fleet growth, patch compliance, and stale devices."),
         ("WIN", "Intune Devices",
          "Microsoft Intune console with Devices, Compliance, Security, Automation, Reports, and Entra ID tabs. Filter Windows / Android / iOS endpoints by encryption state and compliance policy; monitor BitLocker, Defender, and MFA coverage. Built-in automation rules and PDF/CSV report export with live Graph API integration."),
         ("WIN", "Windows Devices",
@@ -148,7 +148,7 @@ MODULES = [
     ]),
     ("Platform", NAVY, [
         ("SET", "Settings",
-         "Central configuration hub for Integrations (Intune, Entra, Kandji, ManageEngine, Jira, Confluence, Slack), notification preferences, and account management. Manage API credentials, connection status, alert thresholds, quiet hours, and data-retention policies from one place. Role-based access lets Global Admin / IT Admin / Helpdesk roles control what each user can view and action."),
+         "Central configuration hub for Integrations (Intune, Entra, ManageEngine, Jira, Confluence, Slack), notification preferences, and account management. Manage API credentials, connection status, alert thresholds, quiet hours, and data-retention policies from one place. Role-based access lets Global Admin / IT Admin / Helpdesk roles control what each user can view and action."),
         ("DOC", "Documentation",
          "In-app docs portal covering architecture, integration setup, API reference, data models, and per-feature guides. Searchable and structured by section; includes interactive examples and configuration snippets. Mirrors the /docs folder so content stays in sync with the codebase."),
     ]),
@@ -183,7 +183,7 @@ sub_r.font.size = Pt(13)
 sub_r.font.color.rgb = RGBColor(0xA8, 0xC4, 0xF0)
 
 desc_p = cell.add_paragraph(
-    "Enterprise IT endpoint management — connect Intune, Kandji & ManageEngine; "
+    "Enterprise IT endpoint management — connect Intune & ManageEngine; "
     "surface compliance, threats, and AI-powered remediation in one platform."
 )
 desc_r = desc_p.runs[0]
@@ -206,7 +206,7 @@ r.font.color.rgb = GREY
 p.paragraph_format.space_before = Pt(6)
 p.paragraph_format.space_after  = Pt(4)
 
-integrations = ["Microsoft Intune", "Kandji", "ManageEngine", "Entra ID / Azure AD",
+integrations = ["Microsoft Intune", "ManageEngine", "Entra ID / Azure AD",
                 "Jira", "Confluence", "Slack", "CrowdStrike / Defender"]
 int_tbl = doc.add_table(rows=1, cols=len(integrations))
 int_tbl.alignment = WD_TABLE_ALIGNMENT.LEFT

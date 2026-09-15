@@ -107,7 +107,7 @@ function OverviewSection() {
     { icon: Laptop2,    label: 'Device Management',    desc: 'Search and inspect managed endpoints across all connected MDM sources.' },
     { icon: ShieldCheck,label: 'Compliance Monitoring', desc: 'Real-time compliance status, policy failure details, and trend visualisation.' },
     { icon: BookOpen,   label: 'Runbooks',              desc: 'Step-by-step remediation guides with one-click automation.' },
-    { icon: Globe,      label: 'Integrations',          desc: 'Unified view across Microsoft Intune, Kandji, and ManageEngine.' },
+    { icon: Globe,      label: 'Integrations',          desc: 'Unified view across Microsoft Intune and ManageEngine.' },
     { icon: Settings,   label: 'Settings',              desc: 'Organisation-wide configuration for compliance, automation, and security.' },
   ]
 
@@ -116,7 +116,7 @@ function OverviewSection() {
       <DocCard>
         <div className="px-5 py-5 space-y-4">
           <p className="text-sm text-slate-700 leading-relaxed">
-            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune, Kandji, and ManageEngine, surfaces compliance issues in real time, and provides actionable runbooks to resolve them — with full automation support.
+            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune and ManageEngine, surfaces compliance issues in real time, and provides actionable runbooks to resolve them — with full automation support.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {features.map(f => (
@@ -139,8 +139,7 @@ function OverviewSection() {
         <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { name: 'Microsoft Intune', color: 'bg-orange-100 text-orange-700',    desc: 'Windows device MDM' },
-            { name: 'Kandji',           color: 'bg-lime-100 text-lime-700', desc: 'macOS MDM' },
-            { name: 'ManageEngine',     color: 'bg-orange-100 text-orange-700', desc: 'Cross-platform UEM' },
+            { name: 'ManageEngine',     color: 'bg-orange-100 text-orange-700', desc: 'Cross-platform UEM (Windows & macOS)' },
           ].map(itg => (
             <div key={itg.name} className={`rounded-xl px-3 py-2.5 ${itg.color}`}>
               <p className="text-xs font-bold leading-tight">{itg.name}</p>
@@ -531,7 +530,7 @@ function FaqSection() {
       a: 'Yes, the user email is visible in the Device Summary panel. However, Helpdesk users cannot copy it to the clipboard — that action is restricted to IT Admin and above.',
     },
     {
-      q: 'Who can disconnect an integration (e.g. Intune or Kandji)?',
+      q: 'Who can disconnect an integration (e.g. Intune or ManageEngine)?',
       a: 'Only Global Admins. Disconnecting stops all syncs for that platform immediately. IT Admins can view integration status and trigger a sync, but cannot modify or disconnect.',
     },
     {
@@ -1004,7 +1003,7 @@ function ReportsSection() {
     { name: 'Device Check-in Report',       cat: 'Health',     desc: 'Last sync times and offline device counts.' },
     { name: 'Sign-in Risk Report',          cat: 'Users',      desc: 'Entra ID risky sign-ins (requires Entra integration).' },
     { name: 'Hardware Inventory Report',    cat: 'Inventory',  desc: 'CPU, RAM, disk, and firmware for each device.' },
-    { name: 'License Compliance Report',    cat: 'Software',   desc: 'Kandji / Intune license utilisation.' },
+    { name: 'License Compliance Report',    cat: 'Software',   desc: 'ManageEngine / Intune license utilisation.' },
     { name: 'User Roles & Permissions',     cat: 'Users',      desc: 'Audit of all user role assignments.' },
   ]
 
@@ -1079,22 +1078,13 @@ function ConfigurationSection() {
       ],
     },
     {
-      name: 'Kandji',
-      fields: ['KANDJI_API_URL', 'KANDJI_API_TOKEN'],
-      steps: [
-        'In Kandji (or Iru) Admin, go to Settings → Access → API Token',
-        'Create a token with Read scope for Devices and Library',
-        'Your API URL is your org subdomain, e.g. https://yourorg.api.kandji.io',
-        'Paste the API URL and token in Settings → Integrations → Kandji',
-      ],
-    },
-    {
       name: 'ManageEngine',
       fields: ['MANAGEENGINE_URL', 'MANAGEENGINE_API_KEY'],
       steps: [
         'In ManageEngine UEM, go to Admin → API → Generate API Key',
         'Note your server URL including port (default: 8443)',
         'Paste the URL and API key in Settings → Integrations → ManageEngine',
+        'ManageEngine supplies both Windows and macOS device inventory',
       ],
     },
     {
@@ -1141,8 +1131,6 @@ function ConfigurationSection() {
             <p>INTUNE_TENANT_ID=<span className="text-amber-400">your-tenant-id</span></p>
             <p>INTUNE_CLIENT_ID=<span className="text-amber-400">your-client-id</span></p>
             <p>INTUNE_CLIENT_SECRET=<span className="text-amber-400">your-client-secret</span></p>
-            <p className="mt-2">KANDJI_API_URL=<span className="text-amber-400">https://yourorg.api.kandji.io</span></p>
-            <p>KANDJI_API_TOKEN=<span className="text-amber-400">your-kandji-token</span></p>
             <p className="mt-2">MANAGEENGINE_URL=<span className="text-amber-400">https://yourserver:8443</span></p>
             <p>MANAGEENGINE_API_KEY=<span className="text-amber-400">your-api-key</span></p>
             <p className="mt-2 text-slate-500"># Identity</p>
@@ -1348,7 +1336,7 @@ function QuickStartSection() {
     },
     {
       n: '6', title: 'Connect your MDM', color: 'bg-orange-500',
-      desc: 'When you\'re ready for live data, go to Settings → Integrations. Add your Intune, Kandji, or ManageEngine credentials. See Integration Setup in this docs for step-by-step instructions.',
+      desc: 'When you\'re ready for live data, go to Settings → Integrations. Add your Intune or ManageEngine credentials. See Integration Setup in this docs for step-by-step instructions.',
       tips: ['Without credentials, all data is realistic mock data — safe to explore.', 'Each integration can be connected independently; you don\'t need all three.'],
     },
   ]
@@ -1775,7 +1763,7 @@ function SecuritySection() {
           <CardHeader title="LAPS (Local Admin Password)" />
           <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
             <p><strong>LAPS</strong> (Local Administrator Password Solution) automatically rotates the local admin password on managed devices so that every device has a unique, time-limited credential.</p>
-            <p>View LAPS status per device in the <strong>Device Detail Panel → LAPS tab</strong>. Fields shown: enabled status, managing source (Microsoft LAPS / Kandji Managed / Legacy LAPS), account name, last rotation, and expiry date.</p>
+            <p>View LAPS status per device in the <strong>Device Detail Panel → LAPS tab</strong>. Fields shown: enabled status, managing source (Microsoft LAPS / ManageEngine Managed / Legacy LAPS), account name, last rotation, and expiry date.</p>
           </div>
         </DocCard>
         <DocCard>
@@ -1784,7 +1772,7 @@ function SecuritySection() {
             <p>The Vulnerabilities page tracks CVE-level patch exposure across your fleet — which devices are affected by which CVEs, severity ratings, and patch availability status.</p>
             <p className="flex items-start gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-              <span>This page is under active development. CVE data will be pulled from Defender Vulnerability Management (Intune) and Iru (Kandji) in a future release.</span>
+              <span>This page is under active development. CVE data will be pulled from Defender Vulnerability Management (Intune) and ManageEngine in a future release.</span>
             </p>
           </div>
         </DocCard>
@@ -1932,16 +1920,15 @@ function FeatureGuideSection() {
       <Section id="endpoint" title="Section 1 — Endpoint Management" color="bg-blue-700">
 
         <div>
-          <p className="text-xs font-bold text-slate-800 mb-2">1.1 Mac Devices — Kandji Connector</p>
-          <p className="text-[0.7rem] text-slate-600 mb-3">Primary hub for Apple macOS device management. Five tabs cover the full fleet lifecycle.</p>
+          <p className="text-xs font-bold text-slate-800 mb-2">1.1 Mac Devices — ManageEngine Connector</p>
+          <p className="text-[0.7rem] text-slate-600 mb-3">Primary hub for Apple macOS device management, backed by ManageEngine MDM On-Demand (Endpoint Central Cloud). Tabs cover the full fleet lifecycle using per-device data — ManageEngine has no global app catalog/blueprint concept, so app and policy data is shown per device rather than as a central library.</p>
           <DocCard>
             <CardHeader title="Tabs & Key Features" />
             <TabFeatureList items={[
-              { tab: 'Devices',      desc: 'Full inventory with model/OS/blueprint filters, check-in staleness dots (green→today, amber→3-6d, red→7+d), FileVault & compliance badges.' },
-              { tab: 'Applications', desc: 'Library inventory (Auto App · VPP · Custom · Profile · Script) with enforcement type, blueprint, status filter, and CSV export.' },
-              { tab: 'Security',     desc: 'Per-device FileVault, CrowdStrike EDR agent, macOS Firewall, applied policy count, and aggregated risk level.' },
-              { tab: 'Automation',   desc: '5 Kandji-specific rules: FileVault Off Alert, Blueprint Drift, Stale Quarantine, CrowdStrike Health Alert, Weekly Fleet Report.' },
-              { tab: 'Reports',      desc: 'Fleet growth, patch compliance, macOS version mix, app currency, stale devices, blueprint rate, IRU Patch Report, and 18-KPI fleet dashboard.' },
+              { tab: 'Devices',      desc: 'Full inventory with model/OS filters, check-in staleness dots (green→today, amber→3-6d, red→7+d), FileVault & compliance badges.' },
+              { tab: 'Applications', desc: 'Per-device installed app inventory and applied configuration profile strings (no global catalog — ManageEngine only exposes per-device app/policy state).' },
+              { tab: 'Security',     desc: 'Per-device FileVault, EDR agent, macOS Firewall, applied policy count, and aggregated risk level.' },
+              { tab: 'Reports',      desc: 'Fleet growth, patch compliance, macOS version mix, stale devices, IRU Patch Report, and fleet KPI dashboard.' },
             ]} />
           </DocCard>
         </div>
@@ -1964,15 +1951,15 @@ function FeatureGuideSection() {
         <div>
           <p className="text-xs font-bold text-slate-800 mb-2">1.3 IRU — Infrastructure & Remote Users Patch Report</p>
           <p className="text-[0.7rem] text-slate-600 mb-3">
-            IRU is a specialised macOS patch-compliance and staleness report built on Kandji data —
-            not a separate connector. Accessible via Kandji → Reports → IRU Patch Report, and as a standalone full-page view.
+            IRU is a specialised macOS patch-compliance and staleness report built on ManageEngine data —
+            not a separate connector. Accessible via Mac Devices → Reports → IRU Patch Report, and as a standalone full-page view.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DocCard>
               <CardHeader title="Patch Tiers (6)" />
               <TabFeatureList items={[
                 { tab: 'Current (26.5)',       desc: 'Latest macOS Tahoe — no action needed.' },
-                { tab: 'Minor Patch (26.4)',   desc: 'One patch behind — Kandji nudge to upgrade.' },
+                { tab: 'Minor Patch (26.4)',   desc: 'One patch behind — ManageEngine notification to upgrade.' },
                 { tab: 'Update Req (26.x)',    desc: 'Multiple versions behind — investigate dev/beta channel.' },
                 { tab: 'Sequoia (15.x)',       desc: 'Outdated major release — enforce upgrade to 26.x.' },
                 { tab: 'Sonoma (14.x)',        desc: '2-3 releases behind — direct outreach + force policy.' },
@@ -2002,32 +1989,31 @@ function FeatureGuideSection() {
         </div>
 
         <div>
-          <p className="text-xs font-bold text-slate-800 mb-3">1.4 Kandji vs Intune — Feature Comparison</p>
+          <p className="text-xs font-bold text-slate-800 mb-3">1.4 ManageEngine (macOS) vs Intune — Feature Comparison</p>
           <CompareTable
-            headers={['Feature / Metric', 'Kandji (Mac)', 'Intune (Windows / Mobile)', 'Winner']}
+            headers={['Feature / Metric', 'ManageEngine (Mac)', 'Intune (Windows / Mobile)', 'Winner']}
             rows={[
               ['Primary Platform',     'macOS (M-series & Intel)',    'Windows 10/11, iOS, Android',     'Platform-specific'],
-              ['Disk Encryption',      'FileVault — 94% pass rate',   'BitLocker — 82% pass rate',       'Kandji'],
-              ['EDR / Antivirus',      'CrowdStrike Falcon — 96%',    'Microsoft Defender — 91%',        'Kandji'],
-              ['Firewall Compliance',  'macOS Firewall — 98%',        'Windows Firewall — 95%',          'Kandji'],
-              ['OS Patch Compliance',  'macOS updates — 81%',         'Windows Update — 68%',            'Kandji'],
-              ['Identity / MFA',       'Okta MFA — 92%',              'Azure AD MFA — 87%',              'Kandji'],
-              ['Overall Compliance',   '93% avg',                     '90% avg',                         'Kandji'],
+              ['Disk Encryption',      'FileVault — 90% pass rate',   'BitLocker — 82% pass rate',       'ManageEngine'],
+              ['EDR / Antivirus',      'EDR / AV — 94%',              'Microsoft Defender — 91%',        'ManageEngine'],
+              ['Firewall Compliance',  'macOS Firewall — 96%',        'Windows Firewall — 95%',          'ManageEngine'],
+              ['OS Patch Compliance',  'macOS updates — 79%',         'Windows Update — 68%',            'ManageEngine'],
+              ['Identity / MFA',       'MFA — 90%',                   'Azure AD MFA — 87%',              'ManageEngine'],
+              ['Overall Compliance',   '91% avg',                     '90% avg',                         'ManageEngine'],
               ['Mobile Device Support','None (Mac only)',              'iOS + Android full MDM',          'Intune'],
-              ['Windows Management',   'None',                        'Full GPO + Intune policy stack',  'Intune'],
-              ['Patch Reporting',      'IRU (6-tier + regional)',      'Binary: compliant / not',         'Kandji'],
-              ['Identity Provider',    'Okta / SAML',                 'Azure AD / Entra ID',             'Context-dependent'],
+              ['Windows Management',   'Cross-platform (Windows + macOS)', 'Full GPO + Intune policy stack',  'Context-dependent'],
+              ['Patch Reporting',      'IRU (6-tier + regional)',      'Binary: compliant / not',         'ManageEngine'],
+              ['Identity Provider',    'Directory-dependent',         'Azure AD / Entra ID',             'Context-dependent'],
             ]}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <AdvantageBox color="emerald" title="Kandji Advantages over Intune" points={[
-              'Higher compliance rates across all macOS security pillars',
-              'Native Apple silicon optimisation — M1/M2/M3 support without legacy overhead',
+            <AdvantageBox color="emerald" title="ManageEngine Advantages over Intune" points={[
+              'Higher compliance rates across measured macOS security pillars',
+              'Single UEM console covers both Windows and macOS fleets',
               'IRU provides 6-tier patch segmentation vs Intune\'s binary pass/fail',
-              'CrowdStrike Falcon offers deeper detection telemetry than Defender',
-              'Kandji check-in is more reliable on macOS than Intune MDM sync cycle',
+              'On-premises deployment option for strict data residency requirements',
             ]} />
-            <AdvantageBox color="blue" title="Intune Advantages over Kandji" points={[
+            <AdvantageBox color="blue" title="Intune Advantages over ManageEngine" points={[
               'Full Windows 10/11 management — GPO migration, Win32 app deployment',
               'iOS and Android MDM in one platform',
               'Microsoft Graph API is the richest identity + device data source',
@@ -2064,14 +2050,14 @@ function FeatureGuideSection() {
         <div>
           <p className="text-xs font-bold text-slate-800 mb-2">2.1 Security Posture — Pillar Scores</p>
           <CompareTable
-            headers={['Pillar', 'All Sources', 'Intune (Windows)', 'Kandji (macOS)', 'ManageEngine']}
+            headers={['Pillar', 'All Sources', 'Intune (Windows)', 'ManageEngine (Mixed)']}
             rows={[
-              ['Encryption / FileVault / BitLocker', '87%', '82% BitLocker',  '94% FileVault',    '78%'],
-              ['EDR / Antivirus',                    '93%', '91% Defender',   '96% CrowdStrike',  '89% AV'],
-              ['Firewall',                           '96%', '95% Win FW',     '98% macOS FW',     '91% Host FW'],
-              ['OS Patching',                        '74%', '68% Win Update', '81% macOS Updates','71% ME Patch'],
-              ['Identity / MFA',                     '89%', '87% Azure MFA',  '92% Okta MFA',     '84% MFA'],
-              ['MDM Compliance',                     '91%', '90% Intune',     '93% Kandji',       '88% ME'],
+              ['Encryption / FileVault / BitLocker', '87%', '82% BitLocker',  '90%'],
+              ['EDR / Antivirus',                    '93%', '91% Defender',   '94%'],
+              ['Firewall',                           '96%', '95% Win FW',     '96%'],
+              ['OS Patching',                        '74%', '68% Win Update', '79%'],
+              ['Identity / MFA',                     '89%', '87% Azure MFA',  '90%'],
+              ['MDM Compliance',                     '91%', '90% Intune',     '91%'],
             ]}
           />
         </div>
@@ -2205,7 +2191,7 @@ function FeatureGuideSection() {
         <DocCard>
           <CardHeader title="Settings — 4 Configuration Categories" />
           <TabFeatureList items={[
-            { tab: 'Integrations',          desc: 'Intune · Entra · Kandji · ManageEngine · Jira · Confluence · Slack — API credentials, connection test.' },
+            { tab: 'Integrations',          desc: 'Intune · Entra · ManageEngine · Jira · Confluence · Slack — API credentials, connection test.' },
             { tab: 'Notifications',         desc: 'Alert thresholds by severity, delivery channels (in-app/Slack/email), quiet hours.' },
             { tab: 'Account Settings',      desc: 'User role assignment, API key management, session management.' },
             { tab: 'Data & Privacy',        desc: 'Log retention policies, data export, compliance flags (GDPR / SOC 2).' },

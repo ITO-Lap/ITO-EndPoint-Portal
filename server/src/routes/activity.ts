@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { getCachedKandjiDevices, isKandjiConfigured } from '../services/kandji.js'
 import { getIntuneDevices, isIntuneConfigured } from '../services/intune.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import type { ActivityItem } from '../types.js'
@@ -70,16 +69,8 @@ async function fetchFallbackDevices(): Promise<Device[]> {
 router.get('/', asyncHandler(async (req, res) => {
   const { limit, status } = querySchema.parse(req.query)
 
-  let sourceDevices: Pick<Device, 'id' | 'deviceName' | 'complianceState' | 'primaryIssue'>[]
-
-  if (isKandjiConfigured()) {
-    // Prefer the already-populated Kandji cache — no extra API call
-    const cached = getCachedKandjiDevices()
-    sourceDevices = cached && cached.length > 0 ? cached : []
-  } else {
-    // Fall back to Intune + ManageEngine (cached with TTL)
-    sourceDevices = await fetchFallbackDevices()
-  }
+  const sourceDevices: Pick<Device, 'id' | 'deviceName' | 'complianceState' | 'primaryIssue'>[] =
+    await fetchFallbackDevices()
 
   let items: ActivityItem[]
 

@@ -454,7 +454,6 @@ export function UsersPage({ viewerRole = 'Global Admin', onOpenUser }: { viewerR
                 <option value="All">All Sources</option>
                 <option value="Microsoft Entra ID">Microsoft Entra ID</option>
                 <option value="Microsoft Intune">Microsoft Intune</option>
-                <option value="Kandji">Kandji</option>
                 <option value="ManageEngine">ManageEngine</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />

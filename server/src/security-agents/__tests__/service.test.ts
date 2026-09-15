@@ -62,8 +62,8 @@ describe('scanDevice', () => {
     expect(findAgent(status, 'zscaler')?.health).toBe('Error')
   })
 
-  it('treats a Kandji antivirusStatus hint as installed-but-unverified', () => {
-    const device = makeDevice({ managementSource: 'Kandji', antivirusStatus: 'CrowdStrike' })
+  it('treats a ManageEngine antivirusStatus hint as installed-but-unverified', () => {
+    const device = makeDevice({ managementSource: 'ManageEngine', antivirusStatus: 'CrowdStrike' })
     const status = scanDevice(device, [], '2026-08-07T00:00:00Z', collectors)
     const falcon = findAgent(status, 'crowdstrike')
     expect(falcon?.installed).toBe(true)
@@ -119,7 +119,7 @@ describe('buildPlatformCoverage', () => {
   it('computes Falcon/Zscaler coverage for physical devices of one platform only', () => {
     const covered   = { device: makeDevice({ id: 'p1' }), apps: [makeApp({ name: 'Zscaler Client Connector', version: '5.0.0' }), makeApp({ name: 'CrowdStrike Falcon Sensor', version: '7.0.0' })] }
     const uncovered = { device: makeDevice({ id: 'p2' }), apps: [] }
-    const mac       = { device: makeDevice({ id: 'p3', platform: 'macOS', managementSource: 'Kandji' }), apps: [] }
+    const mac       = { device: makeDevice({ id: 'p3', platform: 'macOS', managementSource: 'ManageEngine' }), apps: [] }
     const vdi       = { device: makeDevice({ id: 'p4', deviceName: 'VDI-WIN-01' }), apps: [] }
 
     const statuses = scanFleet([covered, uncovered, mac, vdi], '2026-08-07T00:00:00Z', collectors)

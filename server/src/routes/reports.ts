@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { fetchAllDevices } from './devices.js'
-import { getKandjiLibraryApps, isKandjiConfigured } from '../services/kandji.js'
 import { getEntraData, isEntraConfigured } from '../services/entra.js'
 import {
   getReportDef,
@@ -39,12 +38,11 @@ router.post('/:id/run', asyncHandler(async (req, res) => {
   }
 
   const { devices, mock } = await fetchAllDevices()
-  const kandjiApps = isKandjiConfigured() ? await getKandjiLibraryApps().catch(() => []) : []
   const entraData  = isEntraConfigured()  ? await getEntraData().catch(() => undefined) : undefined
 
   const { sortBy, ...rest } = parsed.data
   const params = sortBy !== undefined ? { ...rest, sortBy } : rest
-  const result = runReport(def, { devices, kandjiApps, ...(entraData ? { entraData } : {}), isMock: mock }, params)
+  const result = runReport(def, { devices, ...(entraData ? { entraData } : {}), isMock: mock }, params)
   res.json({ success: true, data: result })
 }))
 
@@ -61,7 +59,6 @@ router.get('/:id/export/csv', asyncHandler(async (req, res) => {
   }
 
   const { devices, mock } = await fetchAllDevices()
-  const kandjiApps = isKandjiConfigured() ? await getKandjiLibraryApps().catch(() => []) : []
   const entraData  = isEntraConfigured()  ? await getEntraData().catch(() => undefined) : undefined
 
   // For CSV export, return all rows (no pagination limit from query)
@@ -69,7 +66,7 @@ router.get('/:id/export/csv', asyncHandler(async (req, res) => {
   const csvParams = csvSortBy !== undefined
     ? { ...csvRest, sortBy: csvSortBy, limit: 5000, offset: 0 }
     : { ...csvRest, limit: 5000, offset: 0 }
-  const result = runReport(def, { devices, kandjiApps, ...(entraData ? { entraData } : {}), isMock: mock }, csvParams)
+  const result = runReport(def, { devices, ...(entraData ? { entraData } : {}), isMock: mock }, csvParams)
   const csv = toCSV(result)
 
   const filename = `${def.id}-${new Date().toISOString().slice(0, 10)}.csv`

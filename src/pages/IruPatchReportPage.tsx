@@ -604,13 +604,13 @@ export function IruPatchReportPage() {
 
   // ── Recommendations ───────────────────────────────────────────────────────────
   const recs = useMemo(() => [
-    { p: 1 as const, label: 'Priority 1 — Immediate (this week)',   title: `Investigate ${abandonedCount} abandoned device${abandonedCount !== 1 ? 's' : ''}`,   body: `Cross-reference against HR offboarding records. Issue remote-wipe commands for unaccounted devices via Kandji.${venturaCount > 0 ? ` ${venturaCount} Ventura machine${venturaCount > 1 ? 's' : ''} have had no Apple security patches since Nov 2024 — treat as P0.` : ''}` },
-    { p: 1 as const, label: 'Priority 1 — Immediate (this week)',   title: `Remediate ${sonomaCount + venturaCount} EOL / severely outdated devices`,            body: `Direct owner outreach for Sonoma (${sonomaCount}) and Ventura (${venturaCount}) devices. Set 48-hour compliance deadline. Enforce OS upgrade via Kandji PROD blueprint.` },
-    { p: 2 as const, label: 'Priority 2 — Short term (2 weeks)',    title: `Push macOS ${TARGET_OS} to ${sequoiaCount} Sequoia devices`,                         body: `Schedule region-aware blueprint push. Use Kandji's 5-day deferral window to minimize disruption. Confirm update completion via daily MDM report pull.` },
-    { p: 2 as const, label: 'Priority 2 — Short term (2 weeks)',    title: `Drive ${minorCount} "minor patch" devices to ${TARGET_OS}`,                          body: `${pct(minorCount, total)} of the fleet is one minor update behind. Deploy fleet-wide Kandji nudge campaign. Target: 80% compliance within 10 business days.` },
-    { p: 3 as const, label: 'Priority 3 — Ongoing (30 days)',       title: `Tag all ${untaggedCount} untagged devices`,                                           body: `Untagged devices block regional reporting and targeted rollouts. Audit device assignments in Kandji. Confirm owner for serial-only device names.` },
-    { p: 3 as const, label: 'Priority 3 — Ongoing (30 days)',       title: `Evaluate ${updateReqCount} early-channel 26.0/26.2 devices`,                         body: `Confirm whether these are on dev/beta channels intentionally. If not, migrate to PROD blueprint and push ${TARGET_OS} immediately.` },
-    { p: 4 as const, label: 'Priority 4 — Process improvement',     title: 'Establish 14-day stale check-in SLA',                                                body: 'Automate: Slack DM at day 7 → manager CC at day 14 → Security ticket at day 30. Weekly Kandji report to IRU team prevents the abandoned backlog from rebuilding.' },
+    { p: 1 as const, label: 'Priority 1 — Immediate (this week)',   title: `Investigate ${abandonedCount} abandoned device${abandonedCount !== 1 ? 's' : ''}`,   body: `Cross-reference against HR offboarding records. Issue remote-wipe commands for unaccounted devices via ManageEngine.${venturaCount > 0 ? ` ${venturaCount} Ventura machine${venturaCount > 1 ? 's' : ''} have had no Apple security patches since Nov 2024 — treat as P0.` : ''}` },
+    { p: 1 as const, label: 'Priority 1 — Immediate (this week)',   title: `Remediate ${sonomaCount + venturaCount} EOL / severely outdated devices`,            body: `Direct owner outreach for Sonoma (${sonomaCount}) and Ventura (${venturaCount}) devices. Set 48-hour compliance deadline. Enforce OS upgrade via ManageEngine's production configuration profile.` },
+    { p: 2 as const, label: 'Priority 2 — Short term (2 weeks)',    title: `Push macOS ${TARGET_OS} to ${sequoiaCount} Sequoia devices`,                         body: `Schedule region-aware profile push. Use ManageEngine's deferral window to minimize disruption. Confirm update completion via daily MDM report pull.` },
+    { p: 2 as const, label: 'Priority 2 — Short term (2 weeks)',    title: `Drive ${minorCount} "minor patch" devices to ${TARGET_OS}`,                          body: `${pct(minorCount, total)} of the fleet is one minor update behind. Deploy fleet-wide ManageEngine notification campaign. Target: 80% compliance within 10 business days.` },
+    { p: 3 as const, label: 'Priority 3 — Ongoing (30 days)',       title: `Tag all ${untaggedCount} untagged devices`,                                           body: `Untagged devices block regional reporting and targeted rollouts. Audit device assignments in ManageEngine. Confirm owner for serial-only device names.` },
+    { p: 3 as const, label: 'Priority 3 — Ongoing (30 days)',       title: `Evaluate ${updateReqCount} early-channel 26.0/26.2 devices`,                         body: `Confirm whether these are on dev/beta channels intentionally. If not, migrate to the production configuration profile and push ${TARGET_OS} immediately.` },
+    { p: 4 as const, label: 'Priority 4 — Process improvement',     title: 'Establish 14-day stale check-in SLA',                                                body: 'Automate: Slack DM at day 7 → manager CC at day 14 → Security ticket at day 30. Weekly ManageEngine report to IRU team prevents the abandoned backlog from rebuilding.' },
     { p: 4 as const, label: 'Priority 4 — Process improvement',     title: 'Hardware refresh planning for pre-M1 Intel Macs',                                    body: "Identify MBP 2017–2019 Intel models — they won't support future macOS releases. Initiate a refresh Jira epic and align with Finance for next fiscal cycle budget." },
   ], [abandonedCount, venturaCount, sonomaCount, sequoiaCount, minorCount, updateReqCount, untaggedCount, total])
 
@@ -675,7 +675,7 @@ export function IruPatchReportPage() {
               )}
             </span>
           </div>
-          <p className="text-[12px] text-[#9090a8] mb-3">Infrastructure &amp; Remote Users (IRU) &nbsp;·&nbsp; Kandji MDM &nbsp;·&nbsp; PROD Blueprint</p>
+          <p className="text-[12px] text-[#9090a8] mb-3">Infrastructure &amp; Remote Users (IRU) &nbsp;·&nbsp; ManageEngine MDM &nbsp;·&nbsp; Production Profile</p>
           <div className="flex flex-wrap gap-2">
             {legacyCount > 0 && <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-red-900/40 text-red-300 border border-red-800/50">⚠ {legacyCount} legacy/EOL OS</span>}
             {staleCount > 0  && <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-amber-900/30 text-amber-300 border border-amber-800/50">{staleCount} stale (14+ days)</span>}
@@ -745,7 +745,7 @@ export function IruPatchReportPage() {
       {isMock && (
         <div className="bg-amber-50 border-b border-amber-200 px-8 py-2.5 flex items-center gap-2 text-[12px] text-amber-700">
           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-          Showing mock data — connect Kandji with real credentials to see live patch compliance metrics.
+          Showing mock data — connect ManageEngine with real credentials to see live patch compliance metrics.
         </div>
       )}
 
@@ -816,7 +816,7 @@ export function IruPatchReportPage() {
             <SH>Executive summary</SH>
             <p className="text-[13px] text-slate-600 leading-relaxed">
               As of <strong className="text-slate-800">{today}</strong>, the Zinnia macOS fleet comprises{' '}
-              <strong className="text-slate-800">{total} devices</strong> under the PROD Kandji blueprint.
+              <strong className="text-slate-800">{total} devices</strong> under the production ManageEngine configuration profile.
               Tahoe (26.x) adoption is at {pct(tahoeCount, total)} ({tahoeCount} devices), but only{' '}
               <strong className="text-slate-800">{currentCount} ({pct(currentCount, total)})</strong> are fully current on macOS {TARGET_OS}.
               {minorCount > 0 && ` ${minorCount} devices on 26.4/26.4.1 need a minor patch push.`}
@@ -858,7 +858,7 @@ export function IruPatchReportPage() {
                 <tbody>
                   {([
                     { tier: 'current'    as PatchTier, count: currentCount,   versions: TARGET_OS,      risk: 'None',     rCls: 'text-green-700',             action: 'No action needed' },
-                    { tier: 'minor'      as PatchTier, count: minorCount,     versions: '26.4, 26.4.1', risk: 'Low',      rCls: 'text-blue-700',              action: 'Deploy 26.5 via Kandji nudge (5-day window)' },
+                    { tier: 'minor'      as PatchTier, count: minorCount,     versions: '26.4, 26.4.1', risk: 'Low',      rCls: 'text-blue-700',              action: 'Deploy 26.5 via ManageEngine notification (5-day window)' },
                     { tier: 'update-req' as PatchTier, count: updateReqCount, versions: '26.0, 26.2',   risk: 'Medium',   rCls: 'text-amber-600',             action: 'Force-push 26.5; likely on dev/beta channel' },
                     { tier: 'sequoia'    as PatchTier, count: sequoiaCount,   versions: '15.x',         risk: 'Medium',   rCls: 'text-amber-600',             action: 'Enforce OS upgrade to 26.x via blueprint' },
                     { tier: 'sonoma'     as PatchTier, count: sonomaCount,    versions: '14.x',         risk: 'High',     rCls: 'text-red-600',               action: 'Direct outreach + force upgrade within 48h' },
@@ -1494,7 +1494,7 @@ export function IruPatchReportPage() {
 
       {/* ── Footer ── */}
       <div className="bg-slate-50 border-t border-slate-200 px-8 py-3 flex flex-wrap justify-between items-center gap-2 text-[11px] text-slate-400">
-        <span>IRU macOS Patch &amp; Stale Device Report · Kandji MDM · {today}</span>
+        <span>IRU macOS Patch &amp; Stale Device Report · ManageEngine MDM · {today}</span>
         <span className="flex items-center gap-2">
           {refreshInterval > 0 && (
             <span className="flex items-center gap-1">

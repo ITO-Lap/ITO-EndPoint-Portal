@@ -54,7 +54,7 @@ interface DashboardContentProps {
   complianceSegments:   ComplianceSegment[]
   issueCategories:      IssueCategory[]
   recentActivityItems:  ActivityItem[]
-  sourceCounts?:        { intune: number; kandji: number; manageEngine: number }
+  sourceCounts?:        { intune: number; manageEngine: number }
   countdown?:           number
   lastUpdated?:         Date | null
   onRefresh?:           () => void
@@ -72,7 +72,7 @@ export function DashboardContent({
   complianceSegments,
   issueCategories,
   recentActivityItems,
-  sourceCounts = { intune: 0, kandji: 0, manageEngine: 0 },
+  sourceCounts = { intune: 0, manageEngine: 0 },
   countdown = 30,
   lastUpdated = null,
   onRefresh,

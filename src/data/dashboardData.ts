@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Clock3,
-  Cloud,
   Home,
   Search,
   Server,
@@ -93,7 +92,6 @@ export const AUTOMATION_GROUP = 'Automation'
 export const connectedSources: ConnectedSource[] = [
   { name: 'Microsoft Intune',   label: 'Intune',       status: 'Connected', icon: Server,      integrationId: 'intune'       },
   { name: 'Microsoft Entra ID', label: 'Entra ID',     status: 'Connected', icon: ShieldCheck, integrationId: 'entra'        },
-  { name: 'Kandji',             label: 'Kandji',       status: 'Connected', icon: Cloud,       integrationId: 'kandji'       },
   { name: 'Manage Engine',      label: 'ManageEngine', status: 'Connected', icon: Settings,    integrationId: 'manageengine' },
   { name: 'Jira',               label: 'Jira',         status: 'Connected', icon: Hash,        integrationId: 'jira'         },
 ]
@@ -121,11 +119,11 @@ export function getRunbookForDevice(device: DeviceData): RunbookData {
         'Open System Settings > Privacy & Security.',
         'Enable FileVault encryption.',
         'Save the recovery key securely.',
-        'Sync device with Kandji.',
+        'Sync device with ManageEngine.',
         'Verify compliance after next check-in.',
       ],
       escalation: 'No',
-      automation: 'Partial (Kandji)',
+      automation: 'Partial (ManageEngine)',
     }
   }
   if (device.recommendedRunbook === 'Force OS Update via Intune') {

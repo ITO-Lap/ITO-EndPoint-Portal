@@ -1,5 +1,4 @@
 import type { Device } from '../types.js'
-import type { LibraryApp } from '../services/kandji.js'
 import type { EntraData } from '../services/entra.js'
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -70,7 +69,6 @@ export interface ReportMeta {
 // Data context injected into every report runner
 export interface ReportContext {
   devices:     Device[]
-  kandjiApps?: LibraryApp[]
   entraData?:  EntraData
   isMock:      boolean
 }

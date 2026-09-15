@@ -30,7 +30,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const SOURCE_COLORS: Record<string, string> = {
   'Microsoft Intune': '#0078d4',
-  'Kandji':           '#7c3aed',
   'ManageEngine':     '#f59e0b',
 }
 

@@ -22,15 +22,10 @@ const SOURCE_META: Record<string, { lastSync: string; description: string }> = {
     description:
       'Microsoft Entra ID (Azure AD) provides identity signals — sign-in logs, risky sign-in events, MFA registration status, directory audits, and user lifecycle events used to enrich device risk context.',
   },
-  'Kandji': {
-    lastSync: '5 minutes ago',
-    description:
-      'Kandji manages macOS device configurations, FileVault encryption, application deployment, and compliance blueprints for Apple fleet devices.',
-  },
   'Manage Engine': {
     lastSync: '12 minutes ago',
     description:
-      'ManageEngine Desktop Central tracks Windows desktop inventory, patch compliance, software licensing, and remote management workflows.',
+      'ManageEngine Desktop Central tracks Windows and macOS desktop inventory, patch compliance, software licensing, and remote management workflows.',
   },
   'Jira': {
     lastSync: 'On demand',

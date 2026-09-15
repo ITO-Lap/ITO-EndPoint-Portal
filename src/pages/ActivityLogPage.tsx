@@ -179,7 +179,7 @@ function parseEventMeta(event: LogEvent): EventMeta {
           { label: 'Search Query',    value: queryMatch?.[1] ?? action, mono: true },
           { label: 'Results Found',   value: resultsMatch ? `${resultsMatch[1]} device(s) matched` : detail },
           { label: 'Initiated By',    value: event.user },
-          { label: 'Search Scope',    value: 'All connected sources (Intune · Kandji · ManageEngine)' },
+          { label: 'Search Scope',    value: 'All connected sources (Intune · ManageEngine)' },
         ],
         note: 'Search queries are logged for security auditing.',
       }

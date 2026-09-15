@@ -6,7 +6,7 @@
 
 ## What this project is
 
-Enterprise IT endpoint management dashboard. IT admins connect their MDM sources (Intune, Kandji, ManageEngine), and the dashboard shows compliance status, device health, issues, and AI-powered remediation runbooks — all in one place.
+Enterprise IT endpoint management dashboard. IT admins connect their MDM sources (Intune, ManageEngine), and the dashboard shows compliance status, device health, issues, and AI-powered remediation runbooks — all in one place.
 
 **Stack:** React 19 + TypeScript + Tailwind 4 (frontend) · Express + TypeScript (backend) · OpenAI GPT-4o-mini (AI layer)
 
@@ -63,7 +63,7 @@ server/src/                 Backend (Express + TypeScript)
 ├── index.ts                Entry point, route mounting
 ├── types.ts                Shared server types
 ├── routes/                 ai, activity, devices, integrations, notifications, runbooks, intuneAuditLogs
-├── services/               intune, kandji, manageEngine, openai, intuneAuditGraph/Export/Scheduler
+├── services/               intune, manageEngine, openai, intuneAuditGraph/Export/Scheduler
 ├── middleware/             errorHandler, requestLogger, requireRole
 ├── data/                   Mock data (devices, runbooks, activity, notifications)
 └── store/integrationStore  Runtime credential + fetch-result cache
@@ -73,7 +73,7 @@ docs/                       All project documentation (start here)
 ├── 01-overview/            Architecture, tech stack
 ├── 02-frontend/            Components, hooks, routing guide
 ├── 03-backend/             API reference, services guide
-├── 04-integrations/        Per-integration setup (Intune, Kandji, ManageEngine, OpenAI)
+├── 04-integrations/        Per-integration setup (Intune, ManageEngine, OpenAI)
 ├── 05-data-models/         TypeScript types reference
 ├── 06-development/         Setup guide, quick-mod cookbook
 └── 07-features/            Feature-by-feature documentation
@@ -87,8 +87,7 @@ docs/                       All project documentation (start here)
 |---|---|
 | `OPENAI_API_KEY` | AI analysis + chat |
 | `INTUNE_TENANT_ID` + `INTUNE_CLIENT_ID` + `INTUNE_CLIENT_SECRET` | Live Intune data |
-| `KANDJI_API_URL` + `KANDJI_API_TOKEN` | Live Kandji data |
-| `MANAGEENGINE_URL` + `MANAGEENGINE_API_KEY` | Live ManageEngine data |
+| `MANAGEENGINE_URL` + `MANAGEENGINE_API_KEY` | Live ManageEngine data (Windows, cross-platform, and macOS) |
 | `DATABASE_URL` | PostgreSQL — multi-tenant, app audit log, scheduled reports, Intune Audit Logs exports/schedules |
 | `INTUNE_AUDIT_*` | Intune Audit Logs module (auth mode, storage, email, scheduler) — see [`docs/04-integrations/INTUNE-AUDIT-LOGS.md`](docs/04-integrations/INTUNE-AUDIT-LOGS.md) |
 | `PORT` | Server port (default: 4000) |
