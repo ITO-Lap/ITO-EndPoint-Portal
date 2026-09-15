@@ -14,14 +14,10 @@ import type { AutomationRule, AutomationCategory, AutomationActionType, Automati
 import { useToast } from '../ui/ToastProvider'
 import { usePagination } from '../../hooks/usePagination'
 import { Pagination } from '../ui/Pagination'
-import { IntuneHealthTab } from './tabs/IntuneHealthTab'
-import { DeviceLifecycleTab } from './tabs/DeviceLifecycleTab'
-import { ComplianceIntelTab } from './tabs/ComplianceIntelTab'
-import { HelpdeskCopilotTab } from './tabs/HelpdeskCopilotTab'
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
-type ViewTab = 'rules' | 'history' | 'intune-health' | 'device-lifecycle' | 'compliance-intel' | 'copilot'
+type ViewTab = 'rules' | 'history'
 
 const RULES_PAGE_SIZE   = 12
 const HISTORY_PAGE_SIZE = 25
@@ -1089,7 +1085,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: string }) {
+export function AutomationPage() {
   const { notify }                        = useToast()
   const [activeTab, setActiveTab]         = useState<ViewTab>('rules')
   const [activeCategory, setActiveCategory] = useState<AutomationCategory | 'all'>('all')
@@ -1280,10 +1276,6 @@ export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: s
         {([
           { id: 'rules',             label: 'Automation Rules',  icon: Zap        },
           { id: 'history',           label: 'Execution History', icon: Activity   },
-          { id: 'intune-health',     label: 'Intune Health',     icon: ShieldCheck },
-          { id: 'device-lifecycle',  label: 'Device Lifecycle',  icon: Layers     },
-          { id: 'compliance-intel',  label: 'Compliance Intel',  icon: ListChecks },
-          { id: 'copilot',           label: 'Help Desk Copilot', icon: Sparkles   },
         ] as const).map(tab => (
           <button
             key={tab.id}
@@ -1430,18 +1422,6 @@ export function AutomationPage({ viewerRole = 'Global Admin' }: { viewerRole?: s
 
       {/* ── History Tab ───────────────────────────────────────────────────── */}
       {activeTab === 'history' && <ExecutionHistoryTab onRefresh={refresh} />}
-
-      {/* ── Intune Health Tab ──────────────────────────────────────────────── */}
-      {activeTab === 'intune-health' && <IntuneHealthTab />}
-
-      {/* ── Device Lifecycle Tab ───────────────────────────────────────────── */}
-      {activeTab === 'device-lifecycle' && <DeviceLifecycleTab />}
-
-      {/* ── Compliance Intel Tab ───────────────────────────────────────────── */}
-      {activeTab === 'compliance-intel' && <ComplianceIntelTab />}
-
-      {/* ── Helpdesk Copilot Tab ───────────────────────────────────────────── */}
-      {activeTab === 'copilot' && <HelpdeskCopilotTab viewerRole={viewerRole} />}
 
       {/* ── Create Modal ──────────────────────────────────────────────────── */}
       {showCreate && (

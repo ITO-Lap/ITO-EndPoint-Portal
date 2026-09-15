@@ -10,7 +10,6 @@ import {
 import { api } from '../api'
 import type { ApiDevice, ManageEngineAppEntry } from '../api'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
-import { DeviceLogDrawer } from '../components/mac/DeviceLogDrawer'
 import { useToast } from '../components/ui/ToastProvider'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
@@ -105,9 +104,9 @@ function CategoryCard({ label, value, sub, color, icon, active, onClick }: {
   )
 }
 
-function DevicesTab({ devices, loading, category, onSelect, onViewLogs }: {
+function DevicesTab({ devices, loading, category, onSelect }: {
   devices: ApiDevice[]; loading: boolean; category: Category | 'all'
-  onSelect: (d: ApiDevice) => void; onViewLogs: (d: ApiDevice) => void
+  onSelect: (d: ApiDevice) => void
 }) {
   const [search, setSearch] = useState('')
 
@@ -150,7 +149,7 @@ function DevicesTab({ devices, loading, category, onSelect, onViewLogs }: {
         ) : (
           <div className="overflow-x-auto">
             <table className="z-table">
-              <thead><tr>{['Device','User','Platform','OS Version','Compliance','Encryption','Last Scan',''].map(h => <th key={h}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Device','User','Platform','OS Version','Compliance','Encryption','Last Scan'].map(h => <th key={h}>{h}</th>)}</tr></thead>
               <tbody>
                 {paginated.map(d => (
                   <tr key={d.id} onClick={() => onSelect(d)} className="cursor-pointer">
@@ -161,15 +160,6 @@ function DevicesTab({ devices, loading, category, onSelect, onViewLogs }: {
                     <td><span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.62rem] font-bold ${d.complianceState === 'Compliant' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : d.complianceState === 'Non-Compliant' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{d.complianceState}</span></td>
                     <td>{d.encryptionStatus && /encrypt|on|luks|enabled/i.test(d.encryptionStatus) && !/off|pending|not /i.test(d.encryptionStatus) ? <span className="text-[0.68rem] font-bold text-emerald-600">On</span> : <span className="text-[0.68rem] font-bold text-red-500">Off</span>}</td>
                     <td className="text-slate-400 text-[0.68rem]">{d.lastCheckIn || '—'}</td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); onViewLogs(d) }}
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 glass px-2.5 py-1 text-[0.62rem] font-semibold text-slate-500 water-glow-sm"
-                      >
-                        <FileText className="h-3 w-3" />Logs
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -566,7 +556,6 @@ export function ManageEngineDevicesPage({ onBack }: Props) {
   const [devices, setDevices] = useState<ApiDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [panelDevice, setPanelDevice] = useState<ApiDevice | null>(null)
-  const [logDevice, setLogDevice]     = useState<ApiDevice | null>(null)
   const [category, setCategory]       = useState<Category | 'all'>('all')
 
   const fetchDevices = useCallback(() => {
@@ -658,7 +647,7 @@ export function ManageEngineDevicesPage({ onBack }: Props) {
         </div>
       )}
 
-      {tab === 'devices'      && <DevicesTab      devices={devices} loading={loading} category={category} onSelect={setPanelDevice} onViewLogs={setLogDevice} />}
+      {tab === 'devices'      && <DevicesTab      devices={devices} loading={loading} category={category} onSelect={setPanelDevice} />}
       {tab === 'patches'      && <PatchesTab      devices={devices} />}
       {tab === 'applications' && <ApplicationsTab devices={devices} />}
       {tab === 'automation'   && <MEAutomationTab />}
@@ -682,7 +671,6 @@ export function ManageEngineDevicesPage({ onBack }: Props) {
         </>
       )}
 
-      {logDevice && <DeviceLogDrawer device={logDevice} onClose={() => setLogDevice(null)} />}
     </div>
   )
 }

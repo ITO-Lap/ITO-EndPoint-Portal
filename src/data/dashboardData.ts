@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  BookOpen,
   Clock3,
   Cloud,
   Home,
@@ -8,9 +7,7 @@ import {
   Server,
   Settings,
   Shield,
-  ShieldAlert,
   ShieldCheck,
-  Terminal,
   Users,
   Hash,
   Zap,
@@ -18,7 +15,6 @@ import {
   Monitor,
   GitBranch,
   Layers,
-  Radar,
   Stethoscope,
   Brain,
   FileText,
@@ -51,8 +47,6 @@ export const navItems: NavItem[] = [
 
   // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
   { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security & Compliance' },
-  { id: 'vulnerabilities',      title: 'Vulnerabilities',     icon: ShieldAlert,   group: 'Security & Compliance' },
-  { id: 'edr',                  title: 'EDR',                 icon: Radar,         group: 'Security & Compliance' },
   { id: 'role_activity_audit',  title: 'Role Activity Audit', icon: ShieldCheck,   group: 'Security & Compliance' },
   { id: 'security_policies',    title: 'Security Policies',   icon: ShieldCheck,   group: 'Security & Compliance' },
 
@@ -61,8 +55,6 @@ export const navItems: NavItem[] = [
 
   // ── AUTOMATION ────────────────────────────────────────────────────────────────
   { id: 'automation',           title: 'Automation',          icon: Zap,           group: 'Automation' },
-  { id: 'runbooks',             title: 'Runbooks',            icon: BookOpen,      group: 'Automation' },
-  { id: 'remote_scripts',       title: 'Remote Scripts',      icon: Terminal,      group: 'Automation' },
 
   // ── ANALYTICS & REPORTS ───────────────────────────────────────────────────────
   { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Analytics & Reports' },

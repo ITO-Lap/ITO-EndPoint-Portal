@@ -15,11 +15,8 @@ import { SourceModal } from './components/devices/SourceModal'
 import { ReportsPage } from './components/reports/ReportsPage'
 import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
 import { OpenIssuesPage } from './components/issues/OpenIssuesPage'
-import { RunbooksPage } from './pages/RunbooksPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
-import { RemoteScriptsPage } from './pages/RemoteScriptsPage'
 import { SecurityPosturePage } from './pages/SecurityPosturePage'
-import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { KandjiMacPage } from './pages/KandjiMacPage'
 import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
 import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
@@ -27,7 +24,6 @@ import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
 import { WindowsDevicesPage } from './pages/WindowsDevicesPage'
 import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
 import { AutomationPage } from './components/automation/AutomationPage'
-import { EDRPage } from './pages/EDRPage'
 import { SmartDiagnosticsPage } from './pages/SmartDiagnosticsPage'
 import { IntelligenceDashboardPage } from './pages/IntelligenceDashboardPage'
 import { ComplianceIntelPage } from './pages/ComplianceIntelPage'
@@ -122,7 +118,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 const PAGE_META: Record<string, { description: string }> = {
   'Device Lookup':      { description: 'Search and inspect individual managed devices across all connected sources.' },
   'Users':              { description: 'Browse and manage user accounts, roles, and device assignments.' },
-  'Runbooks':           { description: 'Manage and execute automated runbooks and remediation workflows.' },
   'Diagnostics':        { description: 'Run diagnostic checks and view device health telemetry.' },
   'Reports & Analytics':{ description: 'Generate compliance reports and view trend analytics.' },
   'Activity Log':       { description: 'Full audit trail of all device events, policy changes, and remediation actions.' },
@@ -389,24 +384,16 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                   <DocsPage />
                 ) : activePage === 'Reports & Analytics' ? (
                   <ReportsPage />
-                ) : activePage === 'Runbooks' ? (
-                  <RunbooksPage viewerRole={viewerRole} userName={displayName || userEmail || 'admin'} />
                 ) : activePage === 'Activity Log' ? (
                   <ActivityLogPage />
-                ) : activePage === 'Remote Scripts' ? (
-                  <RemoteScriptsPage />
                 ) : activePage === 'Security Posture' ? (
                   <SecurityPosturePage />
-                ) : activePage === 'Vulnerabilities' ? (
-                  <VulnerabilitiesPage />
                 ) : activePage === 'Role Activity Audit' ? (
                   <RoleActivityAuditPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Security Policies' ? (
                   <SecurityPoliciesPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Automation' ? (
-                  <AutomationPage viewerRole={viewerRole} />
-                ) : activePage === 'EDR' ? (
-                  <EDRPage />
+                  <AutomationPage />
 
                 // ── Intelligence Platform pages ────────────────────────────────
                 ) : activePage === 'Intelligence Hub' ? (

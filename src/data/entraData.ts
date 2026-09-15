@@ -409,28 +409,3 @@ export const PLATFORM_DISTRIBUTION = [
   { platform: 'macOS',       count: 145,  pct: 5.7,  color: '#F59E0B' },
   { platform: 'Linux',       count: 60,   pct: 2.3,  color: '#64748B' },
 ]
-
-// ── AI Copilot Sample Prompts ─────────────────────────────────────────────────
-
-export const AI_PROMPTS = [
-  'Why is LAPTOP-7XG3K2 non-compliant?',
-  'Show all devices affected by the BitLocker policy failure.',
-  'Generate a remediation runbook for BitLocker failures.',
-  'Find stale devices assigned to high-risk users.',
-  'Which users have Defender disabled on their devices?',
-  'List all devices pending reboot for more than 7 days.',
-]
-
-export const AI_RESPONSES: Record<string, string> = {
-  'Why is LAPTOP-7XG3K2 non-compliant?':
-    '**LAPTOP-7XG3K2** (John Doe · Finance) is non-compliant due to 2 issues:\n\n1. **BitLocker not enabled** — The BitLocker Baseline policy requires disk encryption, but the drive is currently unencrypted. This is a Critical issue.\n2. **OS version outdated** — Device is on Windows 11 21H2. Policy requires 23H2 minimum.\n\n**Recommended Actions:**\n- Push BitLocker enforcement via Intune silent enablement policy\n- Deploy Windows 11 23H2 feature update via Update Ring\n- Device will become compliant within ~4 hours after both actions complete.',
-
-  'Show all devices affected by the BitLocker policy failure.':
-    '**145 devices** are non-compliant with the BitLocker Baseline policy.\n\n**Top departments affected:**\n- Finance: 41 devices\n- Legal: 28 devices\n- Marketing: 19 devices\n- Engineering: 11 devices\n- Other: 46 devices\n\n**Recommended Action:** Run the BitLocker Silent Enablement script via Intune remediation. Estimated remediation time: 2-4 hours per device.',
-
-  'Generate a remediation runbook for BitLocker failures.':
-    '# BitLocker Remediation Runbook\n\n**Step 1:** Verify TPM chip is present and enabled in BIOS\n**Step 2:** Check if device is Azure AD Joined (required for silent enablement)\n**Step 3:** Deploy Intune Policy: `Endpoint Security → Disk Encryption → BitLocker`\n**Step 4:** Set `Configure BitLocker recovery → Store BitLocker recovery key to Azure AD`\n**Step 5:** Push remediation script to enable BitLocker silently\n**Step 6:** Monitor compliance status — allow 4 hours\n**Step 7:** Verify in Intune: Device → BitLocker key rotation status',
-
-  'Find stale devices assigned to high-risk users.':
-    '**3 stale devices** are assigned to high-risk users:\n\n1. **LAPTOP-7XG3K2** → John Doe (High Risk) · 10 days stale\n2. **SURFACE-PRO-9** → Sarah Wilson (High Risk) · 11 days stale\n3. **DESKTOP-8JH2M1** → Mike Johnson (Medium Risk) · 12 days stale\n\nAll 3 devices also have open compliance issues. **Recommended:** Immediately trigger remote sync and escalate to security team.',
-}

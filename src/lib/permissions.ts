@@ -18,7 +18,6 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
 
   // Security & Compliance
   'Security Posture':    ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Vulnerabilities':     ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Role Activity Audit': ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Security Policies':   ['Global Admin', 'IT Admin', 'Helpdesk'],
 
@@ -28,8 +27,6 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
 
   // Automation — IT Admin+ only
   'Automation':          ['Global Admin', 'IT Admin'],
-  'Runbooks':            ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Remote Scripts':      ['Global Admin', 'IT Admin'],
 
   // Analytics & Reports
   'Reports & Analytics': ['Global Admin', 'IT Admin'],

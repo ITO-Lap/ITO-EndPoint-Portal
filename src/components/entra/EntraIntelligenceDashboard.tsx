@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   RefreshCw, Network, Bell, ExternalLink, AlertCircle,
-  ShieldCheck, Monitor, Users as UsersIcon, BarChart3, Activity,
+  Monitor, Users as UsersIcon, BarChart3, Activity,
   ChevronDown, Loader2, AlertTriangle,
 } from 'lucide-react'
 import { api } from '../../api'
@@ -20,8 +20,6 @@ import { EntraOverviewCards }        from './EntraOverviewCards'
 import { EntraDeviceInventoryTable } from './EntraDeviceInventoryTable'
 import { EntraUserRiskTable }        from './EntraUserRiskTable'
 import { EntraRelationshipExplorer } from './EntraRelationshipExplorer'
-import { EntraHelpdeskPanel }        from './EntraHelpdeskPanel'
-import { EntraAiCopilotPanel }       from './EntraAiCopilotPanel'
 import type {
   EntraDevice, EntraUser, EntraOverviewMetrics, EntraRelationship,
   EntraIssue, EntraAlert, EntraComplianceTrend,
@@ -435,14 +433,6 @@ export function EntraIntelligenceDashboard() {
           action={<span className="text-[0.62rem] text-slate-500">User → Device → Policy → App</span>}>
           <EntraRelationshipExplorer relationships={relationships} />
         </Section>
-
-        {/* ── Helpdesk + AI ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <Section title="Helpdesk Quick Lookup" icon={ShieldCheck} color="text-teal-400">
-            <EntraHelpdeskPanel devices={devices} users={users} />
-          </Section>
-          <EntraAiCopilotPanel />
-        </div>
 
         <div className="text-center text-[0.62rem] text-slate-600 pt-2 border-t border-slate-800">
           ITO Endpoint · Microsoft Entra Integration · {isLive ? 'Live Microsoft Graph data' : 'Demo mode — configure credentials in Settings'}

@@ -11,7 +11,6 @@ import {
 import { api } from '../api'
 import type { ApiDevice, LibraryApp } from '../api'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
-import { DeviceLogDrawer } from '../components/mac/DeviceLogDrawer'
 import { useColumnResize } from '../hooks/useColumnResize'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
@@ -664,12 +663,10 @@ function DevicesTab({
   devices,
   loading,
   onSelectDevice,
-  onViewLogs,
 }: {
   devices: ApiDevice[]
   loading: boolean
   onSelectDevice: (d: ApiDevice) => void
-  onViewLogs: (d: ApiDevice) => void
 }) {
   const { widths: dw, startResize: dResize, totalWidth: dTotal } = useColumnResize<DColKey>(DEVICE_COLS, 'kandji-devices')
   const [search, setSearch] = useState('')
@@ -801,16 +798,6 @@ function DevicesTab({
                       <td className="px-4 py-3 text-slate-500 text-xs overflow-hidden"><span className="truncate block">{d.user}</span></td>
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden"><span className="truncate block">{d.model ? extractModelBase(d.model) : '—'}</span></td>
                       <td className="px-4 py-3 text-xs font-mono text-slate-500 overflow-hidden"><span className="truncate block">{d.osVersion}</span></td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        <div className="flex items-center gap-1.5">
-                          <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }}
-                            title="View device logs"
-                            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-violet-600 hover:bg-violet-100 hover:border-violet-300 transition">
-                            <Terminal className="h-3 w-3" />
-                            <span className="text-[0.6rem] font-semibold">Logs</span>
-                          </button>
-                        </div>
-                      </td>
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden">
                         <span className="flex items-center gap-1.5">
                           <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${checkInDot(d.lastCheckIn)}`} />
@@ -2039,12 +2026,10 @@ function SecurityTab({
   devices,
   loading,
   onSelectDevice,
-  onViewLogs,
 }: {
   devices: ApiDevice[]
   loading: boolean
   onSelectDevice: (d: ApiDevice) => void
-  onViewLogs: (d: ApiDevice) => void
 }) {
   const { widths: sw, startResize: sResize, totalWidth: sTotal } = useColumnResize<SColKey>(SECURITY_COLS, 'kandji-security')
   const [search, setSearch] = useState('')
@@ -2267,12 +2252,6 @@ function SecurityTab({
                       </td>
                       <td className="px-4 py-3 overflow-hidden">
                         <div className="flex items-center gap-1.5">
-                          <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }}
-                            title="View device logs"
-                            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-violet-600 hover:bg-violet-100 hover:border-violet-300 transition">
-                            <Terminal className="h-3 w-3" />
-                            <span className="text-[0.6rem] font-semibold">Logs</span>
-                          </button>
                           <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
                             title="Device details"
                             className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
@@ -2585,7 +2564,6 @@ export function KandjiMacPage({ onBack, onViewDevice: _onViewDevice }: Props) {
   const [loadingApps, setLoadingApps]     = useState(true)
   const [usingMockApps, setUsingMockApps] = useState(false)
   const [panelDevice, setPanelDevice]     = useState<ApiDevice | null>(null)
-  const [logDevice, setLogDevice]         = useState<ApiDevice | null>(null)
   const [showAddDevice, setShowAddDevice] = useState(false)
   const [showAddApp, setShowAddApp]       = useState(false)
   const [kpiModal, setKpiModal]           = useState<{ title: string; icon: React.ReactNode; devices: ApiDevice[]; accent: string } | null>(null)
@@ -2837,16 +2815,11 @@ export function KandjiMacPage({ onBack, onViewDevice: _onViewDevice }: Props) {
       </div>
 
       {/* ── Tab content ── */}
-      {tab === 'devices'      && <DevicesTab      devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} onViewLogs={setLogDevice} />}
+      {tab === 'devices'      && <DevicesTab      devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} />}
       {tab === 'applications' && <ApplicationsTab apps={allApps} loading={loadingApps} onAddApp={() => setShowAddApp(true)} onRefresh={fetchAll} />}
-      {tab === 'security'     && <SecurityTab     devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} onViewLogs={setLogDevice} />}
+      {tab === 'security'     && <SecurityTab     devices={allDevices} loading={loadingDevices} onSelectDevice={setPanelDevice} />}
       {tab === 'automation'   && <MacAutomationTab />}
       {tab === 'reports'      && <ReportsTab      devices={allDevices} apps={allApps} addedDevices={addedDevices} addedApps={addedApps} />}
-
-      {/* ── Device log drawer ── */}
-      {logDevice && (
-        <DeviceLogDrawer device={logDevice} onClose={() => setLogDevice(null)} />
-      )}
 
       {/* ── Device detail panel ── */}
       {panelDevice && (
