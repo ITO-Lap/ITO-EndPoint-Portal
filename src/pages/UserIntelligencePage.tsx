@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useCopilotPageContext } from '../context/CopilotContextProvider'
 import {
   LayoutGrid, Laptop2, LogIn, Users2, ShieldCheck, Layers, Sparkles, FileBarChart,
 } from 'lucide-react'
@@ -47,6 +48,13 @@ export function UserIntelligencePage({
   }, [user.id, user.email])
 
   useEffect(() => { load(false) }, [load])
+
+  // Page-context awareness for the Endpoint Operations Copilot.
+  const setCopilotPageContext = useCopilotPageContext()
+  useEffect(() => {
+    setCopilotPageContext({ page: 'User Intelligence', userId: user.id })
+    return () => setCopilotPageContext({ page: 'User Intelligence' })
+  }, [user.id, setCopilotPageContext])
 
   const handleRefresh = () => {
     load(true)

@@ -24,7 +24,7 @@ import { randomUUID } from 'crypto'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { identifyAuditActor, requireAppRole } from '../middleware/requireRole.js'
 import { isDbAvailable, query } from '../db/index.js'
-import { runCopilotChat, type CopilotMessage } from '../services/copilotEngine.js'
+import { runCopilotChat, type CopilotMessage, type CopilotRequestContext } from '../services/copilotEngine.js'
 import { getToolByName, scrubSecrets, READ_ROLES, WRITE_ROLES, type CopilotCitation } from '../services/copilotTools.js'
 
 const router = Router()
@@ -136,10 +136,25 @@ function toPendingActionOut(entry: MemoryPendingAction) {
   return { id: entry.id, toolName: entry.toolName, summary: entry.summary, argsPreview: entry.args }
 }
 
+// Only forward known, structured string fields — never trust the client body
+// blindly into the model's context window (no arbitrary keys, no objects).
+function sanitizePageContext(raw: unknown): CopilotRequestContext | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const src = raw as Record<string, unknown>
+  const out: CopilotRequestContext = {}
+  for (const key of ['page', 'deviceId', 'userId', 'reportId', 'automationRunId', 'findingId'] as const) {
+    const v = src[key]
+    if (typeof v === 'string' && v.trim()) out[key] = v.trim().slice(0, 200)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 // ─── POST /chat ───────────────────────────────────────────────────────────
 
 router.post('/chat', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
-  const { conversationId: requestedId, message } = req.body as { conversationId?: string; message?: string }
+  const { conversationId: requestedId, message, context } = req.body as {
+    conversationId?: string; message?: string; context?: CopilotRequestContext
+  }
   if (!message || typeof message !== 'string' || !message.trim()) {
     res.status(400).json({ success: false, error: 'message is required' })
     return
@@ -149,10 +164,12 @@ router.post('/chat', requireAppRole(READ_ROLES), asyncHandler(async (req, res) =
   const conversationId = await ensureConversation(requestedId, actor.email, message)
   const history = await loadHistory(conversationId)
 
+  const sanitizedContext = sanitizePageContext(context)
   const chatResult = await runCopilotChat({
     history,
     userMessage: message,
     ctx: { actorEmail: actor.email, actorRole: actor.role },
+    ...(sanitizedContext ? { pageContext: sanitizedContext } : {}),
   })
 
   if (!chatResult.available) {
@@ -264,6 +281,8 @@ router.post('/actions/:id/confirm', requireAppRole(WRITE_ROLES), asyncHandler(as
     } else if (entry.toolName === 'trigger_automation_rule') {
       const execution = redactedResult as { id?: string; ruleId?: string }
       await insertAuditLog('COPILOT_AUTOMATION_TRIGGERED', 'automation_execution', execution.id ?? execution.ruleId ?? 'unknown', actor.email)
+    } else if (entry.toolName === 'send_team_alert') {
+      await insertAuditLog('COPILOT_TEAMS_ALERT_SENT', 'teams_alert', entry.id, actor.email)
     }
 
     res.json({ status: 'executed', result: redactedResult, message: 'Action executed successfully.' })

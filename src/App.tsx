@@ -42,6 +42,7 @@ import { ZinniaBadge } from './components/ui/ZinniaLogo'
 import type { StatCardData, UserToolRole } from './types'
 import { canAccess } from './lib/permissions'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
+import { CopilotContextProvider } from './context/CopilotContextProvider'
 
 function OfflineBanner({ onRetry }: { onRetry: () => void }) {
   return (
@@ -121,7 +122,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
   const [selectedSource, setSelectedSource] = useState<ConnectedSource | null>(null)
   const [selectedIntelUser, setSelectedIntelUser] = useState<AppUser | null>(null)
-  const [copilotOpen, setCopilotOpen] = useLocalStorage('copilot-panel-open', false)
   const { notify } = useToast()
 
   // Reset scroll position whenever the active page changes — the app has no
@@ -230,6 +230,7 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   }, [markAllRead, notify])
 
   return (
+    <CopilotContextProvider page={activePage}>
     <div className="min-h-full bg-slate-100 text-slate-900 overflow-x-hidden w-full">
       <div className="w-full min-h-full">
         <div className="grid min-h-full grid-cols-1 xl:grid-cols-[minmax(0,268px)_minmax(0,1fr)]">
@@ -257,8 +258,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
               viewerRole={viewerRole}
               displayName={displayName}
               userEmail={userEmail}
-              copilotOpen={copilotOpen}
-              onToggleCopilot={() => setCopilotOpen(prev => !prev)}
             />
             <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
               <div className="mx-auto w-full max-w-[1600px]">
@@ -366,10 +365,9 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
       <CopilotPanel
         viewerRole={viewerRole as UserToolRole}
         userEmail={userEmail}
-        open={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
       />
     </div>
+    </CopilotContextProvider>
   )
 }
 

@@ -28,6 +28,17 @@ export interface CopilotMessage {
   citations?: CopilotCitation[]
 }
 
+/** Structured, safe page-context hints — see src/context/CopilotContextProvider.tsx.
+ *  Never include credentials/tokens/free-text page content here. */
+export interface CopilotRequestContext {
+  page?: string
+  deviceId?: string
+  userId?: string
+  reportId?: string
+  automationRunId?: string
+  findingId?: string
+}
+
 export interface CopilotPendingAction {
   id: string
   toolName: string
@@ -124,10 +135,11 @@ export function sendCopilotMessage(
   conversationId: string | undefined,
   viewerRole: string,
   userEmail?: string,
+  context?: CopilotRequestContext,
 ): Promise<CopilotChatResponse> {
   return request('/chat', viewerRole, userEmail, {
     method: 'POST',
-    body: JSON.stringify({ conversationId, message }),
+    body: JSON.stringify({ conversationId, message, ...(context ? { context } : {}) }),
   })
 }
 

@@ -100,6 +100,36 @@ describe('copilotEngine — runCopilotChat', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2)
   })
 
+  it('injects page context as a transient system message without touching history', async () => {
+    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
+    mockCreate.mockResolvedValueOnce(finalResponse('This device looks fine.'))
+
+    await runCopilotChat({
+      history: [],
+      userMessage: 'why is this mismatched?',
+      ctx,
+      pageContext: { page: 'Risk Scoring', deviceId: 'dev-123' },
+    })
+
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+    const sentMessages = mockCreate.mock.calls[0]![0].messages as Array<{ role: string; content: string }>
+    const contextMsg = sentMessages.find(m => m.role === 'system' && m.content.includes('Risk Scoring'))
+    expect(contextMsg).toBeDefined()
+    expect(contextMsg?.content).toContain('dev-123')
+    // Only one system message beyond the base prompt, and it's never a user/assistant turn.
+    expect(sentMessages.filter(m => m.role === 'system')).toHaveLength(2)
+  })
+
+  it('omits the context system message entirely when no pageContext is passed', async () => {
+    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
+    mockCreate.mockResolvedValueOnce(finalResponse('Hi.'))
+
+    await runCopilotChat({ history: [], userMessage: 'hello', ctx })
+
+    const sentMessages = mockCreate.mock.calls[0]![0].messages as Array<{ role: string }>
+    expect(sentMessages.filter(m => m.role === 'system')).toHaveLength(1)
+  })
+
   it('feeds a tool failure back to the model instead of throwing', async () => {
     vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
     const readRun = vi.fn().mockRejectedValue(new Error('Intune is not configured'))

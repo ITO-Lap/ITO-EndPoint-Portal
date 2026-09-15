@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Zap, ShieldCheck, Package, Activity, GitBranch,
   ToggleLeft, ToggleRight, Play, Trash2, Plus, Clock,
@@ -14,6 +14,7 @@ import type { AutomationRule, AutomationCategory, AutomationActionType, Automati
 import { useToast } from '../ui/ToastProvider'
 import { usePagination } from '../../hooks/usePagination'
 import { Pagination } from '../ui/Pagination'
+import { useCopilotPageContext } from '../../context/CopilotContextProvider'
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -430,6 +431,14 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
   const { executions, loading } = useAutomationExecutions(undefined, 50)
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed' | 'partial'>('all')
   const [selectedExec, setSelectedExec] = useState<AutomationExecution | null>(null)
+
+  // Page-context awareness for the Endpoint Operations Copilot — set the
+  // specific run id when one is open in the detail drawer.
+  const setCopilotPageContext = useCopilotPageContext()
+  useEffect(() => {
+    setCopilotPageContext({ page: 'Automation', ...(selectedExec ? { automationRunId: selectedExec.id } : {}) })
+    return () => setCopilotPageContext({ page: 'Automation' })
+  }, [selectedExec, setCopilotPageContext])
 
   const filtered = statusFilter === 'all' ? executions : executions.filter(e => e.status === statusFilter)
   const { page, setPage, totalPages, paginated } = usePagination(filtered, HISTORY_PAGE_SIZE)
@@ -1101,6 +1110,13 @@ export function AutomationPage() {
     activeCategory === 'all' ? undefined : activeCategory
   )
   const { page: rulesPage, setPage: setRulesPage, totalPages: rulesTotalPages, paginated: paginatedRules } = usePagination(rules, RULES_PAGE_SIZE)
+
+  // Baseline page-context — ExecutionHistoryTab (below) overrides this with a
+  // specific automationRunId while its detail drawer is open.
+  const setCopilotPageContext = useCopilotPageContext()
+  useEffect(() => {
+    setCopilotPageContext({ page: 'Automation' })
+  }, [setCopilotPageContext])
 
   const handleToggle = useCallback(async (id: string, name: string) => {
     setTogglingId(id)

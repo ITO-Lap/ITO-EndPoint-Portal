@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useCopilotPageContext } from '../context/CopilotContextProvider'
 import { Brain, RefreshCw, XCircle, ChevronDown, ChevronRight, AlertTriangle, Shield, Ticket, BookOpen, Loader2 } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { RiskScore } from '../api/intelligence'
@@ -66,6 +67,17 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
   }
 
   useEffect(() => { load() }, [])
+
+  // Page-context awareness for the Endpoint Operations Copilot — let it know
+  // which device the user has expanded, so "why is this mismatched?" resolves
+  // without re-typing a device id. Clears back to just the page name when
+  // nothing is expanded, and on unmount.
+  const setCopilotPageContext = useCopilotPageContext()
+  useEffect(() => {
+    const [firstExpanded] = expanded
+    setCopilotPageContext({ page: 'Risk Scoring', ...(firstExpanded ? { deviceId: firstExpanded } : {}) })
+    return () => setCopilotPageContext({ page: 'Risk Scoring' })
+  }, [expanded, setCopilotPageContext])
 
   const toggle = (id: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })

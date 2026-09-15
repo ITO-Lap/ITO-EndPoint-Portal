@@ -185,6 +185,93 @@ describe('POST /api/copilot/actions/:id/confirm and /reject — pending action l
   })
 })
 
+describe('POST /api/copilot/chat — page context passthrough', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRunCopilotChat.mockResolvedValue({
+      available: true,
+      message: { role: 'assistant', content: 'Hi there.' },
+      toolCallTrace: [],
+    })
+  })
+
+  it('forwards a sanitized context object to the engine as pageContext', async () => {
+    const { server, baseUrl } = await startServer()
+    try {
+      await httpJson(
+        'POST', `${baseUrl}/chat`, { 'x-user-role': 'Global Admin' },
+        { message: 'why is this mismatched?', context: { page: 'Risk Scoring', deviceId: 'dev-123', evil: 'ignored', nested: { a: 1 } } }
+      )
+      expect(mockRunCopilotChat).toHaveBeenCalledTimes(1)
+      const call = mockRunCopilotChat.mock.calls[0]![0]
+      expect(call.pageContext).toEqual({ page: 'Risk Scoring', deviceId: 'dev-123' })
+    } finally { server.close() }
+  })
+
+  it('passes pageContext as undefined when no context is sent', async () => {
+    const { server, baseUrl } = await startServer()
+    try {
+      await httpJson('POST', `${baseUrl}/chat`, { 'x-user-role': 'Global Admin' }, { message: 'hello' })
+      const call = mockRunCopilotChat.mock.calls[0]![0]
+      expect(call.pageContext).toBeUndefined()
+    } finally { server.close() }
+  })
+})
+
+describe('POST /api/copilot/actions/:id/confirm — send_team_alert write tool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('confirming a send_team_alert pending action runs the tool exactly once', async () => {
+    const { server, baseUrl } = await startServer()
+    try {
+      const writeRun = vi.fn().mockResolvedValue({ result: { sent: true, title: 'Fleet issue' }, citations: [] })
+      mockGetToolByName.mockReturnValue({
+        name: 'send_team_alert', rbac: 'write', run: writeRun,
+        describeAction: () => 'Send a Teams alert',
+      })
+      mockRunCopilotChat.mockResolvedValue({
+        available: true,
+        message: { role: 'assistant', content: 'Confirm to send the alert.' },
+        pendingAction: { toolName: 'send_team_alert', args: { title: 'Fleet issue', message: 'x' }, summary: 'Send a Teams alert' },
+        toolCallTrace: [],
+      })
+      const chatRes = await httpJson('POST', `${baseUrl}/chat`, { 'x-user-role': 'Global Admin' }, { message: 'alert the team' })
+      const id = JSON.parse(chatRes.body).pendingAction.id as string
+
+      const res = await httpJson('POST', `${baseUrl}/actions/${id}/confirm`, { 'x-user-role': 'Global Admin' })
+      const body = JSON.parse(res.body)
+      expect(res.status).toBe(200)
+      expect(body.status).toBe('executed')
+      expect(writeRun).toHaveBeenCalledTimes(1)
+    } finally { server.close() }
+  })
+
+  it('blocks Helpdesk from confirming a send_team_alert action', async () => {
+    const { server, baseUrl } = await startServer()
+    try {
+      const writeRun = vi.fn()
+      mockGetToolByName.mockReturnValue({
+        name: 'send_team_alert', rbac: 'write', run: writeRun,
+        describeAction: () => 'Send a Teams alert',
+      })
+      mockRunCopilotChat.mockResolvedValue({
+        available: true,
+        message: { role: 'assistant', content: 'Confirm to send the alert.' },
+        pendingAction: { toolName: 'send_team_alert', args: { title: 'x', message: 'y' }, summary: 'Send a Teams alert' },
+        toolCallTrace: [],
+      })
+      const chatRes = await httpJson('POST', `${baseUrl}/chat`, { 'x-user-role': 'Global Admin' }, { message: 'alert the team' })
+      const id = JSON.parse(chatRes.body).pendingAction.id as string
+
+      const res = await httpJson('POST', `${baseUrl}/actions/${id}/confirm`, { 'x-user-role': 'Helpdesk' })
+      expect(res.status).toBe(403)
+      expect(writeRun).not.toHaveBeenCalled()
+    } finally { server.close() }
+  })
+})
+
 describe('GET /api/copilot/conversations — no DB configured', () => {
   it('returns an empty array rather than an error', async () => {
     const { server, baseUrl } = await startServer()

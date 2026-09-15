@@ -36,6 +36,7 @@ import { getRoleActivityEventsLive, listQuerySchema as roleActivityQuerySchema, 
 import { listAllItems } from './intuneScriptsConfigGraph.js'
 import { getIntuneConfig } from '../store/integrationStore.js'
 import { createJiraIssue, isJiraConfigured, type JiraIssueInput } from './jira.js'
+import { sendTeamsMessage, isTeamsConfigured } from './teams.js'
 import { runAutomationRule } from './automationEngine.js'
 import { getRuleById } from '../data/mockAutomations.js'
 import type { Device, AppStatus } from '../types.js'
@@ -516,6 +517,57 @@ const triggerAutomationRule: ToolDefinition = {
   },
 }
 
+// ─── 13. send_team_alert (write) ─────────────────────────────────────────────
+// Wraps the same real Microsoft Teams incoming-webhook integration used by
+// automation rules' "teams_notify" action (services/teams.ts, gated on
+// TEAMS_WEBHOOK_URL). This is a genuine external notification — distinct
+// from server/src/data/notificationStore.ts, which only appends a row to the
+// in-app bell and has no reach outside this app, so it does not qualify as a
+// "send a notification" write action on its own.
+
+const VALID_ALERT_SEVERITIES = ['Critical', 'High', 'Medium', 'Low', 'Info']
+
+const sendTeamAlert: ToolDefinition = {
+  name: 'send_team_alert',
+  description: 'Send an alert message to the configured Microsoft Teams channel via incoming webhook. WRITE ACTION — always returns a pending action for the user to confirm; never executes automatically. Requires TEAMS_WEBHOOK_URL to be configured.',
+  rbac: 'write',
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Short alert title.' },
+      message: { type: 'string', description: 'Alert body text.' },
+      severity: { type: 'string', enum: VALID_ALERT_SEVERITIES, description: 'Alert severity, used to color the card. Default Medium.' },
+      deviceName: { type: 'string', description: 'Optional device name to include as a fact.' },
+      deviceUser: { type: 'string', description: 'Optional device user to include as a fact.' },
+    },
+    required: ['title', 'message'],
+  },
+  describeAction: (args) => `Send a Teams alert: "${asString(args.title)}" (${asString(args.severity, 'Medium')})`,
+  run: async (args) => {
+    if (!isTeamsConfigured()) throw new Error('Microsoft Teams is not configured — add TEAMS_WEBHOOK_URL in Settings → Integrations')
+    const title = asString(args.title)
+    const message = asString(args.message)
+    if (!title) throw new Error('title is required')
+    if (!message) throw new Error('message is required')
+    const severity = asString(args.severity, 'Medium')
+    const color = severity === 'Critical' ? 'FF0000' : severity === 'High' ? 'FF6600' : severity === 'Medium' ? 'FFC000' : severity === 'Low' ? '0078D4' : '64748B'
+    const facts: Array<{ name: string; value: string }> = [{ name: 'Severity', value: severity }]
+    if (typeof args.deviceName === 'string' && args.deviceName) facts.push({ name: 'Device', value: args.deviceName })
+    if (typeof args.deviceUser === 'string' && args.deviceUser) facts.push({ name: 'User', value: args.deviceUser })
+    facts.push({ name: 'Sent via', value: 'Endpoint Operations Copilot' })
+    const outcome = await sendTeamsMessage({
+      summary: title,
+      themeColor: color,
+      title: `⚡ ${title}`,
+      text: message,
+      sections: [{ title: 'Details', facts }],
+    })
+    if (!outcome.success) throw new Error(outcome.error ?? 'Teams webhook send failed')
+    const freshness = now()
+    return { result: { sent: true, title, severity }, citations: [{ source: 'internal', recordId: 'teams-alert', freshness }] }
+  },
+}
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 export const COPILOT_TOOLS: ToolDefinition[] = [
@@ -531,6 +583,7 @@ export const COPILOT_TOOLS: ToolDefinition[] = [
   lookupDevices,
   createJiraTicket,
   triggerAutomationRule,
+  sendTeamAlert,
 ]
 
 export function getToolByName(name: string): ToolDefinition | undefined {

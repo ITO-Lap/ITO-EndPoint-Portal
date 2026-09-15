@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useCopilotPageContext } from '../context/CopilotContextProvider'
 import { GitBranch, RefreshCw, XCircle, AlertTriangle, Info, ChevronDown, ChevronRight } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { PolicyConflict } from '../api/intelligence'
@@ -37,6 +38,14 @@ export function PolicyConflictPage({ onBack }: { onBack: () => void }) {
   }
 
   useEffect(() => { load() }, [])
+
+  // Page-context awareness for the Endpoint Operations Copilot.
+  const setCopilotPageContext = useCopilotPageContext()
+  useEffect(() => {
+    const [firstExpanded] = expanded
+    setCopilotPageContext({ page: 'Policy Conflicts', ...(firstExpanded ? { findingId: firstExpanded } : {}) })
+    return () => setCopilotPageContext({ page: 'Policy Conflicts' })
+  }, [expanded, setCopilotPageContext])
 
   const toggle = (id: string) =>
     setExpanded(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })

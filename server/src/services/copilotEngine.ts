@@ -25,6 +25,19 @@ export interface CopilotMessage {
   citations?: CopilotCitation[]
 }
 
+/** Structured, safe page-context hints forwarded from the client (see
+ *  src/context/CopilotContextProvider.tsx). Grounding metadata only — never
+ *  persisted as a user/assistant turn in copilot_messages, only injected as a
+ *  transient system-role entry in this turn's tool-calling loop. */
+export interface CopilotRequestContext {
+  page?: string
+  deviceId?: string
+  userId?: string
+  reportId?: string
+  automationRunId?: string
+  findingId?: string
+}
+
 export interface CopilotPendingActionDraft {
   toolName: string
   args: Record<string, unknown>
@@ -75,12 +88,25 @@ function toOpenAITools(role: string): ChatCompletionTool[] {
   }))
 }
 
+function describePageContext(pageContext: CopilotRequestContext): string | null {
+  const parts: string[] = []
+  if (pageContext.page) parts.push(`Current page: ${pageContext.page}.`)
+  if (pageContext.deviceId) parts.push(`Referenced device id: ${pageContext.deviceId}.`)
+  if (pageContext.userId) parts.push(`Referenced user id: ${pageContext.userId}.`)
+  if (pageContext.reportId) parts.push(`Referenced report id: ${pageContext.reportId}.`)
+  if (pageContext.automationRunId) parts.push(`Referenced automation run id: ${pageContext.automationRunId}.`)
+  if (pageContext.findingId) parts.push(`Referenced finding id: ${pageContext.findingId}.`)
+  if (parts.length === 0) return null
+  return `${parts.join(' ')} If the user's question is ambiguous about which record they mean, assume they mean this one and pass its id into the relevant tool (e.g. lookup_devices, get_user_intelligence, get_risk_scores) rather than asking them to repeat it.`
+}
+
 export async function runCopilotChat(params: {
   history: CopilotMessage[]
   userMessage: string
   ctx: ToolContext
+  pageContext?: CopilotRequestContext
 }): Promise<CopilotChatResult> {
-  const { history, userMessage, ctx } = params
+  const { history, userMessage, ctx, pageContext } = params
 
   if (!isOpenAIAvailable()) {
     return {
@@ -96,8 +122,14 @@ export async function runCopilotChat(params: {
   const ai = getClient()
   const tools = toOpenAITools(ctx.actorRole)
 
+  const pageContextNote = pageContext ? describePageContext(pageContext) : null
+
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: SYSTEM_PROMPT },
+    // Transient grounding metadata only — never persisted to copilot_messages
+    // as a user/assistant turn (see routes/copilot.ts persistMessage calls,
+    // which only ever write the raw user message and the model's reply).
+    ...(pageContextNote ? [{ role: 'system' as const, content: pageContextNote }] : []),
     ...history.map((m): ChatCompletionMessageParam => ({ role: m.role, content: m.content })),
     { role: 'user', content: userMessage },
   ]
