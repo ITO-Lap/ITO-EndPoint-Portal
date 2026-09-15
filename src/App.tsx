@@ -5,40 +5,30 @@ import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
 import { DashboardContent } from './components/dashboard/DashboardContent'
 import { PlaceholderPage } from './components/layout/PlaceholderPage'
-import { DeviceLookupPage } from './components/devices/DeviceLookupPage'
 import { UsersPage } from './pages/UsersPage'
 import { UserIntelligencePage } from './pages/UserIntelligencePage'
-import { ProfilePage } from './pages/ProfilePage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { DocsPage } from './pages/DocsPage'
 import { SourceModal } from './components/devices/SourceModal'
 import { ReportsPage } from './components/reports/ReportsPage'
-import { FilteredDevicesPage } from './components/devices/FilteredDevicesPage'
-import { OpenIssuesPage } from './components/issues/OpenIssuesPage'
-import { ActivityLogPage } from './pages/ActivityLogPage'
 import { SecurityPosturePage } from './pages/SecurityPosturePage'
 import { MacDevicesPage } from './pages/MacDevicesPage'
 import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
 import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
 import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
-import { WindowsDevicesPage } from './pages/WindowsDevicesPage'
-import { ManageEngineDevicesPage } from './pages/ManageEngineDevicesPage'
+import { ManageEngineAppInventoryPage } from './pages/ManageEngineAppInventoryPage'
 import { AutomationPage } from './components/automation/AutomationPage'
-import { SmartDiagnosticsPage } from './pages/SmartDiagnosticsPage'
 import { IntelligenceDashboardPage } from './pages/IntelligenceDashboardPage'
 import { ComplianceIntelPage } from './pages/ComplianceIntelPage'
-import { AppDeploymentPage } from './pages/AppDeploymentPage'
 import { PolicyConflictPage } from './pages/PolicyConflictPage'
 import { RiskScoringPage } from './pages/RiskScoringPage'
 import { ReportBuilderPage } from './pages/ReportBuilderPage'
 import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
-import { MultiTenantPage } from './pages/MultiTenantPage'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { SecurityPoliciesPage } from './pages/SecurityPoliciesPage'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
-import { useActivity } from './hooks/useActivity'
 import { useNotifications } from './hooks/useNotifications'
 import type { ConnectedSource, DeviceData, AppUser } from './types'
 import {
@@ -116,11 +106,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 const PAGE_META: Record<string, { description: string }> = {
-  'Device Lookup':      { description: 'Search and inspect individual managed devices across all connected sources.' },
-  'Users':              { description: 'Browse and manage user accounts, roles, and device assignments.' },
-  'Diagnostics':        { description: 'Run diagnostic checks and view device health telemetry.' },
+  'Users':              { description: 'Find a user to open their cross-system risk view.' },
   'Reports & Analytics':{ description: 'Generate compliance reports and view trend analytics.' },
-  'Activity Log':       { description: 'Full audit trail of all device events, policy changes, and remediation actions.' },
   'Settings':           { description: 'Configure integrations, notification preferences, and account settings.' },
 }
 
@@ -132,7 +119,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
   const [selectedSource, setSelectedSource] = useState<ConnectedSource | null>(null)
-  const [deviceLookupTarget, setDeviceLookupTarget] = useState<string | undefined>(undefined)
   const [selectedIntelUser, setSelectedIntelUser] = useState<AppUser | null>(null)
   const { notify } = useToast()
 
@@ -143,7 +129,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   }, [activePage])
 
   const { stats, offline, countdown, lastUpdated, refresh: refreshStats } = useStats()
-  const { items: activityItems } = useActivity()
   const { notifications, markAllRead } = useNotifications()
 
   // Auto-select first non-compliant device when live data first arrives
@@ -233,11 +218,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
     setSearchInput('')
   }, [handleDeviceSelect, notify])
 
-  const handleActivityDeviceClick = useCallback((deviceName: string) => {
-    setDeviceLookupTarget(deviceName)
-    setActivePage('Device Lookup')
-  }, [setActivePage])
-
   const handleNotificationToggle = useCallback(() => {
     setNotificationOpen((prev) => !prev)
   }, [])
@@ -285,45 +265,16 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                     statCards={liveStatCards}
                     selectedDevice={selectedDevice}
                     onDeviceChange={handleDeviceSelect}
-                    onActivityDeviceClick={handleActivityDeviceClick}
                     onStatCardNavigate={setActivePage}
                     runbookData={liveRunbookData}
                     aiRunbookLoading={false}
                     complianceSegments={liveComplianceSegments}
                     issueCategories={liveIssueCategories}
-                    recentActivityItems={activityItems}
                     sourceCounts={stats?.sources ?? { intune: 0, manageEngine: 0 }}
                     countdown={countdown}
                     lastUpdated={lastUpdated}
                     onRefresh={refreshStats}
                     onNavigate={setActivePage}
-                  />
-                ) : activePage === 'Compliant Devices' ? (
-                  <FilteredDevicesPage
-                    filter="Compliant"
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
-                ) : activePage === 'Non-Compliant Devices' ? (
-                  <FilteredDevicesPage
-                    filter="Non-Compliant"
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
-                ) : activePage === 'Warning Devices' ? (
-                  <FilteredDevicesPage
-                    filter="Warning"
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
                   />
                 ) : activePage === 'Mac Devices' ? (
                   <MacDevicesPage
@@ -335,33 +286,12 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                   />
                 ) : activePage === 'Intune Devices' ? (
                   <IntuneDevicesPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
-                ) : activePage === 'Windows Devices' ? (
-                  <WindowsDevicesPage onBack={() => setActivePage('Dashboard')} />
-                ) : activePage === 'ManageEngine Devices' ? (
-                  <ManageEngineDevicesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'ManageEngine App Inventory' ? (
+                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Mac Fleet Reports' ? (
                   <MacFleetReportsPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Entra Intelligence' ? (
                   <EntraIntelligenceDashboard />
-                ) : activePage === 'Diagnostics' ? (
-                  <SmartDiagnosticsPage />
-                ) : activePage === 'Open Issues' ? (
-                  <OpenIssuesPage
-                    onBack={() => setActivePage('Dashboard')}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
-                ) : activePage === 'Device Lookup' ? (
-                  <DeviceLookupPage
-                    initialDeviceName={deviceLookupTarget}
-                    onViewInDashboard={async (deviceName) => {
-                      setDeviceLookupTarget(undefined)
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
                 ) : activePage === 'Users' ? (
                   <UsersPage
                     viewerRole={viewerRole as import('./types').UserToolRole}
@@ -376,16 +306,12 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                       setActivePage('Dashboard')
                     }}
                   />
-                ) : activePage === 'Profile' ? (
-                  <ProfilePage />
                 ) : activePage === 'Settings' ? (
                   <SettingsPage viewerRole={viewerRole as import('./types').UserToolRole} />
                 ) : activePage === 'Documentation' ? (
                   <DocsPage />
                 ) : activePage === 'Reports & Analytics' ? (
                   <ReportsPage />
-                ) : activePage === 'Activity Log' ? (
-                  <ActivityLogPage />
                 ) : activePage === 'Security Posture' ? (
                   <SecurityPosturePage />
                 ) : activePage === 'Role Activity Audit' ? (
@@ -400,8 +326,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                   <IntelligenceDashboardPage onNavigate={setActivePage} />
                 ) : activePage === 'Compliance Intelligence' ? (
                   <ComplianceIntelPage onBack={() => setActivePage('Intelligence Hub')} />
-                ) : activePage === 'App Deployment' ? (
-                  <AppDeploymentPage onBack={() => setActivePage('Intelligence Hub')} />
                 ) : activePage === 'Policy Conflicts' ? (
                   <PolicyConflictPage onBack={() => setActivePage('Intelligence Hub')} />
                 ) : activePage === 'Risk Scoring' ? (
@@ -410,8 +334,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                   <ReportBuilderPage onBack={() => setActivePage('Intelligence Hub')} />
                 ) : activePage === 'Scheduled Reports' ? (
                   <ScheduledReportsPage onBack={() => setActivePage('Intelligence Hub')} />
-                ) : activePage === 'Multi-Tenant' ? (
-                  <MultiTenantPage onBack={() => setActivePage('Intelligence Hub')} />
                 ) : activePage === 'Audit Log' ? (
                   <AuditLogPage onBack={() => setActivePage('Intelligence Hub')} />
 

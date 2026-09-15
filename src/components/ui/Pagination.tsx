@@ -11,7 +11,7 @@ interface PaginationProps {
 }
 
 // Shared pagination control — same visual language across the whole app
-// (UsersPage.tsx / DeviceLookupPage.tsx originated this style). Page numbers
+// (originally used across several device-listing pages). Page numbers
 // are windowed (first, last, current±1, ellipsis) so a dataset with hundreds
 // of pages never renders hundreds of buttons in a row.
 export function Pagination({ page, totalPages, onPageChange, totalItems, pageSize, itemLabel = 'item', itemLabelPlural }: PaginationProps) {

@@ -14,7 +14,6 @@ import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useColumnResize } from '../hooks/useColumnResize'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
-import { IruPatchReportPage }         from './IruPatchReportPage'
 import { MacFleetReportsPage }       from './MacFleetReportsPage'
 import { useToast } from '../components/ui/ToastProvider'
 
@@ -123,7 +122,7 @@ function metricBar(label: string, value: number, total: number, color: string, i
 
 // ─── Report engine helpers ────────────────────────────────────────────────────
 
-type ReportType = 'macos_versions' | 'stale_devices' | 'policy_compliance' | 'iru_patch_report' | 'fleet_kpi_cards'
+type ReportType = 'macos_versions' | 'stale_devices' | 'policy_compliance' | 'fleet_kpi_cards'
 
 interface ReportDef {
   id: ReportType
@@ -138,7 +137,6 @@ const REPORT_DEFS: ReportDef[] = [
   { id: 'macos_versions',     label: 'macOS Updates',      description: 'Version distribution & upgrade eligibility',   icon: <Apple         className="h-4 w-4" />, accent: 'orange',  group: 'analytical' },
   { id: 'stale_devices',      label: 'Stale Devices',      description: 'Devices that haven\'t checked in recently',    icon: <Clock         className="h-4 w-4" />, accent: 'amber',   group: 'analytical' },
   { id: 'policy_compliance',  label: 'Policy Compliance',  description: 'Compliance rates by applied policy / profile', icon: <ClipboardList className="h-4 w-4" />, accent: 'purple',  group: 'analytical' },
-  { id: 'iru_patch_report',   label: 'IRU Patch Report',   description: 'Device-level patch status from ManageEngine', icon: <FileText      className="h-4 w-4" />, accent: 'slate',   group: 'full' },
   { id: 'fleet_kpi_cards',    label: 'Fleet KPI Cards',    description: 'Fleet health KPI dashboard',                   icon: <BarChart2     className="h-4 w-4" />, accent: 'orange',  group: 'full' },
 ]
 
@@ -797,7 +795,7 @@ function ReportsTab({
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const isFullReport = activeReport === 'iru_patch_report' || activeReport === 'fleet_kpi_cards'
+  const isFullReport = activeReport === 'fleet_kpi_cards'
   const analyticalDefs = REPORT_DEFS.filter(d => d.group === 'analytical')
   const fullDefs       = REPORT_DEFS.filter(d => d.group === 'full')
 
@@ -876,7 +874,6 @@ function ReportsTab({
       {activeReport === 'policy_compliance'  && BlueprintPolicyReport()}
 
       {/* Active full-page report */}
-      {activeReport === 'iru_patch_report' && <IruPatchReportPage />}
       {activeReport === 'fleet_kpi_cards'  && <MacFleetReportsPage />}
 
     </div>

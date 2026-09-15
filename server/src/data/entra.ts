@@ -29,18 +29,6 @@ export const mockEntraGroups = [
   { id: 'g-003', displayName: 'Marketing Team',             memberCount: 89,  type: 'Microsoft 365' },
 ]
 
-export const mockEntraRelationships = [
-  {
-    userId: 'u-001', userName: 'John Doe', userUpn: 'john.doe@contoso.com',
-    devices: [{ id: 'd-001', name: 'LAPTOP-7XG3K2', compliance: 'Non-Compliant', os: 'Windows' }],
-    groups: ['Finance Users', 'Windows Autopilot Devices'],
-    policies: ['BitLocker Baseline', 'Defender Security Baseline'],
-    apps: ['Microsoft 365 Apps', 'VPN Client'],
-    tickets: ['INC-1042'],
-    issues: ['BitLocker not enabled', 'OS version outdated'],
-  },
-]
-
 export const mockEntraSecurity = {
   highRiskUsers: 18, mfaNotEnabled: 24, conditionalAccessBlocked: 7,
   staleDevicesOverThreshold: 337, devicesWithoutDefender: 102,

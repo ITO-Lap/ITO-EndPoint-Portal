@@ -664,304 +664,6 @@ registerReport({
   },
 })
 
-// ── Graph API: Endpoint Management (Intune) ───────────────────────────────────
-
-registerReport({
-  id:          'graph-managed-device-inventory',
-  name:        'Managed Device Inventory (Graph)',
-  category:    'endpoint',
-  description: 'Full device inventory pulled directly from Microsoft Graph — enrollment state, compliance status, OS build, and last sync time for every Intune-managed device.',
-  sources:     ['intune'],
-  cacheTtlSec: 300,
-  defaultSort: { field: 'deviceName', dir: 'asc' },
-  apiEndpoint: 'GET /deviceManagement/managedDevices',
-  graphSource: 'Microsoft Intune',
-  columns: [
-    { key: 'deviceName',       label: 'Device Name',       type: 'string', width: 'lg' },
-    { key: 'user',             label: 'Primary User',       type: 'string', width: 'lg' },
-    { key: 'platform',         label: 'Platform',           type: 'badge',  width: 'sm' },
-    { key: 'osVersion',        label: 'OS Version',         type: 'string', width: 'md' },
-    { key: 'osBuildNumber',    label: 'Build',              type: 'string', width: 'md' },
-    { key: 'enrollmentState',  label: 'Enrollment',         type: 'badge',  width: 'md' },
-    { key: 'complianceState',  label: 'Compliance',         type: 'badge',  width: 'md' },
-    { key: 'lastSyncDateTime', label: 'Last Sync',          type: 'string', width: 'md' },
-    { key: 'ownership',        label: 'Ownership',          type: 'badge',  width: 'sm' },
-    { key: 'model',            label: 'Model',              type: 'string', width: 'lg' },
-    { key: 'serialNumber',     label: 'Serial',             type: 'string', width: 'md' },
-  ],
-  run({ devices }) {
-    const intune = devices.filter(d => d.managementSource === 'Microsoft Intune')
-    const enrolled   = intune.filter(d => d.enrollmentDate).length
-    const compliant  = intune.filter(d => d.complianceState === 'Compliant').length
-    const windows    = intune.filter(d => d.platform === 'Windows').length
-    const mac        = intune.filter(d => d.platform === 'macOS').length
-
-    const summary: ReportSummaryCard[] = [
-      { label: 'Intune Devices',  value: intune.length, color: 'sky'   },
-      { label: 'Enrolled',        value: enrolled,      color: 'green' },
-      { label: 'Compliant',       value: compliant,     color: compliant === intune.length ? 'green' : 'amber' },
-      { label: 'Windows',         value: windows,       color: 'slate' },
-      { label: 'macOS',           value: mac,           color: 'violet'},
-      { label: 'Compliance Rate', value: pct(compliant, intune.length || 1), color: compliant / (intune.length || 1) >= 0.9 ? 'green' : 'amber' },
-    ]
-
-    const rows = intune.map(d => ({
-      deviceName:       d.deviceName,
-      user:             d.user,
-      platform:         d.platform,
-      osVersion:        d.osVersion,
-      osBuildNumber:    d.osBuildNumber ?? '—',
-      enrollmentState:  d.enrollmentDate ? 'Enrolled' : 'Pending',
-      complianceState:  d.complianceState,
-      lastSyncDateTime: d.lastCheckIn,
-      ownership:        d.ownership ?? 'Corporate',
-      model:            d.model ?? '—',
-      serialNumber:     d.serialNumber,
-    }))
-    return { rows, summary }
-  },
-})
-
-registerReport({
-  id:          'graph-device-compliance-policy-status',
-  name:        'Device Compliance Policy Status',
-  category:    'endpoint',
-  description: 'Per-device compliance policy results from Intune — which policies passed, which failed, and on which devices. Pinpoints the exact policy causing non-compliance.',
-  sources:     ['intune'],
-  cacheTtlSec: 300,
-  defaultSort: { field: 'status', dir: 'asc' },
-  apiEndpoint: 'GET /deviceManagement/deviceCompliancePolicyDeviceStateSummary',
-  graphSource: 'Microsoft Intune',
-  columns: [
-    { key: 'deviceName',      label: 'Device Name',    type: 'string', width: 'lg' },
-    { key: 'user',            label: 'User',            type: 'string', width: 'lg' },
-    { key: 'platform',        label: 'Platform',        type: 'badge',  width: 'sm' },
-    { key: 'policyName',      label: 'Policy',          type: 'string', width: 'xl' },
-    { key: 'status',          label: 'Status',          type: 'badge',  width: 'md' },
-    { key: 'severity',        label: 'Severity',        type: 'badge',  width: 'sm' },
-    { key: 'primaryIssue',    label: 'Failing Setting', type: 'string', width: 'xl' },
-    { key: 'lastEvaluation',  label: 'Last Evaluated',  type: 'string', width: 'md' },
-    { key: 'remediationSteps',label: 'Remediation',     type: 'string', width: 'xl' },
-  ],
-  run({ devices }) {
-    const intune  = devices.filter(d => d.managementSource === 'Microsoft Intune')
-    const failing = intune.filter(d => d.complianceState !== 'Compliant')
-    const passed  = intune.filter(d => d.complianceState === 'Compliant').length
-
-    const summary: ReportSummaryCard[] = [
-      { label: 'Policies Evaluated', value: intune.length, color: 'sky'   },
-      { label: 'Passed',             value: passed,        color: 'green' },
-      { label: 'Failed',             value: failing.filter(d => d.complianceState === 'Non-Compliant').length, color: 'red'   },
-      { label: 'Warning',            value: failing.filter(d => d.complianceState === 'Warning').length,       color: 'amber' },
-    ]
-
-    const REMEDIATION: Record<string, string> = {
-      'FileVault Not Enabled':  'Enable FileVault in System Settings > Privacy & Security',
-      'BitLocker Not Enabled':  'Run "manage-bde -on C:" or use Intune BitLocker policy',
-      'Firewall Disabled':      'Enable firewall via System Preferences or Group Policy',
-      'OS Update Required':     'Apply latest OS update through Intune software update policy',
-      'Antivirus Not Running':  'Re-enable Defender or re-enroll CrowdStrike/SentinelOne',
-    }
-
-    const rows = intune.map(d => ({
-      deviceName:      d.deviceName,
-      user:            d.user,
-      platform:        d.platform,
-      policyName:      d.policyFailed || 'Baseline Compliance Policy',
-      status:          d.complianceState,
-      severity:        d.complianceState === 'Non-Compliant' ? d.severity : 'Low',
-      primaryIssue:    d.primaryIssue || 'None',
-      lastEvaluation:  d.lastCheckIn,
-      remediationSteps:REMEDIATION[d.primaryIssue] ?? 'Review policy settings in Intune portal',
-    }))
-
-    return { rows, summary }
-  },
-})
-
-registerReport({
-  id:          'graph-app-installation-status',
-  name:        'App Installation Status',
-  category:    'endpoint',
-  description: 'Deployment status for all Intune-managed applications across the device fleet — installed, pending, failed, and not applicable per device.',
-  sources:     ['intune'],
-  cacheTtlSec: 600,
-  defaultSort: { field: 'failedDevices', dir: 'desc' },
-  apiEndpoint: 'GET /deviceManagement/deviceAppManagement/mobileAppDeviceStatuses',
-  graphSource: 'Microsoft Intune',
-  columns: [
-    { key: 'appName',       label: 'Application',     type: 'string', width: 'xl' },
-    { key: 'appType',       label: 'App Type',        type: 'badge',  width: 'md' },
-    { key: 'platform',      label: 'Platform',        type: 'badge',  width: 'sm' },
-    { key: 'totalDevices',  label: 'Total',           type: 'number', width: 'sm', align: 'right' },
-    { key: 'installed',     label: 'Installed',       type: 'number', width: 'sm', align: 'right' },
-    { key: 'pending',       label: 'Pending',         type: 'number', width: 'sm', align: 'right' },
-    { key: 'failedDevices', label: 'Failed',          type: 'number', width: 'sm', align: 'right' },
-    { key: 'installRate',   label: 'Install Rate',    type: 'percent', width: 'md', align: 'right' },
-    { key: 'lastAttempt',   label: 'Last Attempt',    type: 'string', width: 'md' },
-  ],
-  run({ devices }) {
-    const intune = devices.filter(d => d.managementSource === 'Microsoft Intune')
-    const APPS = [
-      { name: 'Microsoft 365 Apps', type: 'MSI/EXE',  platform: 'Windows' },
-      { name: 'CrowdStrike Falcon',  type: 'Win32 App', platform: 'Windows' },
-      { name: 'Cisco AnyConnect VPN',type: 'Win32 App', platform: 'Cross-platform' },
-      { name: 'Microsoft Teams',     type: 'Microsoft Store', platform: 'Cross-platform' },
-      { name: 'Slack',               type: 'Microsoft Store', platform: 'Windows' },
-      { name: 'Zoom',                type: 'Win32 App', platform: 'Cross-platform' },
-      { name: 'Google Chrome',       type: 'Win32 App', platform: 'Cross-platform' },
-      { name: 'Microsoft Edge',      type: 'Built-in',  platform: 'Windows' },
-    ]
-    const total = intune.length || 1
-
-    const rows = APPS.map(app => {
-      const installed     = Math.floor(total * (0.7 + Math.random() * 0.25))
-      const failedDevices = Math.floor((total - installed) * 0.3)
-      const pending       = total - installed - failedDevices
-      return {
-        appName:       app.name,
-        appType:       app.type,
-        platform:      app.platform,
-        totalDevices:  total,
-        installed,
-        pending:       Math.max(0, pending),
-        failedDevices,
-        installRate:   parseFloat(pct(installed, total)),
-        lastAttempt:   new Date(Date.now() - Math.floor(Math.random() * 86400000 * 3)).toISOString().slice(0, 10),
-      }
-    })
-
-    const avgRate = rows.reduce((s, r) => s + r.installRate, 0) / rows.length
-    const summary: ReportSummaryCard[] = [
-      { label: 'Managed Apps',   value: APPS.length, color: 'sky'   },
-      { label: 'Target Devices', value: total,       color: 'slate' },
-      { label: 'Avg Install Rate', value: `${avgRate.toFixed(1)}%`, color: avgRate >= 90 ? 'green' : 'amber' },
-      { label: 'With Failures',  value: rows.filter(r => r.failedDevices > 0).length, color: 'red' },
-    ]
-
-    return { rows, summary }
-  },
-})
-
-
-registerReport({
-  id:          'graph-config-policy-status',
-  name:        'Configuration Policy Status',
-  category:    'endpoint',
-  description: 'Assignment and application status for all Intune device configuration profiles — settings catalog, templates, and endpoint security policies per device.',
-  sources:     ['intune'],
-  cacheTtlSec: 300,
-  defaultSort: { field: 'conflictCount', dir: 'desc' },
-  apiEndpoint: 'GET /deviceManagement/deviceConfigurations',
-  graphSource: 'Microsoft Intune',
-  columns: [
-    { key: 'policyName',    label: 'Policy Name',    type: 'string', width: 'xl' },
-    { key: 'policyType',    label: 'Policy Type',    type: 'badge',  width: 'md' },
-    { key: 'platform',      label: 'Platform',       type: 'badge',  width: 'sm' },
-    { key: 'successCount',  label: 'Success',        type: 'number', width: 'sm', align: 'right' },
-    { key: 'errorCount',    label: 'Error',          type: 'number', width: 'sm', align: 'right' },
-    { key: 'conflictCount', label: 'Conflict',       type: 'number', width: 'sm', align: 'right' },
-    { key: 'pendingCount',  label: 'Pending',        type: 'number', width: 'sm', align: 'right' },
-    { key: 'successRate',   label: 'Success Rate',   type: 'percent', width: 'md', align: 'right' },
-    { key: 'lastModified',  label: 'Last Modified',  type: 'string', width: 'md' },
-  ],
-  run({ devices }) {
-    const intune = devices.filter(d => d.managementSource === 'Microsoft Intune')
-    const POLICIES = [
-      { name: 'Windows Defender Antivirus',      type: 'Endpoint Security', platform: 'Windows' },
-      { name: 'BitLocker Encryption',            type: 'Endpoint Security', platform: 'Windows' },
-      { name: 'Windows Hello for Business',      type: 'Settings Catalog',  platform: 'Windows' },
-      { name: 'Edge Browser Configuration',      type: 'Settings Catalog',  platform: 'Windows' },
-      { name: 'macOS FileVault',                 type: 'Endpoint Security', platform: 'macOS'   },
-      { name: 'macOS Firewall',                  type: 'Endpoint Security', platform: 'macOS'   },
-      { name: 'Corporate Wi-Fi Profile',         type: 'Configuration',     platform: 'Cross-platform' },
-      { name: 'VPN Configuration',               type: 'Configuration',     platform: 'Cross-platform' },
-      { name: 'Certificate Trust Profile',       type: 'Configuration',     platform: 'Cross-platform' },
-      { name: 'Password Complexity Policy',      type: 'Compliance Policy', platform: 'Cross-platform' },
-    ]
-    const total = intune.length || 1
-
-    const rows = POLICIES.map((p, i) => {
-      const success  = Math.floor(total * (0.75 + Math.random() * 0.2))
-      const error    = Math.floor((total - success) * 0.4)
-      const conflict = Math.floor((total - success - error) * 0.3)
-      const pending  = total - success - error - conflict
-      return {
-        policyName:    p.name,
-        policyType:    p.type,
-        platform:      p.platform,
-        successCount:  success,
-        errorCount:    error,
-        conflictCount: conflict,
-        pendingCount:  Math.max(0, pending),
-        successRate:   parseFloat(pct(success, total)),
-        lastModified:  new Date(Date.now() - i * 86400000 * 3).toISOString().slice(0, 10),
-      }
-    })
-
-    const totalErrors = rows.reduce((s, r) => s + r.errorCount, 0)
-    const summary: ReportSummaryCard[] = [
-      { label: 'Config Policies',  value: POLICIES.length, color: 'sky'   },
-      { label: 'Target Devices',   value: total,           color: 'slate' },
-      { label: 'Policy Errors',    value: totalErrors,     color: totalErrors > 0 ? 'red' : 'green' },
-      { label: 'With Conflicts',   value: rows.filter(r => r.conflictCount > 0).length, color: 'amber' },
-    ]
-
-    return { rows, summary }
-  },
-})
-
-registerReport({
-  id:          'graph-enrollment-health',
-  name:        'Enrollment Health',
-  category:    'endpoint',
-  description: 'Device enrollment success and failure rates in Intune — enrollment method breakdown, failure codes, and time-to-enroll metrics to identify onboarding bottlenecks.',
-  sources:     ['intune'],
-  cacheTtlSec: 600,
-  defaultSort: { field: 'enrollmentDate', dir: 'desc' },
-  apiEndpoint: 'GET /deviceManagement/managedDevices?$filter=enrollmentState eq \'enrolled\'',
-  graphSource: 'Microsoft Intune',
-  columns: [
-    { key: 'deviceName',      label: 'Device Name',     type: 'string', width: 'lg' },
-    { key: 'user',            label: 'User',             type: 'string', width: 'lg' },
-    { key: 'platform',        label: 'Platform',         type: 'badge',  width: 'sm' },
-    { key: 'enrollmentType',  label: 'Enrollment Type',  type: 'badge',  width: 'md' },
-    { key: 'enrollmentState', label: 'State',            type: 'badge',  width: 'md' },
-    { key: 'enrollmentDate',  label: 'Enrolled',         type: 'string', width: 'md' },
-    { key: 'timeToEnrollMin', label: 'Time to Enroll',   type: 'number', width: 'sm', align: 'right' },
-    { key: 'complianceState', label: 'Post-Enroll State',type: 'badge',  width: 'md' },
-    { key: 'ownership',       label: 'Ownership',        type: 'badge',  width: 'sm' },
-  ],
-  run({ devices }) {
-    const intune = devices.filter(d => d.managementSource === 'Microsoft Intune')
-    const TYPES = ['Autopilot', 'BYOD', 'Co-Management', 'MDM', 'Azure AD Join']
-    const enrolled    = intune.filter(d => d.enrollmentDate).length
-    const compliant   = intune.filter(d => d.complianceState === 'Compliant').length
-
-    const rows = intune.map((d, i) => ({
-      deviceName:      d.deviceName,
-      user:            d.user,
-      platform:        d.platform,
-      enrollmentType:  d.enrollmentType ?? TYPES[i % TYPES.length],
-      enrollmentState: d.enrollmentDate ? 'Enrolled' : 'Pending',
-      enrollmentDate:  d.enrollmentDate ?? '—',
-      timeToEnrollMin: d.enrollmentDate ? Math.floor(Math.random() * 25) + 3 : null,
-      complianceState: d.complianceState,
-      ownership:       d.ownership ?? 'Corporate',
-    }))
-
-    const summary: ReportSummaryCard[] = [
-      { label: 'Total Devices',  value: intune.length, color: 'sky'   },
-      { label: 'Enrolled',       value: enrolled,      color: 'green' },
-      { label: 'Post-Enroll Compliance', value: pct(compliant, intune.length || 1), color: compliant / (intune.length || 1) >= 0.9 ? 'green' : 'amber' },
-      { label: 'Avg Enroll Time', value: '11 min',     color: 'slate' },
-    ]
-
-    return { rows, summary }
-  },
-})
-
-
 
 registerReport({
   id:          'graph-risky-signins',
@@ -985,78 +687,51 @@ registerReport({
     { key: 'mfaUsed',        label: 'MFA Used',          type: 'badge',  width: 'sm' },
     { key: 'recommendation', label: 'Recommended Action',type: 'string', width: 'xl' },
   ],
-  run({ devices, entraData }) {
-    // Use live Entra risky sign-ins when available
-    if (entraData && entraData.riskySignIns.length > 0) {
-      const live = entraData.riskySignIns
-      const RECS: Record<string, string> = {
-        High:   'Block user and require password reset with MFA',
-        Medium: 'Require MFA re-registration and notify user',
-        Low:    'Monitor and require MFA for future sign-ins',
-      }
-      const rows = live.map((s: EntraRiskySignIn) => ({
-        user:           s.userDisplayName || s.userPrincipalName,
-        riskLevel:      s.riskLevelDuringSignIn ?? 'Unknown',
-        riskDetail:     s.riskDetail,
-        location:       s.location ? `${s.location.city}, ${s.location.countryOrRegion}` : 'Unknown',
-        ipAddress:      s.ipAddress ?? '—',
-        app:            '—',
-        signInTime:     s.createdDateTime.slice(0, 16).replace('T', ' '),
-        status:         s.status.errorCode === 0 ? 'Success' : 'Failure',
-        mfaUsed:        '—',
-        recommendation: RECS[s.riskLevelDuringSignIn] ?? 'Review sign-in event',
-      }))
-      const high  = rows.filter(r => r.riskLevel === 'high' || r.riskLevel === 'High').length
-      const noMfa = rows.filter(r => r.mfaUsed === 'No').length
+  run({ entraData }) {
+    // Live Entra risky sign-ins only — no fabricated fallback rows. When
+    // Entra isn't configured or reports no data, return an empty result
+    // rather than presenting synthetic sign-ins as real.
+    if (!entraData || entraData.riskySignIns.length === 0) {
       return {
-        rows,
+        rows: [],
         summary: [
-          { label: 'Risky Sign-ins', value: rows.length, color: rows.length > 0 ? 'red'   : 'green' },
-          { label: 'High Risk',      value: high,         color: high  > 0 ? 'red'   : 'green' },
-          { label: 'No MFA',         value: noMfa,        color: noMfa > 0 ? 'amber' : 'green' },
-          { label: 'Failures',       value: rows.filter(r => r.status === 'Failure').length, color: 'amber' },
+          { label: 'Risky Sign-ins', value: 0, color: 'green' },
+          { label: 'High Risk',      value: 0, color: 'green' },
+          { label: 'No MFA',         value: 0, color: 'green' },
+          { label: 'Failures',       value: 0, color: 'green' },
         ] as ReportSummaryCard[],
       }
     }
 
-    // Fallback: mock from devices
-    const RISKS = [
-      { level: 'High',   detail: 'Impossible travel detected — sign-in from two distant locations within 1 hour',  rec: 'Block user and require password reset with MFA' },
-      { level: 'High',   detail: 'Sign-in from Tor anonymization network',                                          rec: 'Block access and investigate user account' },
-      { level: 'Medium', detail: 'Unfamiliar sign-in properties — new device and location',                         rec: 'Require MFA re-registration and notify user' },
-      { level: 'Medium', detail: 'Leaked credentials detected in breach database',                                  rec: 'Force password reset and enable MFA' },
-      { level: 'Low',    detail: 'Sign-in from anonymous IP address',                                               rec: 'Monitor and require MFA for future sign-ins' },
-      { level: 'Low',    detail: 'Malware linked IP — device may be compromised',                                   rec: 'Scan device and review sign-in behavior' },
-    ]
-    const LOCS = ['New York, US', 'London, UK', 'Singapore, SG', 'Tor Exit Node', 'Frankfurt, DE', 'Unknown']
-    const APPS = ['Microsoft 365', 'Azure Portal', 'SharePoint Online', 'Teams', 'Outlook Web']
-
-    const rows = devices.slice(0, Math.min(devices.length, 25)).map((d, i) => {
-      const r = RISKS[i % RISKS.length]!
-      return {
-        user:        d.user,
-        riskLevel:   r.level,
-        riskDetail:  r.detail,
-        location:    LOCS[i % LOCS.length],
-        ipAddress:   `${Math.floor(Math.random() * 220) + 20}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-        app:         APPS[i % APPS.length],
-        signInTime:  new Date(Date.now() - i * 3600000 * 6).toISOString().slice(0, 16).replace('T', ' '),
-        status:      i % 3 === 0 ? 'Failure' : 'Success',
-        mfaUsed:     i % 4 === 0 ? 'No' : 'Yes',
-        recommendation: r.rec,
-      }
-    })
-
-    const high   = rows.filter(r => r.riskLevel === 'High').length
-    const noMfa  = rows.filter(r => r.mfaUsed === 'No').length
-    const summary: ReportSummaryCard[] = [
-      { label: 'Risky Sign-ins', value: rows.length, color: rows.length > 0 ? 'red'   : 'green' },
-      { label: 'High Risk',      value: high,         color: high  > 0 ? 'red'   : 'green' },
-      { label: 'No MFA',         value: noMfa,        color: noMfa > 0 ? 'amber' : 'green' },
-      { label: 'Failures',       value: rows.filter(r => r.status === 'Failure').length, color: 'amber' },
-    ]
-
-    return { rows, summary }
+    const live = entraData.riskySignIns
+    const RECS: Record<string, string> = {
+      High:   'Block user and require password reset with MFA',
+      Medium: 'Require MFA re-registration and notify user',
+      Low:    'Monitor and require MFA for future sign-ins',
+    }
+    const rows = live.map((s: EntraRiskySignIn) => ({
+      user:           s.userDisplayName || s.userPrincipalName,
+      riskLevel:      s.riskLevelDuringSignIn ?? 'Unknown',
+      riskDetail:     s.riskDetail,
+      location:       s.location ? `${s.location.city}, ${s.location.countryOrRegion}` : 'Unknown',
+      ipAddress:      s.ipAddress ?? '—',
+      app:            '—',
+      signInTime:     s.createdDateTime.slice(0, 16).replace('T', ' '),
+      status:         s.status.errorCode === 0 ? 'Success' : 'Failure',
+      mfaUsed:        '—',
+      recommendation: RECS[s.riskLevelDuringSignIn] ?? 'Review sign-in event',
+    }))
+    const high  = rows.filter(r => r.riskLevel === 'high' || r.riskLevel === 'High').length
+    const noMfa = rows.filter(r => r.mfaUsed === 'No').length
+    return {
+      rows,
+      summary: [
+        { label: 'Risky Sign-ins', value: rows.length, color: rows.length > 0 ? 'red'   : 'green' },
+        { label: 'High Risk',      value: high,         color: high  > 0 ? 'red'   : 'green' },
+        { label: 'No MFA',         value: noMfa,        color: noMfa > 0 ? 'amber' : 'green' },
+        { label: 'Failures',       value: rows.filter(r => r.status === 'Failure').length, color: 'amber' },
+      ] as ReportSummaryCard[],
+    }
   },
 })
 
@@ -1085,80 +760,54 @@ registerReport({
     { key: 'topApp',            label: 'Top App',             type: 'string', width: 'lg' },
     { key: 'riskLevel',         label: 'Risk',                type: 'badge',  width: 'sm' },
   ],
-  run({ devices, entraData }) {
-    // Use live Entra sign-in data when available
-    if (entraData && entraData.signIns.length > 0) {
-      const byUser = new Map<string, { success: number; failed: number; mfa: number; apps: Set<string>; lastSignIn: string; risk: string }>()
-      for (const s of entraData.signIns as EntraSignIn[]) {
-        const existing = byUser.get(s.userPrincipalName) ?? { success: 0, failed: 0, mfa: 0, apps: new Set<string>(), lastSignIn: s.createdDateTime, risk: s.riskLevelDuringSignIn ?? 'none' }
-        if (s.status.errorCode === 0) existing.success++ ; else existing.failed++
-        if (s.mfaDetail) existing.mfa++
-        if (s.appDisplayName) existing.apps.add(s.appDisplayName)
-        if (s.createdDateTime > existing.lastSignIn) existing.lastSignIn = s.createdDateTime
-        byUser.set(s.userPrincipalName, existing)
-      }
-
-      const liveRows = Array.from(byUser.entries()).map(([upn, v]) => ({
-        user:              upn,
-        department:        '—',
-        successfulSignIns: v.success,
-        failedSignIns:     v.failed,
-        mfaSignIns:        v.mfa,
-        mfaRate:           parseFloat(pct(v.mfa, v.success || 1)),
-        lastSignIn:        v.lastSignIn.slice(0, 10),
-        topApp:            v.apps.size > 0 ? [...v.apps][0] : '—',
-        riskLevel:         (v.risk === 'none' || v.risk === '') ? 'None' : v.risk,
-      }))
-
-      const noMfa  = liveRows.filter(r => r.mfaRate < 50).length
-      const risky  = liveRows.filter(r => r.riskLevel !== 'None').length
-      const avgMfa = liveRows.reduce((acc, r) => acc + r.mfaRate, 0) / (liveRows.length || 1)
+  run({ entraData }) {
+    // Live Entra sign-in data only — no fabricated fallback rows.
+    if (!entraData || entraData.signIns.length === 0) {
       return {
-        rows: liveRows,
+        rows: [],
         summary: [
-          { label: 'Total Users',    value: liveRows.length, color: 'sky'   },
-          { label: 'Low MFA (<50%)', value: noMfa,           color: noMfa  > 0 ? 'red' : 'green' },
-          { label: 'Risky Users',    value: risky,           color: risky  > 0 ? 'red' : 'green' },
-          { label: 'Fleet MFA Rate', value: `${avgMfa.toFixed(1)}%`, color: avgMfa >= 90 ? 'green' : avgMfa >= 70 ? 'amber' : 'red' },
+          { label: 'Total Users',    value: 0, color: 'sky'   },
+          { label: 'Low MFA (<50%)', value: 0, color: 'green' },
+          { label: 'Risky Users',    value: 0, color: 'green' },
+          { label: 'Fleet MFA Rate', value: '—', color: 'slate' },
         ] as ReportSummaryCard[],
       }
     }
 
-    // Fallback: mock from devices
-    const APPS  = ['Microsoft 365', 'Azure Portal', 'Teams', 'SharePoint', 'Outlook']
-    const DEPTS = ['Engineering', 'Finance', 'HR', 'Legal', 'Marketing', 'Operations', 'Sales', 'Security']
-    const RISKS = ['None', 'None', 'None', 'Low', 'Medium', 'High']
+    const byUser = new Map<string, { success: number; failed: number; mfa: number; apps: Set<string>; lastSignIn: string; risk: string }>()
+    for (const s of entraData.signIns as EntraSignIn[]) {
+      const existing = byUser.get(s.userPrincipalName) ?? { success: 0, failed: 0, mfa: 0, apps: new Set<string>(), lastSignIn: s.createdDateTime, risk: s.riskLevelDuringSignIn ?? 'none' }
+      if (s.status.errorCode === 0) existing.success++ ; else existing.failed++
+      if (s.mfaDetail) existing.mfa++
+      if (s.appDisplayName) existing.apps.add(s.appDisplayName)
+      if (s.createdDateTime > existing.lastSignIn) existing.lastSignIn = s.createdDateTime
+      byUser.set(s.userPrincipalName, existing)
+    }
 
-    const users = [...new Set(devices.map(d => d.user).filter(Boolean))]
-    const rows = users.map((user, i) => {
-      const success = 20 + Math.floor(Math.random() * 80)
-      const failed  = Math.floor(Math.random() * 8)
-      const mfa     = Math.floor(success * (0.6 + Math.random() * 0.4))
-      return {
-        user,
-        department:         DEPTS[i % DEPTS.length],
-        successfulSignIns:  success,
-        failedSignIns:      failed,
-        mfaSignIns:         mfa,
-        mfaRate:            parseFloat(pct(mfa, success || 1)),
-        lastSignIn:         new Date(Date.now() - Math.floor(Math.random() * 3) * 86400000).toISOString().slice(0, 10),
-        topApp:             APPS[i % APPS.length],
-        riskLevel:          RISKS[i % RISKS.length],
-      }
-    })
+    const rows = Array.from(byUser.entries()).map(([upn, v]) => ({
+      user:              upn,
+      department:        '—',
+      successfulSignIns: v.success,
+      failedSignIns:     v.failed,
+      mfaSignIns:        v.mfa,
+      mfaRate:           parseFloat(pct(v.mfa, v.success || 1)),
+      lastSignIn:        v.lastSignIn.slice(0, 10),
+      topApp:            v.apps.size > 0 ? [...v.apps][0] : '—',
+      riskLevel:         (v.risk === 'none' || v.risk === '') ? 'None' : v.risk,
+    }))
 
     const noMfa  = rows.filter(r => r.mfaRate < 50).length
     const risky  = rows.filter(r => r.riskLevel !== 'None').length
-    const avgMfa = rows.reduce((s, r) => s + r.mfaRate, 0) / (rows.length || 1)
-
-    const summary: ReportSummaryCard[] = [
-      { label: 'Total Users',   value: rows.length, color: 'sky'   },
-      { label: 'Low MFA (<50%)',value: noMfa,       color: noMfa  > 0 ? 'red' : 'green' },
-      { label: 'Risky Users',   value: risky,       color: risky  > 0 ? 'red' : 'green' },
-      { label: 'Fleet MFA Rate',value: `${avgMfa.toFixed(1)}%`, color: avgMfa >= 90 ? 'green' : avgMfa >= 70 ? 'amber' : 'red' },
-    ]
-
-    return { rows, summary }
+    const avgMfa = rows.reduce((acc, r) => acc + r.mfaRate, 0) / (rows.length || 1)
+    return {
+      rows,
+      summary: [
+        { label: 'Total Users',    value: rows.length, color: 'sky'   },
+        { label: 'Low MFA (<50%)', value: noMfa,        color: noMfa  > 0 ? 'red' : 'green' },
+        { label: 'Risky Users',    value: risky,        color: risky  > 0 ? 'red' : 'green' },
+        { label: 'Fleet MFA Rate', value: `${avgMfa.toFixed(1)}%`, color: avgMfa >= 90 ? 'green' : avgMfa >= 70 ? 'amber' : 'red' },
+      ] as ReportSummaryCard[],
+    }
   },
 })
 
@@ -1183,72 +832,46 @@ registerReport({
     { key: 'ssprRegistered',         label: 'SSPR Registered',         type: 'badge',  width: 'md' },
     { key: 'lastUpdated',            label: 'Last Updated',            type: 'string', width: 'md' },
   ],
-  run({ devices, entraData }) {
-    // Use live Entra MFA registration data when available
-    if (entraData && entraData.mfaRegistrations.length > 0) {
-      const rows = (entraData.mfaRegistrations as EntraMfaRegistration[]).map(m => ({
-        user:                m.userDisplayName || m.userPrincipalName,
-        mfaRegistered:       m.isMfaRegistered ? 'Registered' : 'Not Registered',
-        defaultMethod:       m.defaultMfaMethod || 'None',
-        methodsCount:        m.methodsRegistered.length,
-        authenticatorApp:    m.methodsRegistered.includes('microsoftAuthenticatorApp') ? 'Registered' : 'Not Registered',
-        phoneRegistered:     m.methodsRegistered.includes('mobilePhone') ? 'Registered' : 'Not Registered',
-        passwordlessCapable: m.isPasswordlessCapable ? 'Capable' : 'Not Capable',
-        ssprRegistered:      m.isSsprRegistered ? 'Registered' : 'Not Registered',
-        lastUpdated:         '—',
-      }))
-
-      const registered   = rows.filter(r => r.mfaRegistered === 'Registered').length
-      const passwordless = rows.filter(r => r.passwordlessCapable === 'Capable').length
-      const noMfa        = rows.filter(r => r.mfaRegistered === 'Not Registered').length
+  run({ entraData }) {
+    // Live Entra MFA registration data only — no fabricated fallback rows.
+    if (!entraData || entraData.mfaRegistrations.length === 0) {
       return {
-        rows,
+        rows: [],
         summary: [
-          { label: 'Total Users',    value: rows.length,  color: 'sky'   },
-          { label: 'MFA Registered', value: registered,   color: registered / (rows.length || 1) >= 0.9 ? 'green' : 'amber' },
-          { label: 'Not Registered', value: noMfa,        color: noMfa > 0 ? 'red' : 'green' },
-          { label: 'Passwordless',   value: passwordless, color: 'violet' },
-          { label: 'MFA Coverage',   value: pct(registered, rows.length || 1), color: registered / (rows.length || 1) >= 0.95 ? 'green' : 'red' },
+          { label: 'Total Users',    value: 0,   color: 'sky'   },
+          { label: 'MFA Registered', value: 0,   color: 'green' },
+          { label: 'Not Registered', value: 0,   color: 'green' },
+          { label: 'Passwordless',   value: 0,   color: 'slate' },
+          { label: 'MFA Coverage',   value: '—', color: 'slate' },
         ] as ReportSummaryCard[],
       }
     }
 
-    // Fallback: mock from devices
-    const METHODS = ['Microsoft Authenticator', 'TOTP App', 'SMS', 'Hardware Token', 'Windows Hello', 'FIDO2 Key']
-    const users = [...new Set(devices.map(d => d.user).filter(Boolean))]
-
-    const rows = users.map((user, i) => {
-      const registered  = Math.random() > 0.15
-      const methodCount = registered ? 1 + Math.floor(Math.random() * 3) : 0
-      const authApp     = registered && Math.random() > 0.3
-      const phone       = registered && Math.random() > 0.5
-      const passwordless= registered && Math.random() > 0.6
-      return {
-        user,
-        mfaRegistered:       registered ? 'Registered' : 'Not Registered',
-        defaultMethod:       registered ? METHODS[i % METHODS.length] : 'None',
-        methodsCount:        methodCount,
-        authenticatorApp:    authApp ? 'Registered' : 'Not Registered',
-        phoneRegistered:     phone ? 'Registered' : 'Not Registered',
-        passwordlessCapable: passwordless ? 'Capable' : 'Not Capable',
-        ssprRegistered:      registered && Math.random() > 0.4 ? 'Registered' : 'Not Registered',
-        lastUpdated:         new Date(Date.now() - Math.floor(Math.random() * 90) * 86400000).toISOString().slice(0, 10),
-      }
-    })
+    const rows = (entraData.mfaRegistrations as EntraMfaRegistration[]).map(m => ({
+      user:                m.userDisplayName || m.userPrincipalName,
+      mfaRegistered:       m.isMfaRegistered ? 'Registered' : 'Not Registered',
+      defaultMethod:       m.defaultMfaMethod || 'None',
+      methodsCount:        m.methodsRegistered.length,
+      authenticatorApp:    m.methodsRegistered.includes('microsoftAuthenticatorApp') ? 'Registered' : 'Not Registered',
+      phoneRegistered:     m.methodsRegistered.includes('mobilePhone') ? 'Registered' : 'Not Registered',
+      passwordlessCapable: m.isPasswordlessCapable ? 'Capable' : 'Not Capable',
+      ssprRegistered:      m.isSsprRegistered ? 'Registered' : 'Not Registered',
+      lastUpdated:         '—',
+    }))
 
     const registered   = rows.filter(r => r.mfaRegistered === 'Registered').length
     const passwordless = rows.filter(r => r.passwordlessCapable === 'Capable').length
     const noMfa        = rows.filter(r => r.mfaRegistered === 'Not Registered').length
-
-    const summary: ReportSummaryCard[] = [
-      { label: 'Total Users',    value: rows.length,  color: 'sky'   },
-      { label: 'MFA Registered', value: registered,   color: registered / rows.length >= 0.9 ? 'green' : 'amber' },
-      { label: 'Not Registered', value: noMfa,        color: noMfa > 0 ? 'red' : 'green' },
-      { label: 'Passwordless',   value: passwordless, color: 'violet'},
-      { label: 'MFA Coverage',   value: pct(registered, rows.length || 1), color: registered / (rows.length || 1) >= 0.95 ? 'green' : 'red' },
-    ]
-
-    return { rows, summary }
+    return {
+      rows,
+      summary: [
+        { label: 'Total Users',    value: rows.length,  color: 'sky'   },
+        { label: 'MFA Registered', value: registered,   color: registered / (rows.length || 1) >= 0.9 ? 'green' : 'amber' },
+        { label: 'Not Registered', value: noMfa,        color: noMfa > 0 ? 'red' : 'green' },
+        { label: 'Passwordless',   value: passwordless, color: 'violet' },
+        { label: 'MFA Coverage',   value: pct(registered, rows.length || 1), color: registered / (rows.length || 1) >= 0.95 ? 'green' : 'red' },
+      ] as ReportSummaryCard[],
+    }
   },
 })
 
@@ -1273,79 +896,52 @@ registerReport({
     { key: 'accountEnabled',    label: 'Account State',       type: 'badge',  width: 'md' },
     { key: 'recommendation',    label: 'Recommendation',      type: 'string', width: 'xl' },
   ],
-  run({ devices, entraData }) {
-    // Use live Entra user data when available (filter for users inactive 30+ days)
-    if (entraData && entraData.users.length > 0) {
-      const LICENSES = ['Microsoft 365 E3', 'Microsoft 365 E5', 'Microsoft 365 Business', 'Entra ID P2', 'Exchange Online P1']
-      const liveRows = (entraData.users as EntraUser[])
-        .map((u, i) => {
-          const lastSignIn = u.signInActivity?.lastSignInDateTime ?? null
-          const days = lastSignIn ? (daysSince(lastSignIn) ?? 999) : 999
-          let rec = 'Review with manager and disable if no longer needed'
-          if (days > 90) rec = 'Disable account immediately and remove licenses'
-          else if (days > 60) rec = 'Send account reactivation notice — disable in 14 days if no response'
-          return {
-            user:            u.displayName || u.userPrincipalName,
-            department:      u.department ?? '—',
-            accountType:     'Member',
-            lastSignIn:      lastSignIn ? lastSignIn.slice(0, 10) : 'Never',
-            daysSinceSignIn: days,
-            licenses:        LICENSES[i % LICENSES.length],
-            mfaRegistered:   'Unknown',
-            accountEnabled:  u.accountEnabled ? 'Enabled' : 'Disabled',
-            recommendation:  rec,
-          }
-        })
-        .filter(r => r.daysSinceSignIn >= 30)
-
-      const over90 = liveRows.filter(r => r.daysSinceSignIn > 90).length
+  run({ entraData }) {
+    // Live Entra user data only — no fabricated fallback rows.
+    if (!entraData || entraData.users.length === 0) {
       return {
-        rows: liveRows,
+        rows: [],
         summary: [
-          { label: 'Inactive Users',    value: liveRows.length, color: liveRows.length > 0 ? 'amber' : 'green' },
-          { label: '>90 Days',          value: over90,          color: over90 > 0 ? 'red' : 'green' },
-          { label: 'Disabled Accounts', value: liveRows.filter(r => r.accountEnabled === 'Disabled').length, color: 'slate' },
-          { label: 'Avg Days Inactive', value: liveRows.length ? Math.round(liveRows.reduce((s, r) => s + r.daysSinceSignIn, 0) / liveRows.length) : 0, color: 'slate' },
+          { label: 'Inactive Users',    value: 0, color: 'green' },
+          { label: '>90 Days',          value: 0, color: 'green' },
+          { label: 'Disabled Accounts', value: 0, color: 'slate' },
+          { label: 'Avg Days Inactive', value: 0, color: 'slate' },
         ] as ReportSummaryCard[],
       }
     }
 
-    // Fallback: mock from devices
-    const DEPTS   = ['Engineering', 'Finance', 'HR', 'Legal', 'Marketing', 'Operations']
-    const TYPES   = ['Member', 'Member', 'Member', 'Guest', 'Service Account']
-    const LICENSES= ['Microsoft 365 E3', 'Microsoft 365 E5', 'Microsoft 365 Business', 'Entra ID P2', 'Exchange Online P1']
+    const LICENSES = ['Microsoft 365 E3', 'Microsoft 365 E5', 'Microsoft 365 Business', 'Entra ID P2', 'Exchange Online P1']
+    const rows = (entraData.users as EntraUser[])
+      .map((u, i) => {
+        const lastSignIn = u.signInActivity?.lastSignInDateTime ?? null
+        const days = lastSignIn ? (daysSince(lastSignIn) ?? 999) : 999
+        let rec = 'Review with manager and disable if no longer needed'
+        if (days > 90) rec = 'Disable account immediately and remove licenses'
+        else if (days > 60) rec = 'Send account reactivation notice — disable in 14 days if no response'
+        return {
+          user:            u.displayName || u.userPrincipalName,
+          department:      u.department ?? '—',
+          accountType:     'Member',
+          lastSignIn:      lastSignIn ? lastSignIn.slice(0, 10) : 'Never',
+          daysSinceSignIn: days,
+          licenses:        LICENSES[i % LICENSES.length],
+          mfaRegistered:   'Unknown',
+          accountEnabled:  u.accountEnabled ? 'Enabled' : 'Disabled',
+          recommendation:  rec,
+        }
+      })
+      .filter(r => r.daysSinceSignIn >= 30)
 
-    const users = [...new Set(devices.map(d => d.user).filter(Boolean))]
-    const inactive = users.filter((_, i) => i % 3 === 0)
-
-    const rows = inactive.map((user, i) => {
-      const days = 30 + Math.floor(Math.random() * 150)
-      let rec = 'Review with manager and disable if no longer needed'
-      if (days > 90) rec = 'Disable account immediately and remove licenses'
-      if (days > 60) rec = 'Send account reactivation notice — disable in 14 days if no response'
-      return {
-        user,
-        department:       DEPTS[i % DEPTS.length],
-        accountType:      TYPES[i % TYPES.length],
-        lastSignIn:       new Date(Date.now() - days * 86400000).toISOString().slice(0, 10),
-        daysSinceSignIn:  days,
-        licenses:         LICENSES[i % LICENSES.length],
-        mfaRegistered:    i % 4 === 0 ? 'Not Registered' : 'Registered',
-        accountEnabled:   'Enabled',
-        recommendation:   rec,
-      }
-    })
-
-    const over90  = rows.filter(r => r.daysSinceSignIn > 90).length
-    const guests  = rows.filter(r => r.accountType === 'Guest').length
-    const summary: ReportSummaryCard[] = [
-      { label: 'Inactive Users',  value: rows.length, color: rows.length > 0 ? 'amber' : 'green' },
-      { label: '>90 Days',        value: over90,      color: over90  > 0 ? 'red'   : 'green' },
-      { label: 'Guest Accounts',  value: guests,      color: guests  > 0 ? 'amber' : 'green' },
-      { label: 'Avg Days Inactive', value: rows.length ? Math.round(rows.reduce((acc, r) => acc + r.daysSinceSignIn, 0) / rows.length) : 0, color: 'slate' },
-    ]
-
-    return { rows, summary }
+    const over90 = rows.filter(r => r.daysSinceSignIn > 90).length
+    return {
+      rows,
+      summary: [
+        { label: 'Inactive Users',    value: rows.length, color: rows.length > 0 ? 'amber' : 'green' },
+        { label: '>90 Days',          value: over90,      color: over90 > 0 ? 'red' : 'green' },
+        { label: 'Disabled Accounts', value: rows.filter(r => r.accountEnabled === 'Disabled').length, color: 'slate' },
+        { label: 'Avg Days Inactive', value: rows.length ? Math.round(rows.reduce((s, r) => s + r.daysSinceSignIn, 0) / rows.length) : 0, color: 'slate' },
+      ] as ReportSummaryCard[],
+    }
   },
 })
 
@@ -1372,76 +968,43 @@ registerReport({
     { key: 'ipAddress',      label: 'IP Address',       type: 'string', width: 'md' },
     { key: 'details',        label: 'Details',          type: 'string', width: 'xl' },
   ],
-  run({ devices, entraData }) {
-    // Use live Entra directory audit data when available
-    if (entraData && entraData.directoryAudits.length > 0) {
-      const liveRows = (entraData.directoryAudits as EntraDirectoryAudit[]).map(a => ({
-        timestamp:      a.activityDateTime.slice(0, 16).replace('T', ' '),
-        actorUser:      a.initiatedBy.user?.displayName || a.initiatedBy.user?.userPrincipalName || 'System',
-        operation:      a.activityDisplayName,
-        category:       a.category,
-        targetResource: a.targetResources[0]?.displayName ?? '—',
-        targetType:     a.targetResources[0]?.type ?? '—',
-        result:         a.result === 'success' ? 'Success' : a.result === 'failure' ? 'Failure' : a.result,
-        ipAddress:      a.initiatedBy.user?.ipAddress ?? '—',
-        details:        `${a.activityDisplayName} — ${a.category}`,
-      }))
-
-      const failures = liveRows.filter(r => r.result === 'Failure').length
-      const roleMgmt = liveRows.filter(r => r.category === 'RoleManagement').length
+  run({ entraData }) {
+    // Live Entra directory audit data only — no fabricated fallback rows.
+    if (!entraData || entraData.directoryAudits.length === 0) {
       return {
-        rows: liveRows,
+        rows: [],
         summary: [
-          { label: 'Audit Events',   value: liveRows.length, color: 'sky'   },
-          { label: 'Failures',       value: failures,         color: failures > 0 ? 'red' : 'green' },
-          { label: 'Role Changes',   value: roleMgmt,         color: roleMgmt > 5 ? 'amber' : 'green' },
-          { label: 'Policy Changes', value: liveRows.filter(r => r.category === 'Policy').length, color: 'amber' },
+          { label: 'Audit Events',   value: 0, color: 'sky'   },
+          { label: 'Failures',       value: 0, color: 'green' },
+          { label: 'Role Changes',   value: 0, color: 'green' },
+          { label: 'Policy Changes', value: 0, color: 'slate' },
         ] as ReportSummaryCard[],
       }
     }
 
-    // Fallback: mock from devices
-    const OPS = [
-      { op: 'Add user',                    cat: 'UserManagement',     type: 'User',   detail: 'New user account created and activated' },
-      { op: 'Delete user',                 cat: 'UserManagement',     type: 'User',   detail: 'User account soft-deleted from directory' },
-      { op: 'Update user',                 cat: 'UserManagement',     type: 'User',   detail: 'UPN and department updated' },
-      { op: 'Add member to role',          cat: 'RoleManagement',     type: 'Role',   detail: 'User added to Global Administrator role' },
-      { op: 'Remove member from role',     cat: 'RoleManagement',     type: 'Role',   detail: 'User removed from Security Administrator role' },
-      { op: 'Consent to application',      cat: 'ApplicationManagement', type: 'App', detail: 'Admin consent granted for Microsoft Teams app' },
-      { op: 'Add group member',            cat: 'GroupManagement',    type: 'Group',  detail: 'User added to sg-IT-Admins security group' },
-      { op: 'Update conditional access policy', cat: 'Policy',        type: 'Policy', detail: 'Require MFA for all users — policy updated' },
-      { op: 'Reset user password',         cat: 'UserManagement',     type: 'User',   detail: 'Admin-initiated password reset' },
-      { op: 'Disable account',             cat: 'UserManagement',     type: 'User',   detail: 'Account disabled per offboarding request' },
-    ]
+    const rows = (entraData.directoryAudits as EntraDirectoryAudit[]).map(a => ({
+      timestamp:      a.activityDateTime.slice(0, 16).replace('T', ' '),
+      actorUser:      a.initiatedBy.user?.displayName || a.initiatedBy.user?.userPrincipalName || 'System',
+      operation:      a.activityDisplayName,
+      category:       a.category,
+      targetResource: a.targetResources[0]?.displayName ?? '—',
+      targetType:     a.targetResources[0]?.type ?? '—',
+      result:         a.result === 'success' ? 'Success' : a.result === 'failure' ? 'Failure' : a.result,
+      ipAddress:      a.initiatedBy.user?.ipAddress ?? '—',
+      details:        `${a.activityDisplayName} — ${a.category}`,
+    }))
 
-    const adminUsers = devices.slice(0, 5).map(d => d.user)
-    const rows: Record<string, unknown>[] = []
-    for (let i = 0; i < Math.min(devices.length * 2, 50); i++) {
-      const op = OPS[i % OPS.length]!
-      const d  = devices[i % devices.length]!
-      rows.push({
-        timestamp:      new Date(Date.now() - i * 1800000).toISOString().slice(0, 16).replace('T', ' '),
-        actorUser:      adminUsers[i % adminUsers.length] ?? d.user,
-        operation:      op.op,
-        category:       op.cat,
-        targetResource: d.user,
-        targetType:     op.type,
-        result:         i % 10 === 0 ? 'Failure' : 'Success',
-        ipAddress:      `10.${Math.floor(i / 25)}.${Math.floor(i / 5) % 255}.${i % 255}`,
-        details:        op.detail,
-      })
+    const failures = rows.filter(r => r.result === 'Failure').length
+    const roleMgmt = rows.filter(r => r.category === 'RoleManagement').length
+    return {
+      rows,
+      summary: [
+        { label: 'Audit Events',   value: rows.length, color: 'sky'   },
+        { label: 'Failures',       value: failures,    color: failures > 0 ? 'red' : 'green' },
+        { label: 'Role Changes',   value: roleMgmt,    color: roleMgmt > 5 ? 'amber' : 'green' },
+        { label: 'Policy Changes', value: rows.filter(r => r.category === 'Policy').length, color: 'amber' },
+      ] as ReportSummaryCard[],
     }
-
-    const failures  = rows.filter(r => r.result === 'Failure').length
-    const roleMgmt  = rows.filter(r => r.category === 'RoleManagement').length
-    const summary: ReportSummaryCard[] = [
-      { label: 'Audit Events',   value: rows.length, color: 'sky'   },
-      { label: 'Failures',       value: failures,    color: failures > 0 ? 'red' : 'green' },
-      { label: 'Role Changes',   value: roleMgmt,    color: roleMgmt > 5 ? 'amber' : 'green' },
-      { label: 'Policy Changes', value: rows.filter(r => r.category === 'Policy').length, color: 'amber' },
-    ]
-
-    return { rows, summary }
   },
 })
 

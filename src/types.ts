@@ -88,14 +88,6 @@ export interface IssueCategory {
   color: string
 }
 
-export interface ActivityItem {
-  device: string
-  status: 'Compliant' | 'Warning' | 'Non-Compliant'
-  message: string
-  time: string
-  color: 'green' | 'yellow' | 'red'
-}
-
 export interface NotificationItem {
   id: string
   message: string
@@ -250,72 +242,5 @@ export interface ToastItem {
   type: ToastType
   title: string
   message: string
-}
-
-// ─── Smart Diagnostics ────────────────────────────────────────────────────────
-
-export interface DiagnosticDevice {
-  id: string
-  deviceName: string
-  user: string
-  platform: 'Windows' | 'macOS' | 'Linux'
-  osVersion: string
-  managementSource: string
-  uptime: string
-  cpu: number
-  memory: { usedGb: number; totalGb: number }
-  disk: { usedGb: number; totalGb: number }
-  battery?: { level: number; charging: boolean; health: 'Good' | 'Fair' | 'Poor' }
-  network: { status: 'Connected' | 'Disconnected' | 'Limited'; ssid?: string; ip?: string }
-  lastSync: string
-  complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
-  riskScore: number
-}
-
-export interface DiagnosticCategoryResult {
-  name: string
-  score: number
-  status: 'Healthy' | 'Warning' | 'Critical' | 'Unknown'
-  findings: string[]
-  details: string
-}
-
-export interface DeviceHealthReport {
-  deviceId: string
-  generatedAt: string
-  overallScore: number
-  categories: DiagnosticCategoryResult[]
-}
-
-export interface ApplicationFailureReport {
-  id: string
-  appName: string
-  crashTime: string
-  faultingModule: string
-  errorCode: string
-  eventId: string
-  affectedUser: string
-  possibleReason: string
-  recommendedFix: string
-  severity: 'Critical' | 'High' | 'Medium' | 'Low'
-}
-
-export interface EventLogEntry {
-  id: string
-  timestamp: string
-  source: string
-  eventId: string
-  level: 'Critical' | 'Error' | 'Warning' | 'Information'
-  category: string
-  description: string
-}
-
-export interface AIRecommendation {
-  summary: string
-  rootCause: string
-  steps: string[]
-  severity: 'Critical' | 'High' | 'Medium' | 'Low'
-  helpdeskExplanation: string
-  generatedAt: string
 }
 

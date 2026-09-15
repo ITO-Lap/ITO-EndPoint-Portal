@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-  Brain, Shield, Package, GitBranch,
-  FileText, Calendar, Building2, ClipboardList,
+  Brain, Shield, GitBranch,
+  FileText, Calendar, ClipboardList,
   ArrowRight, RefreshCw, TrendingUp, AlertTriangle, CheckCircle,
 } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
@@ -18,13 +18,11 @@ interface ModuleCard {
 }
 
 const MODULES: ModuleCard[] = [
-  { id: 'compliance',        title: 'Compliance Intelligence', description: 'Deep compliance reporting with per-policy device status and OS breakdown.', icon: Shield,        page: 'Compliance Intelligence', color: 'text-emerald-600', iconBg: 'bg-emerald-100' },
-  { id: 'app-deployment',   title: 'App Deployment',          description: 'Track install status for every assigned app across all managed devices.',   icon: Package,       page: 'App Deployment',          color: 'text-blue-600',    iconBg: 'bg-blue-100'    },
+  { id: 'compliance',        title: 'Compliance Intelligence', description: 'AI-generated executive summary of tenant-wide compliance posture.', icon: Shield,        page: 'Compliance Intelligence', color: 'text-emerald-600', iconBg: 'bg-emerald-100' },
   { id: 'policy-conflicts', title: 'Policy Conflicts',        description: 'Detect duplicate, stale, and conflicting configuration policies.',           icon: GitBranch,     page: 'Policy Conflicts',        color: 'text-orange-600',  iconBg: 'bg-orange-100', badge: 'AI' },
   { id: 'risk-scoring',     title: 'AI Risk Scoring',         description: 'Per-device risk scores powered by AI with actionable remediation steps.',    icon: Brain,         page: 'Risk Scoring',            color: 'text-purple-600',  iconBg: 'bg-purple-100', badge: 'AI' },
   { id: 'report-builder',   title: 'Report Builder',          description: 'Generate and download reports in PDF, Excel, CSV, and PowerPoint.',          icon: FileText,      page: 'Report Builder',          color: 'text-red-600',     iconBg: 'bg-red-100'     },
   { id: 'scheduled-reports',title: 'Scheduled Reports',       description: 'Automate report delivery on a recurring schedule to email recipients.',      icon: Calendar,      page: 'Scheduled Reports',       color: 'text-teal-600',    iconBg: 'bg-teal-100'    },
-  { id: 'multi-tenant',     title: 'Multi-Tenant',            description: 'Manage multiple Intune tenants from a single MSP dashboard.',                icon: Building2,     page: 'Multi-Tenant',            color: 'text-indigo-600',  iconBg: 'bg-indigo-100'  },
   { id: 'audit-log',        title: 'Audit Log',               description: 'Full change and access trail for compliance and security reviews.',           icon: ClipboardList, page: 'Audit Log',               color: 'text-slate-600',   iconBg: 'bg-slate-100'   },
 ]
 
@@ -41,11 +39,11 @@ export function IntelligenceDashboardPage({ onNavigate }: { onNavigate: (page: s
   const loadKpi = async () => {
     setKpiLoading(true)
     try {
-      const data = await intelApi.compliance()
+      const data = await intelApi.devices()
       setKpi({
-        total: data.summary.total,
-        compliant: data.summary.compliant,
-        noncompliant: data.summary.noncompliant,
+        total: data.count,
+        compliant: data.data.filter(d => d.complianceState === 'compliant').length,
+        noncompliant: data.data.filter(d => d.complianceState === 'noncompliant').length,
         avgRisk: null,
         conflicts: null,
       })

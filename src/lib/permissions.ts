@@ -6,13 +6,9 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
   'Dashboard':           ['Global Admin', 'IT Admin', 'Helpdesk'],
 
   // Endpoint Management
-  'Device Lookup':           ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Mac Devices':             ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Intune Devices':          ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Windows Devices':         ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'ManageEngine Devices':    ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Open Issues':             ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Smart Diagnostics':       ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'ManageEngine App Inventory': ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Mac Fleet Reports':       ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Entra Intelligence':      ['Global Admin', 'IT Admin', 'Helpdesk'],
 
@@ -30,28 +26,14 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
 
   // Analytics & Reports
   'Reports & Analytics': ['Global Admin', 'IT Admin'],
-  'Activity Log':        ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Diagnostics':         ['Global Admin', 'IT Admin', 'Helpdesk'],
 
   // Platform
   'Settings':            ['Global Admin', 'IT Admin'],
   'Documentation':       ['Global Admin', 'IT Admin', 'Helpdesk'],
-
-  // Always accessible
-  'Profile':             ['Global Admin', 'IT Admin', 'Helpdesk'],
 }
 
 export function canAccess(role: UserToolRole, page: string): boolean {
   const allowed = PAGE_ROLES[page]
   if (!allowed) return role === 'Global Admin'
   return allowed.includes(role)
-}
-
-/** Pages restricted to this role's tier or above (i.e. NOT available to every
- * tier below it) — used to show a role's real elevated access on the Profile
- * page instead of a generic hardcoded permissions list. */
-export function getElevatedPages(role: UserToolRole): string[] {
-  return Object.entries(PAGE_ROLES)
-    .filter(([, roles]) => roles.includes(role) && roles.length < 3)
-    .map(([page]) => page)
 }

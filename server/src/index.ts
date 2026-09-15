@@ -6,20 +6,15 @@ import { requestLogger } from './middleware/requestLogger.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import devicesRouter from './routes/devices.js'
 import notificationsRouter from './routes/notifications.js'
-import activityRouter from './routes/activity.js'
 import integrationsRouter from './routes/integrations.js'
 import reportsRouter from './routes/reports.js'
 import jiraRouter from './routes/jira.js'
 import usersRouter from './routes/users.js'
-import profileRouter from './routes/profile.js'
 import automationsRouter from './routes/automations.js'
 import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
-import smartDiagnosticsRouter from './routes/smartDiagnostics.js'
 import authRouter from './routes/auth.js'
-import appVersionsRouter from './routes/appVersions.js'
 import intelligenceRouter from './routes/intelligence.js'
-import tenantsRouter from './routes/tenants.js'
 import auditLogRouter from './routes/auditLog.js'
 import scheduledReportsRouter from './routes/scheduledReports.js'
 import securityInventoryRouter from './routes/securityInventory.js'
@@ -75,21 +70,16 @@ app.get('/health', (_req, res) => {
 app.use('/api/devices',      apiLimiter, devicesRouter)
 app.use('/api/integrations', apiLimiter, integrationsRouter)
 app.use('/api/notifications',apiLimiter, notificationsRouter)
-app.use('/api/activity',     apiLimiter, activityRouter)
 app.use('/api/reports',      apiLimiter, reportsRouter)
 app.use('/api/jira',         apiLimiter, jiraRouter)
 app.use('/api/users',        apiLimiter, usersRouter)
-app.use('/api/profile',      apiLimiter, profileRouter)
 app.use('/api/automations',  apiLimiter, automationsRouter)
 app.use('/api/slack',        apiLimiter, slackRouter)
 app.use('/api/entra',             apiLimiter, entraRouter)
-app.use('/api/smart-diagnostics', apiLimiter, smartDiagnosticsRouter)
 app.use('/api/auth',              authRouter)
-app.use('/api/app-versions',       apiLimiter, appVersionsRouter)
 
 // ── Intelligence Platform ──────────────────────────────────────────────────────
 app.use('/api/intelligence',       apiLimiter, intelligenceRouter)
-app.use('/api/tenants',            apiLimiter, tenantsRouter)
 app.use('/api/audit',              apiLimiter, auditLogRouter)
 app.use('/api/scheduled-reports',  apiLimiter, scheduledReportsRouter)
 app.use('/api/security-inventory', apiLimiter, securityInventoryRouter)

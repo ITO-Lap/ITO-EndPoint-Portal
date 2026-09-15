@@ -127,14 +127,6 @@ export interface ApiDevice {
   laps?: LapsInfo
 }
 
-export interface ApiActivityItem {
-  id: string
-  deviceName: string
-  message: string
-  status: 'Compliant' | 'Warning' | 'Non-Compliant'
-  timestamp: string
-}
-
 export interface ApiNotification {
   id: string
   message: string
@@ -478,54 +470,6 @@ export interface CreateAutomationRuleInput {
 export type { UserSignIn, UserDetails, UserDeviceDetail, UserHealthScore, UserIntelligenceTab } from '../types'
 import type { UserDetails } from '../types'
 
-// ── Profile (real Entra ID + Intune data for the app's fixed admin identity) ───
-// No per-user login exists in this app, so /api/profile always returns data
-// for one fixed, server-configured UPN — see server/src/routes/profile.ts.
-
-export interface ProfileData {
-  id:                string
-  displayName:       string | null
-  givenName:         string | null
-  surname:           string | null
-  mail:              string | null
-  userPrincipalName: string
-  mobilePhone:       string | null
-  businessPhones:    string[]
-  department:        string | null
-  jobTitle:          string | null
-  officeLocation:    string | null
-  accountEnabled:    boolean
-  createdDateTime:   string | null
-  signInActivity:    { lastSignInDateTime: string | null } | null
-  roles:  Array<{ id: string; displayName: string }>
-  groups: Array<{ id: string; displayName: string; groupTypes: string[]; mailEnabled: boolean; securityEnabled: boolean }>
-  apps:   Array<{ id: string; appDisplayName: string; resourceDisplayName: string; createdDateTime: string }>
-  tenantDeviceTotal: number
-  ownDevices: Array<{
-    deviceName: string
-    platform: string
-    complianceState: string
-    lastCheckIn: string
-    model: string
-    osVersion: string
-  }>
-}
-
-export type ProfileResult =
-  | { success: true; data: ProfileData }
-  | { success: false; code: 'not_configured' | 'user_not_found' | 'insufficient_permissions' | 'graph_error'; error: string }
-
-/** Raw fetch (not the shared get() helper) — we need the {code, error} body
- * even on non-2xx responses, which get() would otherwise discard. */
-async function fetchProfileRaw(): Promise<ProfileResult> {
-  try {
-    const res = await fetch(`${BASE_URL}/api/profile`)
-    return await res.json() as ProfileResult
-  } catch {
-    return { success: false, code: 'graph_error', error: 'Could not reach the server.' }
-  }
-}
-
 export const api = {
   fetchStats:    () => get<ApiStats>('/api/devices/stats'),
   fetchDevices:  (q?: string) =>
@@ -545,8 +489,6 @@ export const api = {
     qs.set('limit', String(params?.limit ?? 200))
     return get<{ devices: ApiDevice[]; total: number; mock: boolean }>(`/api/devices?${qs}`)
   },
-  fetchActivity: (limit = 20) =>
-    get<ApiActivityItem[]>(`/api/activity?limit=${limit}`),
   fetchNotifications: () => get<ApiNotification[]>('/api/notifications'),
   markAllRead: () => patch<ApiNotification[]>('/api/notifications/read-all'),
   markRead: (id: string) => patch<ApiNotification>(`/api/notifications/${id}/read`),
@@ -590,9 +532,6 @@ export const api = {
     get<import('../types').AppUser[]>('/api/users'),
   fetchUserDetails: (id: string, email?: string) =>
     get<UserDetails>(`/api/users/${encodeURIComponent(id)}${email ? `?email=${encodeURIComponent(email)}` : ''}`),
-
-  // Profile (real Entra ID + Intune data — see ProfileResult above)
-  fetchProfile: () => fetchProfileRaw(),
 
   // Jira
   jiraStatus: () =>
@@ -702,9 +641,6 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 
-  fetchEntraRelationships: (userId?: string) =>
-    get<unknown[]>(`/api/entra/relationships${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
-
   fetchEntraSecurity: () =>
     get<Record<string, number>>('/api/entra/security'),
 
@@ -713,50 +649,6 @@ export const api = {
 
   diagnoseEntraDevice: (deviceId: string) =>
     post<{ summary: string; issues: string[] }>(`/api/entra/devices/${encodeURIComponent(deviceId)}/diagnose`, {}),
-}
-
-// ── Smart Diagnostics ──────────────────────────────────────────────────────────
-import type {
-  DiagnosticDevice,
-  DeviceHealthReport,
-  ApplicationFailureReport,
-  EventLogEntry,
-  AIRecommendation,
-} from '../types'
-
-export const smartDiagnosticsApi = {
-  getDevices: (q?: string, limit = 50) => {
-    const params = new URLSearchParams({ limit: String(limit) })
-    if (q) params.set('q', q)
-    return get<DiagnosticDevice[]>(`/api/smart-diagnostics/devices?${params}`)
-  },
-
-  getHealth: (id: string) =>
-    get<{ device: DiagnosticDevice; report: DeviceHealthReport }>(
-      `/api/smart-diagnostics/devices/${encodeURIComponent(id)}/health`
-    ),
-
-  getLogs: (id: string) =>
-    get<EventLogEntry[]>(`/api/smart-diagnostics/devices/${encodeURIComponent(id)}/logs`),
-
-  getAppFailures: (id: string) =>
-    get<ApplicationFailureReport[]>(
-      `/api/smart-diagnostics/devices/${encodeURIComponent(id)}/app-failures`
-    ),
-
-  analyze: (id: string) =>
-    post<AIRecommendation>(
-      `/api/smart-diagnostics/devices/${encodeURIComponent(id)}/analyze`, {}
-    ),
-
-  exportBundle: (id: string) =>
-    get<{
-      device: DiagnosticDevice
-      report: DeviceHealthReport
-      failures: ApplicationFailureReport[]
-      logs: EventLogEntry[]
-      aiAnalysis: AIRecommendation
-    }>(`/api/smart-diagnostics/devices/${encodeURIComponent(id)}/export`),
 }
 
 /** Map a server Device to the frontend DeviceData shape. */
@@ -785,58 +677,4 @@ export function apiDeviceToDeviceData(d: ApiDevice) {
     issueCategory:        '',
     hasOpenIssue:         d.complianceState !== 'Compliant',
   }
-}
-
-// ── App Version Inventory ─────────────────────────────────────────────────────
-
-export interface AppVersionResult {
-  id: string
-  latestVersion: string | null
-  directDownloadUrl: string | null
-  source: string
-  error: string | null
-  fetchedAt: string
-}
-
-export interface AppVersionsResponse {
-  success: boolean
-  versions: AppVersionResult[]
-  checkedAt: string
-}
-
-const AV = `${BASE_URL}/api/app-versions`
-
-async function avFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${AV}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  })
-  const json = await res.json() as { success: boolean; data?: T; versions?: unknown; checkedAt?: string; error?: string }
-  if (!res.ok) throw new Error((json.error as string | undefined) ?? `App Versions API error ${res.status}`)
-  return json as unknown as T
-}
-
-export interface BatchVersionResult {
-  name: string
-  caskName: string
-  latestVersion: string | null
-  directDownloadUrl: string | null
-  source: string
-  error: string | null
-  fetchedAt: string
-}
-
-export interface AppVersionsBatchResponse {
-  success: boolean
-  results: BatchVersionResult[]
-  checkedAt: string
-}
-
-export const appVersionsApi = {
-  getLatestVersions: () => avFetch<AppVersionsResponse>(''),
-  batchLookup: (appNames: string[]) =>
-    avFetch<AppVersionsBatchResponse>('/batch', {
-      method: 'POST',
-      body: JSON.stringify({ apps: appNames }),
-    }),
 }

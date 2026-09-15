@@ -21,7 +21,7 @@ import { getEntraConfig }  from '../store/integrationStore.js'
 import { getEntraData }    from './entra.js'
 import {
   mockEntraOverview, mockEntraDevices, mockEntraUsers,
-  mockEntraGroups, mockEntraRelationships, mockEntraSecurity,
+  mockEntraGroups, mockEntraSecurity,
 } from '../data/entra.js'
 
 const isConfigured = () => !!getEntraConfig()
@@ -470,12 +470,6 @@ export async function getEntraGroupMemberReport(displayName: string, osFilter?: 
     totalMembers: allRows.length,
     flaggedCount: allRows.filter(r => r.flagged).length,
   }
-}
-
-// ── Relationships (requires multi-join — returns mock for now) ────────────────
-
-export async function getEntraRelationships(userId?: string) {
-  return userId ? mockEntraRelationships.filter(r => r.userId === userId) : mockEntraRelationships
 }
 
 // ── Security ──────────────────────────────────────────────────────────────────

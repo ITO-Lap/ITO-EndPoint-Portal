@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Menu, Search, User, Settings } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, Settings } from 'lucide-react'
 import { ZinniaIcon } from '../ui/ZinniaLogo'
 import { useRef, useState, useEffect } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -212,13 +212,12 @@ export function Header({
                 <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #0EA5E9, #6366F1)' }} />
                 <div className="mt-1 space-y-0.5 px-1.5">
                   {[
-                    { label: 'Profile',   icon: User,     action: 'Profile'  },
                     { label: 'Settings',  icon: Settings, action: 'Settings' },
                   ].map(({ label, icon: Icon, action }) => (
                     <button
                       key={label}
                       type="button"
-                      onClick={() => { setProfileOpen(false); action === 'Profile' ? onProfileNav?.('Profile') : onProfileNav?.('Settings') }}
+                      onClick={() => { setProfileOpen(false); onProfileNav?.(action) }}
                       className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl water-glow"
                       style={{ color: '#475569' }}
                     >

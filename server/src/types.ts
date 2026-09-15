@@ -110,14 +110,6 @@ export interface AutomationJob {
   error?: string
 }
 
-export interface ActivityItem {
-  id: string
-  deviceName: string
-  message: string
-  status: 'Compliant' | 'Warning' | 'Non-Compliant'
-  timestamp: string
-}
-
 export interface DashboardStats {
   total: number
   compliant: number

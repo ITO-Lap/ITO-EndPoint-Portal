@@ -102,7 +102,7 @@ export function scanFleet(
 }
 
 // VDI/virtual desktops are excluded from physical-device coverage — same
-// hostname heuristic already used by ManageEngineDevicesPage.classifyDevice
+// model/hostname heuristic used elsewhere to classify virtual machines
 // (no fabricated device-type field exists to check instead).
 const VIRTUAL_HOSTNAME_PATTERN = /vdi|virtual-machine|virtualmac/i
 export function isVirtualHostname(hostname: string): boolean {

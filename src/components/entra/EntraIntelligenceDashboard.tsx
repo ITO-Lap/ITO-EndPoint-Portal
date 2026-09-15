@@ -11,29 +11,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  RefreshCw, Network, Bell, ExternalLink, AlertCircle,
-  Monitor, Users as UsersIcon, BarChart3, Activity,
+  RefreshCw, Network, AlertCircle,
+  Monitor, Activity,
   ChevronDown, Loader2, AlertTriangle,
 } from 'lucide-react'
 import { api } from '../../api'
-import { EntraOverviewCards }        from './EntraOverviewCards'
-import { EntraDeviceInventoryTable } from './EntraDeviceInventoryTable'
-import { EntraUserRiskTable }        from './EntraUserRiskTable'
-import { EntraRelationshipExplorer } from './EntraRelationshipExplorer'
-import type {
-  EntraDevice, EntraUser, EntraOverviewMetrics, EntraRelationship,
-  EntraIssue, EntraAlert, EntraComplianceTrend,
-} from '../../data/entraData'
-import {
-  ENTRA_OVERVIEW as MOCK_OVERVIEW,
-  ENTRA_DEVICES as MOCK_DEVICES,
-  ENTRA_USERS as MOCK_USERS,
-  ENTRA_RELATIONSHIPS as MOCK_RELATIONSHIPS,
-  TOP_ISSUES as MOCK_ISSUES,
-  ENTRA_ALERTS as MOCK_ALERTS,
-  COMPLIANCE_TREND as MOCK_TREND,
-  PLATFORM_DISTRIBUTION as MOCK_PLATFORM,
-} from '../../data/entraData'
+import type { EntraDevice } from '../../data/entraData'
+import { ENTRA_DEVICES as MOCK_DEVICES } from '../../data/entraData'
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
@@ -58,49 +42,6 @@ function Section({ title, icon: Icon, color = 'text-blue-400', children, action 
         </div>
       </button>
       {open && <div className="p-4">{children}</div>}
-    </div>
-  )
-}
-
-// ── Compliance Trend Chart ────────────────────────────────────────────────────
-
-function ComplianceTrendChart({ data }: { data: EntraComplianceTrend[] }) {
-  const maxVal = Math.max(...data.map(d => d.compliant + d.nonCompliant + d.graceperiod))
-  return (
-    <div>
-      <div className="flex flex-wrap gap-4 mb-4">
-        {[{ label: 'Compliant', color: 'bg-emerald-500' }, { label: 'Non-Compliant', color: 'bg-red-500' }, { label: 'Grace Period', color: 'bg-amber-500' }]
-          .map(l => (
-            <div key={l.label} className="flex items-center gap-1.5">
-              <div className={`h-2.5 w-2.5 rounded-sm ${l.color}`} />
-              <span className="text-xs text-slate-400">{l.label}</span>
-            </div>
-          ))}
-      </div>
-      <div className="flex items-end gap-3 h-32">
-        {data.map(week => {
-          const total = week.compliant + week.nonCompliant + week.graceperiod
-          const cPct  = maxVal > 0 ? (week.compliant    / maxVal) * 100 : 0
-          const nPct  = maxVal > 0 ? (week.nonCompliant / maxVal) * 100 : 0
-          const gPct  = maxVal > 0 ? (week.graceperiod  / maxVal) * 100 : 0
-          return (
-            <div key={week.week} className="flex-1 flex flex-col items-center gap-1 group relative">
-              <div className="w-full flex flex-col justify-end h-full gap-px">
-                <div style={{ height: `${gPct}%` }}  className="bg-amber-500/80 w-full rounded-sm" />
-                <div style={{ height: `${nPct}%` }}  className="bg-red-500/80 w-full rounded-sm"   />
-                <div style={{ height: `${cPct}%` }}  className="bg-emerald-500/80 w-full rounded-sm" />
-              </div>
-              <span className="text-[0.55rem] text-slate-500 whitespace-nowrap">{week.week}</span>
-              <div className="absolute bottom-full mb-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[0.65rem] text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
-                <p className="text-emerald-400">{week.compliant.toLocaleString()} compliant</p>
-                <p className="text-red-400">{week.nonCompliant.toLocaleString()} non-compliant</p>
-                <p className="text-amber-400">{week.graceperiod.toLocaleString()} grace</p>
-                <p className="text-slate-500 mt-1 border-t border-slate-700 pt-1">{total.toLocaleString()} total</p>
-              </div>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
@@ -138,53 +79,6 @@ function PlatformDistribution({ devices }: { devices: EntraDevice[] }) {
       <div className="mt-2 pt-2 border-t border-slate-800 flex justify-between text-xs text-slate-500">
         <span>Total</span><span className="font-bold text-slate-300">{devices.length.toLocaleString()}</span>
       </div>
-    </div>
-  )
-}
-
-// ── Top Issues ────────────────────────────────────────────────────────────────
-
-function TopIssues({ issues }: { issues: EntraIssue[] }) {
-  const sev = (s: string) =>
-    s === 'High' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-    s === 'Medium' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-    'bg-slate-500/15 text-slate-400 border-slate-500/30'
-
-  return (
-    <div className="space-y-2">
-      {issues.map(issue => (
-        <div key={issue.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-800/30 px-3 py-2.5 hover:border-slate-700 transition">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-slate-200 truncate">{issue.title}</p>
-            <p className="text-[0.65rem] text-slate-500 truncate">{issue.description}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className={`rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${sev(issue.severity)}`}>{issue.severity}</span>
-            <span className="text-xs font-bold text-slate-400">{issue.affectedDevices}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Alerts ────────────────────────────────────────────────────────────────────
-
-function RecentAlerts({ alerts }: { alerts: EntraAlert[] }) {
-  const dot = (s: string) => s === 'High' ? 'bg-red-500' : s === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'
-  const txt = (s: string) => s === 'High' ? 'text-red-400' : s === 'Medium' ? 'text-amber-400' : 'text-emerald-400'
-  return (
-    <div className="space-y-2">
-      {alerts.map(a => (
-        <div key={a.id} className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-800/30 px-3 py-2.5">
-          <div className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot(a.severity)}`} />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-slate-300 font-medium">{a.title}</p>
-            <p className="text-[0.62rem] text-slate-500">{a.time}</p>
-          </div>
-          <span className={`text-[0.6rem] font-bold flex-shrink-0 ${txt(a.severity)}`}>{a.severity}</span>
-        </div>
-      ))}
     </div>
   )
 }
@@ -240,13 +134,7 @@ function StaleDevicesTable({ devices }: { devices: EntraDevice[] }) {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export function EntraIntelligenceDashboard() {
-  const [overview,       setOverview]       = useState<EntraOverviewMetrics>(MOCK_OVERVIEW)
   const [devices,        setDevices]        = useState<EntraDevice[]>(MOCK_DEVICES)
-  const [users,          setUsers]          = useState<EntraUser[]>(MOCK_USERS)
-  const [relationships,  setRelationships]  = useState<EntraRelationship[]>(MOCK_RELATIONSHIPS)
-  const [issues]         = useState<EntraIssue[]>(MOCK_ISSUES)
-  const [alerts]         = useState<EntraAlert[]>(MOCK_ALERTS)
-  const [trend]          = useState<EntraComplianceTrend[]>(MOCK_TREND)
 
   const [loading,      setLoading]      = useState(true)
   const [isLive,       setIsLive]       = useState(false)
@@ -257,29 +145,11 @@ export function EntraIntelligenceDashboard() {
   const fetchAll = useCallback(async () => {
     setError(null)
     try {
-      // Overview
-      const rawOverview = await api.fetchEntraOverview().catch(() => null)
-      if (rawOverview && Object.keys(rawOverview).length > 0) {
-        setOverview(rawOverview as unknown as EntraOverviewMetrics)
-        setIsLive(true)
-      }
-
-      // Devices
+      // Devices — still needed for the Platform Distribution and Stale Devices widgets
       const rawDevices = await api.fetchEntraDevices({ limit: 100 }).catch(() => null)
       if (rawDevices && rawDevices.length > 0) {
         setDevices(rawDevices as unknown as EntraDevice[])
-      }
-
-      // Users
-      const rawUsers = await api.fetchEntraUsers().catch(() => null)
-      if (rawUsers && rawUsers.length > 0) {
-        setUsers(rawUsers as unknown as EntraUser[])
-      }
-
-      // Relationships
-      const rawRel = await api.fetchEntraRelationships().catch(() => null)
-      if (rawRel && rawRel.length > 0) {
-        setRelationships(rawRel as unknown as EntraRelationship[])
+        setIsLive(true)
       }
 
       setLastUpdated(new Date())
@@ -351,10 +221,10 @@ export function EntraIntelligenceDashboard() {
         <div className="mx-5 mt-4 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-3">
           <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0" />
           <p className="text-xs text-amber-300">
-            <strong>Demo mode:</strong> Showing synthetic data.{' '}
+            <strong>Demo mode:</strong> Showing synthetic device data.{' '}
             Connect real Entra ID credentials in{' '}
             <span className="underline cursor-pointer">Settings → Integrations → Microsoft Entra ID</span>{' '}
-            to see live device, user, and compliance data from Microsoft Graph.
+            to see live platform distribution and stale check-in data from Microsoft Graph.
           </p>
         </div>
       )}
@@ -379,59 +249,15 @@ export function EntraIntelligenceDashboard() {
 
       <div className="p-5 space-y-5">
 
-        {/* ── KPI Cards ── */}
-        <div>
-          <p className="text-[0.6rem] font-black uppercase tracking-[0.15em] text-slate-500 mb-3">Fleet Overview</p>
-          <EntraOverviewCards metrics={overview} />
-        </div>
-
-        {/* ── Charts row ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <Section title="Compliance Status Over Time" icon={BarChart3} color="text-emerald-400"
-              action={<span className="text-[0.62rem] text-slate-500 mr-1">Last 6 weeks</span>}>
-              <ComplianceTrendChart data={trend} />
-            </Section>
-          </div>
-          <Section title="Devices by Platform" icon={Monitor} color="text-blue-400">
-            <PlatformDistribution devices={devices} />
-          </Section>
-        </div>
-
-        {/* ── Issues + Alerts ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Section title="Top Compliance Issues" icon={AlertCircle} color="text-red-400"
-            action={<button className="text-[0.65rem] text-blue-400 hover:text-blue-300 flex items-center gap-1"><span>View all</span><ExternalLink className="h-2.5 w-2.5" /></button>}>
-            <TopIssues issues={issues} />
-          </Section>
-          <Section title="Recent Alerts" icon={Bell} color="text-amber-400"
-            action={<button className="text-[0.65rem] text-blue-400 hover:text-blue-300 flex items-center gap-1"><span>View all</span><ExternalLink className="h-2.5 w-2.5" /></button>}>
-            <RecentAlerts alerts={alerts} />
-          </Section>
-        </div>
-
-        {/* ── Risky Users ── */}
-        <Section title="Risky Users" icon={UsersIcon} color="text-red-400"
-          action={<span className="text-[0.65rem] text-red-400 font-bold">{users.filter(u => u.riskLevel === 'High' || u.riskLevel === 'Medium').length} at risk</span>}>
-          <EntraUserRiskTable users={users} />
+        {/* ── Platform Distribution ── */}
+        <Section title="Devices by Platform" icon={Monitor} color="text-blue-400">
+          <PlatformDistribution devices={devices} />
         </Section>
 
         {/* ── Stale Devices ── */}
         <Section title="Devices with Stale Check-in" icon={Activity} color="text-amber-400"
           action={<span className="text-[0.65rem] text-amber-400 font-bold">{devices.filter(d => d.daysSinceCheckIn > 7).length} stale</span>}>
           <StaleDevicesTable devices={devices} />
-        </Section>
-
-        {/* ── Device Inventory ── */}
-        <Section title="Device Inventory" icon={Monitor} color="text-blue-400"
-          action={<span className="text-[0.65rem] text-slate-500">{devices.length.toLocaleString()} devices loaded</span>}>
-          <EntraDeviceInventoryTable devices={devices} />
-        </Section>
-
-        {/* ── Relationship Explorer ── */}
-        <Section title="Relationship Intelligence" icon={Network} color="text-purple-400"
-          action={<span className="text-[0.62rem] text-slate-500">User → Device → Policy → App</span>}>
-          <EntraRelationshipExplorer relationships={relationships} />
         </Section>
 
         <div className="text-center text-[0.62rem] text-slate-600 pt-2 border-t border-slate-800">

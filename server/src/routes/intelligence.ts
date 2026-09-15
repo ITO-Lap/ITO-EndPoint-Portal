@@ -67,64 +67,6 @@ router.get('/devices', async (_req, res, next) => {
   }
 })
 
-// ─── GET /api/intelligence/compliance ────────────────────────────────────────
-router.get('/compliance', async (_req, res, next) => {
-  try {
-    const cached = getCached<unknown>('intel:compliance')
-    if (cached) return res.json({ success: true, ...cached as object, cached: true })
-
-    const creds   = credentialsFromEnv()
-    const [devices, policies] = await Promise.all([
-      getManagedDevices(creds),
-      getCompliancePolicies(creds),
-    ])
-
-    const summary = {
-      total:         devices.length,
-      compliant:     devices.filter(d => d.complianceState === 'compliant').length,
-      noncompliant:  devices.filter(d => d.complianceState === 'noncompliant').length,
-      inGracePeriod: devices.filter(d => d.complianceState === 'inGracePeriod').length,
-      error:         devices.filter(d => d.complianceState === 'error' || d.complianceState === 'conflict').length,
-      unknown:       devices.filter(d => d.complianceState === 'unknown').length,
-    }
-
-    const byOS: Record<string, { total: number; compliant: number }> = {}
-    for (const d of devices) {
-      const os = d.operatingSystem || 'Unknown'
-      if (!byOS[os]) byOS[os] = { total: 0, compliant: 0 }
-      byOS[os].total++
-      if (d.complianceState === 'compliant') byOS[os].compliant++
-    }
-
-    const byManagementAgent: Record<string, number> = {}
-    for (const d of devices) {
-      const agent = d.managementAgent || 'Unknown'
-      byManagementAgent[agent] = (byManagementAgent[agent] ?? 0) + 1
-    }
-
-    const result = { summary, byOS, byManagementAgent, policyCount: policies.length }
-    setCached('intel:compliance', result)
-    res.json({ success: true, ...result })
-  } catch (err) {
-    next(err)
-  }
-})
-
-// ─── GET /api/intelligence/apps ───────────────────────────────────────────────
-router.get('/apps', async (_req, res, next) => {
-  try {
-    const cached = getCached<unknown[]>('intel:apps')
-    if (cached) return res.json({ success: true, data: cached, count: cached.length, cached: true })
-
-    const creds = credentialsFromEnv()
-    const apps  = await getMobileApps(creds)
-    setCached('intel:apps', apps)
-    res.json({ success: true, data: apps, count: apps.length })
-  } catch (err) {
-    next(err)
-  }
-})
-
 // ─── GET /api/intelligence/policies ──────────────────────────────────────────
 router.get('/policies', async (_req, res, next) => {
   try {

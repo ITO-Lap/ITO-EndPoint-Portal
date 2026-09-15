@@ -3,7 +3,6 @@
 
 const SERVER = import.meta.env.VITE_API_URL ?? ''
 const BASE = `${SERVER}/api/intelligence`
-const TENANTS = `${SERVER}/api/tenants`
 const AUDIT = `${SERVER}/api/audit`
 const SCHEDULES = `${SERVER}/api/scheduled-reports`
 
@@ -41,22 +40,6 @@ export interface IntelDevice {
 export const intelApi = {
   devices: (): Promise<{ success: boolean; data: IntelDevice[]; count: number }> =>
     get(`${BASE}/devices`),
-
-  // ─── Compliance ─────────────────────────────────────────────────────────────
-  compliance: (): Promise<{
-    success: boolean
-    summary: {
-      total: number; compliant: number; noncompliant: number
-      inGracePeriod: number; error: number; unknown: number
-    }
-    byOS: Record<string, { total: number; compliant: number }>
-    byManagementAgent: Record<string, number>
-    policyCount: number
-  }> => get(`${BASE}/compliance`),
-
-  // ─── Apps ───────────────────────────────────────────────────────────────────
-  apps: (): Promise<{ success: boolean; data: MobileApp[]; count: number }> =>
-    get(`${BASE}/apps`),
 
   // ─── Policies ───────────────────────────────────────────────────────────────
   policies: (): Promise<{
@@ -99,22 +82,6 @@ export const intelApi = {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  },
-
-  // ─── Tenants ────────────────────────────────────────────────────────────────
-  tenants: {
-    list: (): Promise<{ success: boolean; data: Tenant[] }> =>
-      get(TENANTS),
-    create: (t: CreateTenantInput): Promise<{ success: boolean; data: Tenant; error?: string }> =>
-      post(TENANTS, t),
-    update: (id: string, t: Partial<Tenant>): Promise<{ success: boolean }> =>
-      fetch(`${TENANTS}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t) }).then(r => r.json()) as Promise<{ success: boolean }>,
-    delete: (id: string): Promise<{ success: boolean }> =>
-      fetch(`${TENANTS}/${id}`, { method: 'DELETE' }).then(r => r.json()) as Promise<{ success: boolean }>,
-    test: (id: string): Promise<{ success: boolean; deviceCount?: number; responseMs?: number; message?: string; error?: string }> =>
-      post(`${TENANTS}/${id}/test`, {}),
-    testEnv: (): Promise<{ success: boolean; deviceCount?: number; tenantId?: string; error?: string }> =>
-      post(`${TENANTS}/test-env`, {}),
   },
 
   // ─── Audit Log ───────────────────────────────────────────────────────────────
@@ -190,16 +157,6 @@ export const intelApi = {
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
-export interface MobileApp {
-  id: string
-  displayName: string
-  publisher: string
-  '@odata.type': string
-  createdDateTime: string
-  lastModifiedDateTime: string
-  isFeatured: boolean
-}
-
 export interface CompliancePolicy {
   id: string
   displayName: string
@@ -251,25 +208,6 @@ export interface RiskScore {
   aiSummary: string
   actionItems: string[]
   computedAt: string
-}
-
-export interface Tenant {
-  id: string
-  name: string
-  domain: string
-  ms_tenant_id: string
-  plan: string
-  is_active: boolean
-  created_at: string
-}
-
-export interface CreateTenantInput {
-  name: string
-  domain?: string
-  ms_tenant_id: string
-  client_id: string
-  client_secret: string
-  plan?: string
 }
 
 export interface AuditEntry {

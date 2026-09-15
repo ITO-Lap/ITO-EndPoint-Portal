@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import {
   getEntraOverview, getEntraDevices, getEntraUsers, getEntraGroups,
-  getEntraRelationships, getEntraSecurity, syncDevice, diagnoseDevice,
+  getEntraSecurity, syncDevice, diagnoseDevice,
   getEntraGroupMemberReport, searchEntraGroups,
 } from '../services/entraIntelligence.js'
 import { exportToCSV, exportToExcel } from '../services/reportExporter.js'
@@ -107,14 +107,6 @@ router.get('/groups/report/export', asyncHandler(async (req, res) => {
   res.setHeader('Content-Type', 'text/csv')
   res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`)
   res.send(csv)
-}))
-
-// GET /api/entra/relationships?userId=
-router.get('/relationships', asyncHandler(async (req, res) => {
-  const rawId = req.query['userId']
-  const userId = typeof rawId === 'string' ? rawId : undefined
-  const data   = await getEntraRelationships(userId)
-  res.json({ success: true, data })
 }))
 
 // GET /api/entra/security

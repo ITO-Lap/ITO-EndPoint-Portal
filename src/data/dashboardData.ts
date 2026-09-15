@@ -1,8 +1,6 @@
 import {
   BarChart3,
-  Clock3,
   Home,
-  Search,
   Server,
   Settings,
   Shield,
@@ -10,15 +8,12 @@ import {
   Users,
   Hash,
   Zap,
-  AlertTriangle,
   Monitor,
   GitBranch,
   Layers,
-  Stethoscope,
   Brain,
   FileText,
   ClipboardList,
-  Package,
   Activity,
 } from 'lucide-react'
 import type {
@@ -37,12 +32,9 @@ export const navItems: NavItem[] = [
   { id: 'dashboard',            title: 'Dashboard',           icon: Home,          group: 'Overview',               active: true },
 
   // ── ENDPOINT MANAGEMENT ───────────────────────────────────────────────────────
-  { id: 'device_lookup',        title: 'Device Lookup',           icon: Search,        group: 'Endpoint Management' },
   { id: 'mac_devices',          title: 'Mac Devices',             icon: Monitor,       group: 'Endpoint Management' },
   { id: 'intune_devices',       title: 'Intune Devices',          icon: Server,        group: 'Endpoint Management' },
-  { id: 'manageengine_devices', title: 'ManageEngine Devices',    icon: Layers,        group: 'Endpoint Management' },
-  { id: 'open_issues',          title: 'Open Issues',             icon: AlertTriangle, group: 'Endpoint Management' },
-  { id: 'smart_diagnostics',    title: 'Diagnostics',             icon: Stethoscope,   group: 'Endpoint Management' },
+  { id: 'manageengine_apps',    title: 'ManageEngine App Inventory', icon: Layers,     group: 'Endpoint Management' },
 
   // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
   { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security & Compliance' },
@@ -57,12 +49,10 @@ export const navItems: NavItem[] = [
 
   // ── ANALYTICS & REPORTS ───────────────────────────────────────────────────────
   { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Analytics & Reports' },
-  { id: 'activity_log',         title: 'Activity Log',        icon: Clock3,        group: 'Analytics & Reports' },
 
   // ── INTELLIGENCE PLATFORM ─────────────────────────────────────────────────────
   { id: 'intelligence_dashboard', title: 'Intelligence Hub',        icon: Brain,          group: 'Intelligence Platform' },
   { id: 'compliance_intel',       title: 'Compliance Intelligence', icon: ShieldCheck,    group: 'Intelligence Platform' },
-  { id: 'app_deployment',         title: 'App Deployment',          icon: Package,        group: 'Intelligence Platform' },
   { id: 'policy_conflicts',       title: 'Policy Conflicts',        icon: GitBranch,      group: 'Intelligence Platform' },
   { id: 'risk_scoring',           title: 'Risk Scoring',            icon: Activity,       group: 'Intelligence Platform' },
   { id: 'report_builder',         title: 'Report Builder',          icon: FileText,       group: 'Intelligence Platform' },
