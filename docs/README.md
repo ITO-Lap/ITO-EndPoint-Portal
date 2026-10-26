@@ -28,6 +28,9 @@ docs/
 
 ## Quick Navigation
 
+### Handing over the project
+- [**Handover Manual**](HANDOVER-MANUAL.md) — state of the project, setup, deployment, operations, troubleshooting, checklist ([Word version](ITO-Endpoint-Handover-Manual.docx)) ← **Start here if you are the new owner**
+
 ### Understand the project
 - [Project Overview](01-overview/README.md) — what it does, who uses it, feature map
 - [Architecture](01-overview/ARCHITECTURE.md) — system diagram, data flow
