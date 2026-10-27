@@ -23,18 +23,44 @@ const router = Router()
 // ─── Constants ────────────────────────────────────────────────────────────────
 const IT_ADMIN_GROUP     = 'ITO EndPoint Portal'
 const HELPDESK_GROUP     = 'Desktop Support'
-// Must match a Web redirect URI registered on the Entra app. Set AUTH_REDIRECT_URI for any non-local deployment.
-const REDIRECT_URI       = process.env.AUTH_REDIRECT_URI ?? 'http://localhost:4000/api/auth/callback'
-const FRONTEND_ORIGIN    = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+// Where Microsoft sends the browser back, and where the app lives. On localhost these are the dev
+// defaults (API on :4000, Vite on :5173). On any other host they are taken from the request itself
+// (the deployed site is served by this same server), so a deployment works without extra settings;
+// AUTH_REDIRECT_URI / FRONTEND_URL override both. The redirect URI must match a Web redirect URI
+// registered on the Entra app exactly (https://<host>/api/auth/callback when deployed).
+const DEV_REDIRECT_URI   = 'http://localhost:4000/api/auth/callback'
+const DEV_FRONTEND       = 'http://localhost:5173'
+const LOCAL_HOST         = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
+
+export function resolveOrigins(req: { get(name: string): string | undefined; protocol: string }): { redirectUri: string; frontendOrigin: string; misconfigured: boolean } {
+  const first = (v: string | undefined) => v?.split(',')[0]?.trim()
+  const host = first(req.get('x-forwarded-host')) ?? req.get('host') ?? ''
+  const local = LOCAL_HOST.test(host)
+  const proto = first(req.get('x-forwarded-proto')) ?? req.protocol
+  const origin = `${proto}://${host}`
+  // In production a loopback host means a reverse proxy (e.g. IIS ARR) rewrote the Host header and did not pass the
+  // original; sending the browser to localhost would strand the user, so refuse and say what to configure.
+  const misconfigured = process.env.NODE_ENV === 'production' && local && !(process.env.AUTH_REDIRECT_URI && process.env.FRONTEND_URL)
+  return {
+    redirectUri:    process.env.AUTH_REDIRECT_URI ?? (local ? DEV_REDIRECT_URI : `${origin}/api/auth/callback`),
+    frontendOrigin: process.env.FRONTEND_URL ?? (local ? DEV_FRONTEND : origin),
+    misconfigured,
+  }
+}
 const JWT_SECRET         = SESSION_SECRET
 const TOKEN_TTL_SECS     = 8 * 60 * 60 // 8 hours
 
-// ─── In-memory CSRF state store (state → expiry) ──────────────────────────────
-const stateStore = new Map<string, number>()
-function pruneStates() {
-  const now = Date.now()
-  stateStore.forEach((exp, k) => { if (exp < now) stateStore.delete(k) })
+// ─── CSRF state: a signed, 10-minute token, so it survives a server restart ─────
+const STATE_PURPOSE = 'oauth-state'
+const signState = (): string => jwt.sign({ purpose: STATE_PURPOSE, nonce: randomBytes(12).toString('hex') }, JWT_SECRET, { expiresIn: 10 * 60 })
+function verifyState(state: unknown): boolean {
+  if (typeof state !== 'string' || !state) return false
+  try { return (jwt.verify(state, JWT_SECRET) as { purpose?: string }).purpose === STATE_PURPOSE } catch { return false }
 }
+
+// Never let a slow Microsoft / Graph call leave the browser hanging on the callback URL.
+const UPSTREAM_TIMEOUT_MS = 15_000
+const upstream = () => AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
 
 // ─── App-level token cache ────────────────────────────────────────────────────
 let appTokenCache: { token: string; expiresAt: number } | null = null
@@ -53,6 +79,7 @@ async function getAppToken(): Promise<string | null> {
         scope:         'https://graph.microsoft.com/.default',
         grant_type:    'client_credentials',
       }),
+      signal: upstream(),
     }
   )
   if (!res.ok) return null
@@ -64,6 +91,7 @@ async function getAppToken(): Promise<string | null> {
 async function graphGet<T>(token: string, path: string): Promise<T | null> {
   const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: upstream(),
   })
   if (!res.ok) return null
   return res.json() as Promise<T>
@@ -72,19 +100,23 @@ async function graphGet<T>(token: string, path: string): Promise<T | null> {
 // ─── GET /api/auth/login ──────────────────────────────────────────────────────
 // Returns the Microsoft OAuth URL for the frontend to redirect to.
 router.get('/login', (req, res) => {
+  const { redirectUri, misconfigured } = resolveOrigins(req)
+  if (misconfigured) {
+    console.error('[auth] Microsoft sign-in refused: the request host is loopback in production (reverse proxy rewrote Host). Set AUTH_REDIRECT_URI and FRONTEND_URL in server/.env, or forward X-Forwarded-Host / X-Forwarded-Proto.')
+    res.status(503).json({ success: false, error: 'Microsoft sign-in is not configured for this server address. An administrator must set AUTH_REDIRECT_URI and FRONTEND_URL.' })
+    return
+  }
   const cfg = getEntraConfig()
   if (!cfg) {
     res.status(503).json({ success: false, error: 'Entra ID is not configured on this server.' })
     return
   }
-  pruneStates()
-  const state = randomBytes(16).toString('hex')
-  stateStore.set(state, Date.now() + 10 * 60 * 1_000) // 10 min expiry
+  const state = signState()
 
   const params = new URLSearchParams({
     client_id:     cfg.clientId,
     response_type: 'code',
-    redirect_uri:  REDIRECT_URI,
+    redirect_uri:  redirectUri,
     response_mode: 'query',
     scope:         'openid profile email User.Read',
     state,
@@ -94,33 +126,44 @@ router.get('/login', (req, res) => {
   res.json({ success: true, data: { url } })
 })
 
+// Every failed sign-in lands on the login page with ?auth_error=...; log the same reason server-side
+// (never the code or tokens) so a failure can be diagnosed from the server log.
+router.use('/callback', (_req, res, next) => {
+  const redirect = res.redirect.bind(res) as (url: string) => void
+  res.redirect = ((url: string) => {
+    try { const reason = new URL(url).searchParams.get('auth_error'); if (reason) console.warn(`[auth] Microsoft sign-in failed: ${reason}`) } catch { /* not a URL */ }
+    redirect(url)
+  }) as typeof res.redirect
+  next()
+})
+
 // ─── GET /api/auth/callback ───────────────────────────────────────────────────
 // Microsoft redirects here after authentication.
 router.get('/callback', async (req, res) => {
+  const { redirectUri, frontendOrigin, misconfigured } = resolveOrigins(req)
+  if (misconfigured) { res.status(503).type('text').send('Microsoft sign-in is not configured for this server address. An administrator must set AUTH_REDIRECT_URI and FRONTEND_URL.'); return }
   const { code, state, error, error_description } = req.query as Record<string, string>
 
   if (error) {
     const msg = encodeURIComponent(error_description ?? error ?? 'Authentication failed')
-    res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${msg}`)
+    res.redirect(`${frontendOrigin}/?auth_error=${msg}`)
     return
   }
 
   // Validate CSRF state
-  const stateExpiry = stateStore.get(state ?? '')
-  if (!stateExpiry || Date.now() > stateExpiry) {
-    res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${encodeURIComponent('Invalid or expired auth state. Please try again.')}`)
+  if (!verifyState(state)) {
+    res.redirect(`${frontendOrigin}/?auth_error=${encodeURIComponent('Invalid or expired auth state. Please try again.')}`)
     return
   }
-  stateStore.delete(state ?? '')
 
   const cfg = getEntraConfig()
   if (!cfg) {
-    res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${encodeURIComponent('Server configuration error.')}`)
+    res.redirect(`${frontendOrigin}/?auth_error=${encodeURIComponent('Server configuration error.')}`)
     return
   }
 
   if (!code) {
-    res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${encodeURIComponent('Authorization code missing.')}`)
+    res.redirect(`${frontendOrigin}/?auth_error=${encodeURIComponent('Authorization code missing.')}`)
     return
   }
 
@@ -135,9 +178,10 @@ router.get('/callback', async (req, res) => {
           client_secret: cfg.clientSecret,
           grant_type:    'authorization_code',
           code:          code,
-          redirect_uri:  REDIRECT_URI,
+          redirect_uri:  redirectUri,
           scope:         'openid profile email User.Read',
         }),
+        signal: upstream(),
       }
     )
     if (!tokenRes.ok) {
@@ -185,7 +229,7 @@ router.get('/callback', async (req, res) => {
       const msg = encodeURIComponent(groupLookupFailed
         ? `Signed in as ${email}, but group membership could not be checked. Ask an administrator to grant the app the GroupMember.Read.All permission.`
         : `Access denied. ${email} is not a member of '${IT_ADMIN_GROUP}' or '${HELPDESK_GROUP}'.`)
-      res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${msg}`)
+      res.redirect(`${frontendOrigin}/?auth_error=${msg}`)
       return
     }
 
@@ -197,10 +241,10 @@ router.get('/callback', async (req, res) => {
     )
 
     // Fragment, not query string: it is never sent to a server, logged, or passed in a Referer header.
-    res.redirect(`${FRONTEND_ORIGIN}/#session_token=${sessionToken}`)
+    res.redirect(`${frontendOrigin}/#session_token=${sessionToken}`)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Authentication error'
-    res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${encodeURIComponent(msg)}`)
+    const msg = err instanceof Error && err.name === 'TimeoutError' ? 'Microsoft took too long to respond. Please try again.' : err instanceof Error ? err.message : 'Authentication error'
+    res.redirect(`${frontendOrigin}/?auth_error=${encodeURIComponent(msg)}`)
   }
 })
 

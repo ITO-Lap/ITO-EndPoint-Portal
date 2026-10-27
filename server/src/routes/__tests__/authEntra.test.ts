@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import express from 'express'
 import http from 'node:http'
 import type { AddressInfo } from 'net'
@@ -6,7 +6,8 @@ import type { AddressInfo } from 'net'
 vi.mock('../../store/integrationStore.js', () => ({ getEntraConfig: () => ({ tenantId: 'tenant-1', clientId: 'client-1', clientSecret: 'secret-1' }) }))
 
 import authRouter from '../auth.js'
-import { verifySession } from '../../services/session.js'
+import jwt from 'jsonwebtoken'
+import { SESSION_SECRET, verifySession } from '../../services/session.js'
 
 let server: http.Server
 let base = ''
@@ -90,7 +91,79 @@ describe('Microsoft sign-in', () => {
     expect(tokenFrom(location)).toBeNull()
   })
 
-  it('rejects an unknown or reused state', async () => {
+  it('rejects an unknown, tampered or expired state', async () => {
     expect((await callback('abc', 'not-a-real-state')).location.searchParams.get('auth_error')).toContain('Invalid or expired auth state')
+    const expired = jwt.sign({ purpose: 'oauth-state' }, SESSION_SECRET, { expiresIn: -5 })
+    expect((await callback('abc', expired)).location.searchParams.get('auth_error')).toContain('Invalid or expired auth state')
+    const wrongPurpose = jwt.sign({ purpose: 'something-else' }, SESSION_SECRET, { expiresIn: 60 })
+    expect((await callback('abc', wrongPurpose)).location.searchParams.get('auth_error')).toContain('Invalid or expired auth state')
+  })
+
+  it('accepts a state issued before a restart, since it is signed rather than remembered in memory', async () => {
+    // A valid signed state that was never issued by this process instance (as after a server restart).
+    const issuedEarlier = jwt.sign({ purpose: 'oauth-state', nonce: 'earlier-run' }, SESSION_SECRET, { expiresIn: 600 })
+    expect(verifySession(tokenFrom((await callback('abc', issuedEarlier)).location)!)?.role).toBe('IT Admin')
+  })
+
+  it('logs why a sign-in failed, without logging the code', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    memberOf = { status: 200, body: { value: [] } }
+    await callback('secret-code-123')
+    const logged = warn.mock.calls.flat().join(' ')
+    expect(logged).toContain('[auth] Microsoft sign-in failed: Access denied. pat@zinnia.com')
+    expect(logged).not.toContain('secret-code-123')
+    warn.mockRestore()
+  })
+
+  describe('deployed host', () => {
+    const deployed = { 'x-forwarded-host': 'ito-endpoint.deployhub.zinnia.io', 'x-forwarded-proto': 'https' }
+    const loginUrl = async (headers: Record<string, string>) => new URL(((await realFetch(`${base}/api/auth/login`, { headers }).then(r => r.json())) as { data: { url: string } }).data.url)
+
+    it('tells Microsoft to return to the deployed site, not localhost', async () => {
+      expect((await loginUrl(deployed)).searchParams.get('redirect_uri')).toBe('https://ito-endpoint.deployhub.zinnia.io/api/auth/callback')
+    })
+
+    it('sends the browser back to the deployed site after sign-in, and redeems the code with the same redirect URI', async () => {
+      const state = (await loginUrl(deployed)).searchParams.get('state')!
+      vi.mocked(globalThis.fetch).mockClear()
+      const res = await realFetch(`${base}/api/auth/callback?code=abc&state=${state}`, { redirect: 'manual', headers: deployed })
+      const location = new URL(res.headers.get('location')!)
+      expect(location.origin).toBe('https://ito-endpoint.deployhub.zinnia.io')
+      expect(verifySession(tokenFrom(location)!)?.role).toBe('IT Admin')
+      const exchange = vi.mocked(globalThis.fetch).mock.calls.find(([u, init]) => String(u).includes('/oauth2/v2.0/token') && String(init?.body).includes('authorization_code'))
+      expect(new URLSearchParams(String(exchange![1]!.body)).get('redirect_uri')).toBe('https://ito-endpoint.deployhub.zinnia.io/api/auth/callback')
+    })
+
+    it('keeps the localhost defaults on localhost, and lets AUTH_REDIRECT_URI / FRONTEND_URL override', async () => {
+      expect((await loginUrl({})).searchParams.get('redirect_uri')).toBe('http://localhost:4000/api/auth/callback')
+      vi.stubEnv('AUTH_REDIRECT_URI', 'https://custom.example/api/auth/callback')
+      vi.stubEnv('FRONTEND_URL', 'https://custom.example')
+      expect((await loginUrl(deployed)).searchParams.get('redirect_uri')).toBe('https://custom.example/api/auth/callback')
+      const state = (await loginUrl(deployed)).searchParams.get('state')!
+      const res = await realFetch(`${base}/api/auth/callback?code=abc&state=${state}`, { redirect: 'manual', headers: deployed })
+      expect(new URL(res.headers.get('location')!).origin).toBe('https://custom.example')
+      vi.unstubAllEnvs()
+    })
+  })
+
+  describe('production behind a proxy that hides the host', () => {
+    afterEach(() => vi.unstubAllEnvs())
+    it('refuses Microsoft sign-in with a clear message rather than sending users to localhost', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const res = await realFetch(`${base}/api/auth/login`)
+      expect(res.status).toBe(503)
+      expect(((await res.json()) as { error: string }).error).toContain('AUTH_REDIRECT_URI and FRONTEND_URL')
+      expect((await realFetch(`${base}/api/auth/callback?code=a&state=b`, { redirect: 'manual' })).status).toBe(503)
+    })
+    it('works once both settings are provided, or once the proxy forwards the real host', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      vi.stubEnv('AUTH_REDIRECT_URI', 'https://ito-endpoint.deployhub.zinnia.io/api/auth/callback')
+      vi.stubEnv('FRONTEND_URL', 'https://ito-endpoint.deployhub.zinnia.io')
+      expect((await realFetch(`${base}/api/auth/login`)).status).toBe(200)
+      vi.unstubAllEnvs()
+      vi.stubEnv('NODE_ENV', 'production')
+      const forwarded = await realFetch(`${base}/api/auth/login`, { headers: { 'x-forwarded-host': 'ito-endpoint.deployhub.zinnia.io', 'x-forwarded-proto': 'https' } })
+      expect(forwarded.status).toBe(200)
+    })
   })
 })

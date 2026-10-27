@@ -9,13 +9,30 @@
 //   AUTH_PASSWORD        when set, the password is required as well
 //   AUTH_PASSWORDLESS    "true" turns on email-only sign-in (local development only)
 //   AUTH_ENFORCED        "false" turns the API gate off (local debugging only)
-//   SESSION_SECRET       signing key; if unset a random one is used and every
-//                        restart signs everyone out
+//   SESSION_SECRET       signing key; if unset one is generated and saved to server/.session-secret
 
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
+import { chmodSync, readFileSync, writeFileSync } from 'fs'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import jwt from 'jsonwebtoken'
 
-export const SESSION_SECRET = process.env['SESSION_SECRET'] ?? randomBytes(32).toString('hex')
+// SESSION_SECRET if set; otherwise a key generated once and kept in server/.session-secret (git-ignored,
+// owner-only), so restarts do not sign everyone out or break a Microsoft sign-in that is in flight.
+// Tests (NODE_ENV=test) use a throwaway in-memory key.
+function loadSecret(): string {
+  const fromEnv = process.env['SESSION_SECRET']
+  if (fromEnv) return fromEnv
+  const generated = randomBytes(32).toString('hex')
+  if (process.env['NODE_ENV'] === 'test') return generated
+  const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../.session-secret')
+  try { const saved = readFileSync(file, 'utf-8').trim(); if (saved.length >= 32) return saved } catch { /* not created yet */ }
+  try { writeFileSync(file, generated, { mode: 0o600 }); chmodSync(file, 0o600) }
+  catch (e) { console.warn('[auth] Could not persist a session key; sessions will end when the server restarts:', e) }
+  return generated
+}
+
+export const SESSION_SECRET = loadSecret()
 export const SESSION_TTL_SECS = 8 * 60 * 60 // 8 hours
 // Who is Global Admin once Microsoft has verified them (and who may use email sign-in, when it is on).
 const DEFAULT_ALLOWED = 'avinash.verma@zinnia.com'

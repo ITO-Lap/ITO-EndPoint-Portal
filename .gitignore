@@ -33,6 +33,7 @@ server/.patch-remediation-actions.json
 server/.scheduled-reports.json
 server/.fleet-snapshots.json
 server/.notifications.json
+server/.session-secret
 
 # Editor directories and files
 .vscode/*
