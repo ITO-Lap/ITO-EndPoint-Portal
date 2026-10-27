@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('../criticalPatchReport.js', () => ({ isSupportedCriticalPatchClient: (s: { osName?: string }) => !/server/i.test(s.osName ?? '') }))
+vi.mock('../criticalPatchReport.js', async () => ({ ...(await vi.importActual<object>('../criticalPatchReport.js')), isSupportedCriticalPatchClient: (s: { osName?: string }) => !/server/i.test(s.osName ?? '') }))
 vi.mock('../staleDevicesReport.js', () => ({ STALE_DAYS: 30 }))
 
 import ExcelJS from 'exceljs'
@@ -66,6 +66,7 @@ describe('patch sheets', () => {
     const rows = buildPatchRollupRows(systems, patches, now)
     expect(rows.map(r => r.deviceName)).toEqual(['old', 'young'])
     expect(rows[0]).toMatchObject({ oldestPatchAgeDays: 70, oldestPatch: 'Patch 2', cveCount: 2, rebootRequired: 'Yes' })
+    expect(rows[1]).toMatchObject({ deviceName: 'young', rebootRequired: 'No' }) // "Not Required" must not count as required
   })
   it('still lists devices when per-patch detail is unavailable', () => {
     const rows = buildPatchRollupRows(systems, null, now)

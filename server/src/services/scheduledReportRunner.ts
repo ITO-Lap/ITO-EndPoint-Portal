@@ -81,7 +81,7 @@ async function generateReportContent(schedule: ScheduledReportRecord): Promise<{
   switch (schedule.report_type) {
     case 'fleet-digest':
     case 'entra-duplicate-devices': throw new Error(`${schedule.report_type} is delivered as a Slack message, not a file`)
-    case 'critical-patching': { const r = await createCriticalPatchReport(); return { content: r.content, filename: r.filename, rows: r.rows } }
+    case 'critical-patching': { const r = await createCriticalPatchReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length, overview: r.overview } }
     case 'app-updates':       { const r = await createAppUpdatesReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'compliance':        return createComplianceReport(schedule.format as ExportFormat)

@@ -2,6 +2,8 @@ import { getFleetCriticalPatches, getPatchSystems, type MissingPatch, type Patch
 import { exportToExcel, type ReportColumn } from './reportExporter.js'
 import { getSlackConfig } from '../store/integrationStore.js'
 import { uploadSlackFile } from './slack.js'
+import { buildOverviewMessage, countBy, formatCount, topBreakdown, type ReportOverview } from './reportOverview.js'
+import { ok, warn, type DataCheck } from './dataQuality.js'
 
 export interface CriticalPatchReportRow {
   device: string
@@ -49,16 +51,57 @@ export function buildCriticalPatchReportRows(systems: PatchSystemStatus[], patch
     })
 }
 
-export async function createCriticalPatchReport(force = false): Promise<{ content: Buffer; filename: string; criticalDevices: number; rows: number }> {
+/** True for "Required"/"Yes"; false for "Not Required", "No" and empty values. */
+export const isRebootRequired = (value: string | null | undefined): boolean => /\b(required|yes)\b/i.test(value ?? '') && !/\b(not|no)\b/i.test(value ?? '')
+
+/** Headline figures, scan-health and detail-availability checks for the critical patching report. */
+export function buildCriticalPatchOverview(systems: PatchSystemStatus[], patchesBySystem: Map<string, MissingPatch[]>, now = new Date()): ReportOverview {
+  const clients = systems.filter(isSupportedCriticalPatchClient)
+  const critical = clients.filter(s => s.scanSucceeded && s.criticalPatchCount > 0)
+  const patchesOf = (s: PatchSystemStatus) => patchesBySystem.get(s.detailResourceId) ?? []
+  const ages = critical.flatMap(s => patchesOf(s).map(p => ({ device: nameOf(s), days: Math.floor((now.getTime() - Date.parse(p.releasedAt ?? '')) / 86_400_000) })))
+    .filter(a => Number.isFinite(a.days) && a.days >= 0).sort((a, b) => b.days - a.days)
+  const over30 = new Set(ages.filter(a => a.days >= 30).map(a => a.device)).size
+  const failedScans = clients.filter(s => !s.scanSucceeded).length
+  const noDetail = critical.length > 0 && critical.every(s => patchesOf(s).length === 0)
+  const dataChecks: DataCheck[] = [
+    failedScans > 0
+      ? warn('Patch scan health', `${formatCount(failedScans)} of ${formatCount(clients.length)} Windows/macOS endpoints failed their last scan and are excluded, so these counts are a minimum.`)
+      : ok('Patch scan health', `All ${formatCount(clients.length)} Windows/macOS endpoints scanned successfully.`),
+    noDetail ? warn('Patch detail', 'Per-patch names, ages and CVEs were unavailable; the workbook lists devices without them.') : ok('Patch detail', 'Per-patch detail was available.'),
+  ]
+  const rebootDevices = critical.filter(s => patchesOf(s).some(p => isRebootRequired(p.rebootRequirement))).length
+  return {
+    title: 'Critical Patching',
+    fields: [
+      { label: 'Devices missing critical patches', value: critical.length },
+      { label: 'Critical patches missing', value: critical.reduce((sum, s) => sum + s.criticalPatchCount, 0) },
+      { label: 'Oldest missing patch', value: ages[0] ? `${formatCount(ages[0].days)} days (${ages[0].device})` : 'Unknown' },
+      { label: 'Missing for 30+ days', value: ages.length ? `${formatCount(over30)} device${over30 === 1 ? '' : 's'}` : 'Unknown' },
+      { label: 'By platform', value: topBreakdown(countBy(critical, s => s.platform)) },
+      { label: 'Most affected OS', value: topBreakdown(countBy(critical, s => s.osName ?? 'Not reported'), 2) },
+      { label: 'Distinct CVEs', value: new Set(critical.flatMap(s => patchesOf(s).flatMap(p => p.cves))).size },
+      { label: 'Reboot required', value: `${formatCount(rebootDevices)} device${rebootDevices === 1 ? '' : 's'}` },
+    ],
+    action: critical.length
+      ? `Patch the ${formatCount(critical.length)} device${critical.length === 1 ? '' : 's'}${over30 ? `, starting with the ${formatCount(over30)} missing patches for 30+ days` : ''}.`
+      : 'No critical patches are missing on scanned endpoints.',
+    footnote: 'Source: Endpoint Central Patch Manager, Windows client and macOS only',
+    dataChecks,
+  }
+}
+
+export async function createCriticalPatchReport(force = false): Promise<{ content: Buffer; filename: string; criticalDevices: number; rows: number; overview: ReportOverview }> {
   const [systems, patchesBySystem] = await Promise.all([getPatchSystems(force), getFleetCriticalPatches(force)])
   const rows = buildCriticalPatchReportRows(systems, patchesBySystem)
   const now = new Date()
   const date = now.toISOString().slice(0, 10)
+  const overview = buildCriticalPatchOverview(systems, patchesBySystem, now)
   const content = await exportToExcel(rows.map(row => ({ ...row })), columns, {
     title: 'Critical Patching Report', subtitle: 'Missing critical patches on Windows client and macOS endpoints, reported by Endpoint Central Patch Manager',
-    generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length,
+    generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, ...(overview.dataChecks ? { dataChecks: overview.dataChecks } : {}),
   })
-  return { content, filename: `critical-patching-${date}.xlsx`, criticalDevices: new Set(rows.map(row => row.device)).size, rows: rows.length }
+  return { content, filename: `critical-patching-${date}.xlsx`, criticalDevices: new Set(rows.map(row => row.device)).size, rows: rows.length, overview }
 }
 
 export async function sendCriticalPatchReportToSlack(channelId: string, force = false): Promise<{ ok: boolean; error?: string; criticalDevices: number; rows: number; filename?: string }> {
@@ -67,7 +110,7 @@ export async function sendCriticalPatchReportToSlack(channelId: string, force = 
   const report = await createCriticalPatchReport(force)
   const result = await uploadSlackFile(cfg, {
     channelId, filename: report.filename, title: 'Critical Patching Report', content: report.content,
-    initialComment: `Critical Patching report: ${report.criticalDevices} device${report.criticalDevices === 1 ? '' : 's'} with missing critical patches (${report.rows} report rows).`,
+    blocks: buildOverviewMessage(report.overview, new Date().toISOString().slice(0, 10)).blocks,
   })
   return { ...result, criticalDevices: report.criticalDevices, rows: report.rows, ...(result.ok ? { filename: report.filename } : {}) }
 }

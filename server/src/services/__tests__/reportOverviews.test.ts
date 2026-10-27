@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../routes/devices.js', () => ({ fetchAllDevices: vi.fn() }))
+vi.mock('../endpointCentralPatch.js', () => ({ getPatchSystems: vi.fn(), getFleetCriticalPatches: vi.fn() }))
 vi.mock('../graphApi.js', () => ({ credentialsFromEnv: vi.fn(), getManagedDevices: vi.fn() }))
 vi.mock('../reportExporter.js', () => ({ exportToCSV: vi.fn(), exportToExcel: vi.fn(), exportToPDF: vi.fn(), exportToPPTX: vi.fn() }))
 vi.mock('../slack.js', () => ({ uploadSlackFile: vi.fn(), sendSlackMessage: vi.fn() }))
@@ -9,6 +10,7 @@ vi.mock('../appIntel/service.js', () => ({ getAppIntelService: vi.fn() }))
 
 import { buildOverviewMessage, overviewToText, topBreakdown, formatPercent, countBy } from '../reportOverview.js'
 import { buildStaleOverview } from '../staleDevicesReport.js'
+import { buildCriticalPatchOverview } from '../criticalPatchReport.js'
 import { buildInventoryOverview, buildComplianceOverview } from '../complianceInventoryReport.js'
 import { buildUpdatesOverview } from '../appIntel/updateReport.js'
 import type { GraphManagedDevice } from '../graphApi.js'
@@ -121,5 +123,27 @@ describe('buildUpdatesOverview', () => {
   it('flags sync warnings and the all-clear state', () => {
     expect(buildUpdatesOverview([], { syncedAt: '2026-10-27T05:30:00Z', errors: { me: 'x' } }).footnote).toContain('1 sync warning')
     expect(buildUpdatesOverview([], { syncedAt: '2026-10-27T05:30:00Z', errors: {} }).action).toBe('No installed app is behind its latest verified version.')
+  })
+})
+
+describe('buildCriticalPatchOverview', () => {
+  const now = new Date('2026-10-27T00:00:00Z')
+  const sys = (id: string, o: Record<string, unknown> = {}) => ({ resourceId: id, detailResourceId: `d-${id}`, names: [id], platform: 'Windows', osName: 'Windows 11', criticalPatchCount: 2, scanSucceeded: true, ...o }) as never
+  const patch = (daysAgo: number, o: Record<string, unknown> = {}) => ({ releasedAt: new Date(now.getTime() - daysAgo * 86_400_000).toISOString(), cves: ['CVE-1'], rebootRequirement: 'Required', ...o }) as never
+
+  it('summarises devices, patch age, reboots and flags failed scans', () => {
+    const o = buildCriticalPatchOverview([sys('old'), sys('new'), sys('bad', { scanSucceeded: false }), sys('srv', { osName: 'Windows Server 2022' })], new Map([['d-old', [patch(60)]], ['d-new', [patch(5, { rebootRequirement: 'Not Required', cves: ['CVE-2'] })]]]), now)
+    expect(field(o, 'Devices missing critical patches')).toBe(2)
+    expect(field(o, 'Critical patches missing')).toBe(4)
+    expect(field(o, 'Oldest missing patch')).toBe('60 days (old)')
+    expect(field(o, 'Missing for 30+ days')).toBe('1 device')
+    expect(field(o, 'Distinct CVEs')).toBe(2)
+    expect(field(o, 'Reboot required')).toBe('1 device')
+    expect(o.action).toBe('Patch the 2 devices, starting with the 1 missing patches for 30+ days.')
+    expect(o.dataChecks?.find(c => c.label === 'Patch scan health')).toMatchObject({ status: 'warn', detail: expect.stringContaining('1 of 3') })
+  })
+  it('warns when patch detail is unavailable and reports the clean state', () => {
+    expect(buildCriticalPatchOverview([sys('a')], new Map(), now).dataChecks?.find(c => c.label === 'Patch detail')?.status).toBe('warn')
+    expect(buildCriticalPatchOverview([], new Map(), now).action).toBe('No critical patches are missing on scanned endpoints.')
   })
 })

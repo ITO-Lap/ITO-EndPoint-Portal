@@ -8,7 +8,7 @@
 
 import type { Device } from '../types.js'
 import type { MissingPatch, PatchSystemStatus } from './endpointCentralPatch.js'
-import { isSupportedCriticalPatchClient } from './criticalPatchReport.js'
+import { isSupportedCriticalPatchClient, isRebootRequired } from './criticalPatchReport.js'
 import { STALE_DAYS } from './staleDevicesReport.js'
 import type { FleetSnapshot } from '../store/fleetSnapshotStore.js'
 import { addDataQualitySheet, type DataCheck } from './dataQuality.js'
@@ -72,7 +72,7 @@ export function buildPatchRollupRows(systems: PatchSystemStatus[], patchesBySyst
       deviceName: systemName(s), platform: s.platform, operatingSystem: s.osName ?? 'Not reported', criticalPatches: s.criticalPatchCount,
       oldestPatchAgeDays: oldest?.days ?? '', oldestPatch: oldest ? (oldest.p.description || oldest.p.name) : '',
       cveCount: new Set(patches.flatMap(p => p.cves)).size,
-      rebootRequired: patches.some(p => /required|yes/i.test(p.rebootRequirement ?? '')) ? 'Yes' : patches.length ? 'No' : '',
+      rebootRequired: patches.some(p => isRebootRequired(p.rebootRequirement)) ? 'Yes' : patches.length ? 'No' : '',
       lastSuccessfulScan: s.lastSuccessfulScanTime ?? '',
     }
   }).sort((a, b) => (Number(b.oldestPatchAgeDays) || -1) - (Number(a.oldestPatchAgeDays) || -1)
