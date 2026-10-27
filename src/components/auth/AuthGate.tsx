@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { LoginPage } from '../../pages/LoginPage'
+import '../../pages/login.css'
 import { clearSession, fetchCurrentUser, getSession, installAuthFetch, takeRedirect, verifyToken, type SessionUser } from '../../api/session'
 
 type GateState = { status: 'checking' } | { status: 'signedOut' } | { status: 'signedIn'; user: SessionUser }
@@ -28,7 +29,7 @@ export function AuthGate({ children }: { children: (session: { user: SessionUser
     return () => { cancelled = true }
   }, [state.status, redirect])
 
-  if (state.status === 'checking') return <div className="grid min-h-screen place-items-center text-sm text-slate-400 glass-bg">Checking your session…</div>
+  if (state.status === 'checking') return <main className="lg-root"><div className="lg-grid" aria-hidden="true" /><div className="lg-check"><span className="lg-spinner" aria-hidden="true" />Checking your session…</div></main>
   if (state.status === 'signedOut') return <LoginPage initialError={loginError} onSignedIn={user => setState({ status: 'signedIn', user })} />
   return <>{children({ user: state.user, signOut })}</>
 }

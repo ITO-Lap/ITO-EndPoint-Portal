@@ -1,14 +1,56 @@
 import { useEffect, useState } from 'react'
-import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react'
+import { LogIn, Mail, Lock, AlertCircle, Sparkles, ShieldCheck, BellRing, Activity } from 'lucide-react'
 import { ZinniaIcon } from '../components/ui/ZinniaLogo'
 import { fetchAuthConfig, signIn, startMicrosoftSignIn, type AuthConfig, type SessionUser } from '../api/session'
+import './login.css'
 
 const MicrosoftLogo = () => (
-  <svg viewBox="0 0 21 21" className="h-4 w-4" aria-hidden="true">
+  <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true">
     <rect x="1" y="1" width="9" height="9" fill="#F25022" /><rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
     <rect x="1" y="11" width="9" height="9" fill="#00A4EF" /><rect x="11" y="11" width="9" height="9" fill="#FFB900" />
   </svg>
 )
+
+// A fixed constellation (0-100 viewBox); nearby nodes are joined, so the graph is stable between renders.
+const NODES: Array<[number, number]> = [
+  [8, 18], [20, 8], [31, 24], [14, 38], [27, 47], [42, 14], [48, 34], [38, 58], [56, 52], [66, 22],
+  [74, 40], [84, 14], [90, 34], [80, 62], [62, 74], [46, 82], [28, 76], [12, 66], [93, 78], [70, 90],
+]
+const EDGES = NODES.flatMap(([x1, y1], i) => NODES.slice(i + 1).map(([x2, y2], j) => ({ i, j: i + 1 + j, d: Math.hypot(x1 - x2, y1 - y2) })))
+  .filter(e => e.d < 24)
+
+function NeuralGraph() {
+  return (
+    <svg className="lg-neural" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="lg-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#F46C00" stopOpacity=".55" /><stop offset="1" stopColor="#0EA5E9" stopOpacity=".5" /></linearGradient>
+        <radialGradient id="lg-glow"><stop offset="0" stopColor="#FFB020" /><stop offset="1" stopColor="#F46C00" stopOpacity="0" /></radialGradient>
+      </defs>
+      {EDGES.map(({ i, j }) => (
+        <g key={`${i}-${j}`}>
+          <line className="lg-edge" x1={NODES[i]![0]} y1={NODES[i]![1]} x2={NODES[j]![0]} y2={NODES[j]![1]} stroke="url(#lg-edge)" strokeWidth=".16" />
+          {(i + j) % 3 === 0 && (
+            <line className="lg-packet" x1={NODES[i]![0]} y1={NODES[i]![1]} x2={NODES[j]![0]} y2={NODES[j]![1]} stroke="#F46C00" strokeWidth=".42"
+              style={{ animationDelay: `${(i * 0.53) % 5}s` }} />
+          )}
+        </g>
+      ))}
+      {NODES.map(([x, y], i) => (
+        <g key={i}>
+          <circle cx={x} cy={y} r="1.9" fill="url(#lg-glow)" opacity=".35" />
+          <circle className="lg-node" cx={x} cy={y} r=".6" fill="#F46C00" style={{ animationDelay: `${(i * 0.45) % 3.6}s` }} />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
+const FEATURES = [
+  { icon: ShieldCheck, text: 'Compliance, encryption and patch posture across every endpoint' },
+  { icon: Sparkles, text: 'AI Copilot that explains issues and guides remediation' },
+  { icon: Activity, text: 'Intune and ManageEngine, reconciled against Microsoft Graph' },
+  { icon: BellRing, text: 'Scheduled reports delivered to Slack, with data-quality checks' },
+]
 
 export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (user: SessionUser) => void; initialError?: string | null }) {
   const [config, setConfig] = useState<AuthConfig | null>(null)
@@ -43,81 +85,87 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
   const showEmail = !!config?.emailSignIn
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 glass-bg">
-      <div className="w-full max-w-sm rounded-2xl p-7 shadow-xl glass-strong">
-        <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <ZinniaIcon className="h-10 w-auto" />
-          <div>
-            <h1 className="text-lg font-black text-slate-800">ITO Endpoint</h1>
-            <p className="text-xs text-slate-500">Sign in to continue</p>
+    <main className="lg-root">
+      <div className="lg-grid" aria-hidden="true" />
+      <div className="lg-blob lg-blob-1" aria-hidden="true" /><div className="lg-blob lg-blob-2" aria-hidden="true" />
+      <div className="lg-blob lg-blob-3" aria-hidden="true" /><div className="lg-blob lg-blob-4" aria-hidden="true" />
+      <NeuralGraph />
+
+      <div className="lg-shell">
+        <section className="lg-rise" aria-label="About ITO Endpoint">
+          <div className="lg-brand">
+            <ZinniaIcon className="h-9 w-auto" />
+            <span className="lg-brand-sep" aria-hidden="true" />
+            <span className="lg-brand-name">ITO Endpoint</span>
           </div>
-        </div>
+          <span className="lg-pill" style={{ marginTop: '2.2rem' }}><Sparkles size={13} aria-hidden="true" /> AI-powered endpoint operations</span>
+          <h1 className="lg-title">Endpoint intelligence,<br /><span className="lg-gradient-text">made effortless.</span></h1>
+          <p className="lg-lede">One place for device health, patching and compliance, with an AI Copilot that turns signals into the next action.</p>
+          <ul className="lg-features">
+            {FEATURES.map(({ icon: Icon, text }) => (
+              <li key={text} className="lg-feature"><span className="lg-feature-icon"><Icon size={16} aria-hidden="true" /></span>{text}</li>
+            ))}
+          </ul>
+        </section>
 
-        {error && (
-          <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        <section className="lg-rise lg-rise-2">
+          <div className="lg-card">
+            <h2>Welcome back</h2>
+            <p className="lg-sub">Sign in with your Zinnia account to continue.</p>
 
-        {showMicrosoft && (
-          <button
-            type="button" onClick={() => void microsoft()} disabled={submitting}
-            className="inline-flex h-10 w-full items-center justify-center gap-2.5 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            <MicrosoftLogo />
-            Sign in with Microsoft
-          </button>
-        )}
+            {error && (
+              <div role="alert" className="lg-error">
+                <AlertCircle aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
 
-        {showMicrosoft && showEmail && (
-          <div className="my-4 flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-400">
-            <span className="h-px flex-1 bg-slate-200" />or<span className="h-px flex-1 bg-slate-200" />
-          </div>
-        )}
+            {showMicrosoft && (
+              <button type="button" className="lg-btn lg-btn-ms" onClick={() => void microsoft()} disabled={submitting}>
+                <MicrosoftLogo />
+                Sign in with Microsoft
+              </button>
+            )}
 
-        {showEmail && (
-          <form onSubmit={submit} aria-label="Sign in with email">
-            <label className="mb-1 block text-[0.7rem] font-bold uppercase tracking-wide text-slate-500" htmlFor="login-email">Work email</label>
-            <div className="relative mb-4">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                id="login-email" type="email" autoComplete="username" autoFocus={!showMicrosoft} required
-                value={email} onChange={e => setEmail(e.target.value)} placeholder="you@zinnia.com"
-                className="h-10 w-full rounded-xl pl-9 pr-3 text-sm font-medium text-slate-700 water-input"
-              />
-            </div>
+            {showMicrosoft && showEmail && <div className="lg-divider">or</div>}
 
-            {config?.passwordRequired && (
-              <>
-                <label className="mb-1 block text-[0.7rem] font-bold uppercase tracking-wide text-slate-500" htmlFor="login-password">Password</label>
-                <div className="relative mb-4">
-                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    id="login-password" type="password" autoComplete="current-password" required
-                    value={password} onChange={e => setPassword(e.target.value)}
-                    className="h-10 w-full rounded-xl pl-9 pr-3 text-sm font-medium text-slate-700 water-input"
-                  />
+            {showEmail && (
+              <form onSubmit={submit} aria-label="Sign in with email">
+                <label className="lg-label" htmlFor="login-email">Work email</label>
+                <div className="lg-field">
+                  <Mail aria-hidden="true" />
+                  <input id="login-email" className="lg-input" type="email" autoComplete="username" autoFocus={!showMicrosoft} required
+                    value={email} onChange={e => setEmail(e.target.value)} placeholder="you@zinnia.com" />
                 </div>
-              </>
+
+                {config?.passwordRequired && (
+                  <>
+                    <label className="lg-label" htmlFor="login-password">Password</label>
+                    <div className="lg-field">
+                      <Lock aria-hidden="true" />
+                      <input id="login-password" className="lg-input" type="password" autoComplete="current-password" required
+                        value={password} onChange={e => setPassword(e.target.value)} />
+                    </div>
+                  </>
+                )}
+
+                <button type="submit" className="lg-btn lg-btn-primary" disabled={submitting || !email.trim()}>
+                  <LogIn size={16} aria-hidden="true" />
+                  {submitting ? 'Signing in…' : 'Sign in'}
+                </button>
+
+                {!config?.passwordRequired && (
+                  <p className="lg-note">Passwordless sign-in is enabled for now. Only authorised emails can enter.</p>
+                )}
+              </form>
             )}
 
-            <button type="submit" disabled={submitting || !email.trim()} className="btn-water inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-white disabled:opacity-50">
-              <LogIn className="h-4 w-4" />
-              {submitting ? 'Signing in…' : 'Sign in'}
-            </button>
-
-            {!config?.passwordRequired && (
-              <p className="mt-4 text-center text-[0.68rem] leading-relaxed text-slate-400">
-                Passwordless sign-in is enabled for now. Only authorised emails can enter.
-              </p>
+            {config && !showMicrosoft && !showEmail && (
+              <p className="lg-note">No sign-in method is available. Ask an administrator to configure Microsoft sign-in.</p>
             )}
-          </form>
-        )}
-
-        {config && !showMicrosoft && !showEmail && (
-          <p className="text-center text-xs text-slate-500">No sign-in method is available. Ask an administrator to configure Microsoft sign-in.</p>
-        )}
+          </div>
+          {showMicrosoft && <p className="lg-foot"><ShieldCheck aria-hidden="true" />Protected by Microsoft Entra ID</p>}
+        </section>
       </div>
     </main>
   )

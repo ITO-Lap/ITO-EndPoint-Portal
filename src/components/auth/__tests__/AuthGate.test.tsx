@@ -26,7 +26,7 @@ describe('AuthGate', () => {
   it('shows the login page, not the app, when signed out', async () => {
     app()
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.queryByText(/Welcome/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Welcome Avinash/)).not.toBeInTheDocument()
     expect(screen.getByText(/Passwordless sign-in is enabled for now/)).toBeInTheDocument()
   })
 
@@ -45,7 +45,7 @@ describe('AuthGate', () => {
     await userEvent.type(await screen.findByLabelText('Work email'), 'someone@zinnia.com')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('not authorised')
-    expect(screen.queryByText(/Welcome/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Welcome Avinash/)).not.toBeInTheDocument()
   })
 
   it('asks for a password when the server requires one', async () => {
