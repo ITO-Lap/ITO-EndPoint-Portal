@@ -11,7 +11,7 @@ ITO Endpoint supports three distinct roles, each scoped to a specific level of a
 | Role | Who it's for | Access level |
 |---|---|---|
 | **Global Admin** | IT Operations leads, platform owners | Full read/write across all features and settings |
-| **IT Admin** | Endpoint engineers, senior IT staff | Device management, compliance, runbooks — no org settings |
+| **IT Admin** | Endpoint engineers, senior IT staff | Same access as Global Admin |
 | **Helpdesk** | Front-line support, service desk agents | Read-only views + basic device actions only |
 
 ---
@@ -103,48 +103,51 @@ A tightly scoped read-only role for front-line support agents who need to look u
 | View device details | ✅ | ✅ | ✅ |
 | View compliance breakdown | ✅ | ✅ | ✅ |
 | Trigger device sync | ✅ | ✅ | ✅ |
+| Critical patching (scan & remediate, with confirmation) | ✅ | ✅ | ✅ |
 | Copy device serial / user | ✅ | ✅ | ❌ |
 | **Runbooks & Automation** | | | |
 | View runbook steps | ✅ | ✅ | ✅ |
 | Run / execute a runbook | ✅ | ✅ | ❌ |
 | Start automation | ✅ | ✅ | ❌ |
-| Create / edit runbooks | ✅ | ❌ | ❌ |
-| Configure auto-remediation | ✅ | ❌ | ❌ |
+| Create / edit runbooks | ✅ | ✅ | ❌ |
+| Configure auto-remediation | ✅ | ✅ | ❌ |
 | **Compliance** | | | |
 | View compliance policies | ✅ | ✅ | ✅ |
 | Modify compliance policies | ✅ | ✅ | ❌ |
-| Adjust risk score weights | ✅ | ❌ | ❌ |
-| Configure grace period | ✅ | ❌ | ❌ |
+| Adjust risk score weights | ✅ | ✅ | ❌ |
+| Configure grace period | ✅ | ✅ | ❌ |
 | **Integrations** | | | |
 | View integration status | ✅ | ✅ | ❌ |
 | Trigger integration sync | ✅ | ✅ | ❌ |
-| Modify integration config | ✅ | ❌ | ❌ |
-| View API keys | ✅ | ❌ | ❌ |
-| Connect / disconnect source | ✅ | ❌ | ❌ |
+| Modify integration config | ✅ | ✅ | ❌ |
+| View API keys | ✅ | ✅ | ❌ |
+| Connect / disconnect source | ✅ | ✅ | ❌ |
 | **Reports & Analytics** | | | |
 | View reports | ✅ | ✅ | ❌ |
 | Export device records | ✅ | ✅ | ❌ |
 | Export audit log | ✅ | ✅ | ❌ |
-| Export all data (ZIP) | ✅ | ❌ | ❌ |
+| Export all data (ZIP) | ✅ | ✅ | ❌ |
 | **Activity Log** | | | |
 | View activity log | ✅ | ✅ | ✅ (read-only) |
 | **Settings** | | | |
-| General settings | ✅ | ❌ | ❌ |
-| Compliance settings | ✅ | ❌ | ❌ |
-| Automation settings | ✅ | ❌ | ❌ |
-| Security settings | ✅ | View only | ❌ |
-| Notification settings (org) | ✅ | ❌ | ❌ |
+| General settings | ✅ | ✅ | ❌ |
+| Compliance settings | ✅ | ✅ | ❌ |
+| Automation settings | ✅ | ✅ | ❌ |
+| Security settings | ✅ | ✅ | ❌ |
+| Notification settings (org) | ✅ | ✅ | ❌ |
 | Slack notification schedule (Scheduled Reports) | ✅ | ✅ | View only |
 | Notification settings (own) | ✅ | ✅ | ✅ |
-| Data & Privacy | ✅ | ❌ | ❌ |
-| Danger Zone | ✅ | ❌ | ❌ |
+| Data & Privacy | ✅ | ✅ | ❌ |
+| Danger Zone | ✅ | ✅ | ❌ |
 | **User Management** | | | |
-| View all users | ✅ | ❌ | ❌ |
-| Create / deactivate users | ✅ | ❌ | ❌ |
-| Assign / change roles | ✅ | ❌ | ❌ |
+| View all users | ✅ | ✅ | ❌ |
+| Create / deactivate users | ✅ | ✅ | ❌ |
+| Assign / change roles | ✅ | ✅ | ❌ |
 | Edit own profile | ✅ | ✅ | ✅ |
 
-> **Slack notification schedule** is the day/time of automatic Slack deliveries (Scheduled Reports → Slack Notification Schedule). Global Admin and IT Admin can edit it; Helpdesk cannot open Scheduled Reports. Other org-wide notification settings remain Global Admin only. See `server/src/routes/notificationSchedules.ts`.
+> **Slack notification schedule** is the day/time of automatic Slack deliveries (Scheduled Reports → Slack Notification Schedule). Global Admin and IT Admin can edit it; Helpdesk cannot open Scheduled Reports. IT Admin has the same access as Global Admin everywhere else too.
+
+> **Critical patching** (Patch Operations → Scan / Remediate) is open to the Desktop team (Helpdesk) as well; every scan or deployment still needs an explicit confirmation. Enforced in `server/src/routes/endpointCentral.ts`. Helpdesk remains read-only elsewhere. See `server/src/routes/notificationSchedules.ts`.
 
 ---
 

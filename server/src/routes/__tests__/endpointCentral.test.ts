@@ -72,3 +72,15 @@ describe('PATCH operations read model', () => {
     server.close()
   })
 })
+
+describe('critical patching access', () => {
+  const post = (base: string, role: string) => fetch(`${base}/remediation/preview`, { method: 'POST', headers: { 'x-user-role': role, 'content-type': 'application/json' }, body: '{}' })
+
+  it('lets the Desktop team (Helpdesk) reach remediation, and still blocks End Users', async () => {
+    const { server, base } = await start()
+    try {
+      for (const role of ['Global Admin', 'IT Admin', 'Helpdesk']) expect((await post(base, role)).status, role).not.toBe(403)
+      expect((await post(base, 'End User')).status).toBe(403)
+    } finally { server.close() }
+  })
+})

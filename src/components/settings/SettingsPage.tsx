@@ -2202,8 +2202,8 @@ const ROLES_DEF = [
     badge: 'bg-lime-100 text-lime-700 border-lime-200',
     icon: ShieldCheck,
     who: 'Endpoint engineers, senior IT staff',
-    summary: 'Full operational access — devices, runbooks, exports. No org-level configuration.',
-    capabilities: ['Full dashboard access', 'Run runbooks & automations', 'View integration status & sync', 'Export device / compliance reports', 'View (not modify) security settings', 'Own notification preferences'],
+    summary: 'Same access as Global Admin: every page, setting, integration and user-management action.',
+    capabilities: ['Full dashboard access', 'Run & configure automations', 'Manage integrations & API keys', 'Manage users & assign roles', 'Access all Settings sections', 'Danger Zone actions'],
   },
   {
     key: 'helpdesk',
@@ -2211,8 +2211,8 @@ const ROLES_DEF = [
     badge: 'bg-slate-100 text-slate-700 border-slate-200',
     icon: Users,
     who: 'Front-line support, service desk agents',
-    summary: 'Read-only + device sync. Must escalate runbook execution to an IT Admin.',
-    capabilities: ['View dashboard & device details', 'Search devices', 'Trigger device sync (safe)', 'View runbook steps (read-only)', 'View activity log (read-only)', 'Own notification preferences'],
+    summary: 'Read-only + device sync, plus critical patching (scan and remediate). Other runbooks go to an IT Admin.',
+    capabilities: ['View dashboard & device details', 'Search devices', 'Trigger device sync (safe)', 'Critical patching (scan & remediate)', 'View runbook steps (read-only)', 'View activity log (read-only)', 'Own notification preferences'],
   },
 ]
 
@@ -2223,20 +2223,21 @@ const PERM_GROUPS: { group: string; rows: { label: string; global: PermLevel; ad
     { label: 'View compliance dashboard',       global: 'allow', admin: 'allow', helpdesk: 'allow' },
     { label: 'Search & view device details',    global: 'allow', admin: 'allow', helpdesk: 'allow' },
     { label: 'Trigger device sync',             global: 'allow', admin: 'allow', helpdesk: 'allow' },
+    { label: 'Critical patching (scan & remediate)', global: 'allow', admin: 'allow', helpdesk: 'allow' },
     { label: 'Copy serial / user email',        global: 'allow', admin: 'allow', helpdesk: 'deny'  },
   ]},
   { group: 'Runbooks & Automation', rows: [
     { label: 'View runbook steps',              global: 'allow', admin: 'allow', helpdesk: 'allow' },
     { label: 'Execute a runbook',               global: 'allow', admin: 'allow', helpdesk: 'deny'  },
     { label: 'Start automation',                global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Create / edit runbooks',          global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
-    { label: 'Configure auto-remediation',      global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+    { label: 'Create / edit runbooks',          global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
+    { label: 'Configure auto-remediation',      global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
   ]},
   { group: 'Integrations', rows: [
     { label: 'View integration status',         global: 'allow', admin: 'allow', helpdesk: 'deny'  },
     { label: 'Trigger integration sync',        global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'View API keys',                   global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
-    { label: 'Modify / disconnect integration', global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+    { label: 'View API keys',                   global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
+    { label: 'Modify / disconnect integration', global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
   ]},
   { group: 'Reports & Exports', rows: [
     { label: 'View reports & analytics',        global: 'allow', admin: 'allow', helpdesk: 'deny'  },
@@ -2245,15 +2246,15 @@ const PERM_GROUPS: { group: string; rows: { label: string; global: PermLevel; ad
     { label: 'View activity log',               global: 'allow', admin: 'allow', helpdesk: 'limit' },
   ]},
   { group: 'Settings', rows: [
-    { label: 'General / Compliance / Automation', global: 'allow', admin: 'deny',  helpdesk: 'deny' },
-    { label: 'Security settings',               global: 'allow', admin: 'limit', helpdesk: 'deny'  },
-    { label: 'Notifications (org-wide)',        global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+    { label: 'General / Compliance / Automation', global: 'allow', admin: 'allow',  helpdesk: 'deny' },
+    { label: 'Security settings',               global: 'allow', admin: 'allow', helpdesk: 'deny'  },
+    { label: 'Notifications (org-wide)',        global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
     { label: 'Notifications (own profile)',     global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Data & Privacy / Danger Zone',    global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+    { label: 'Data & Privacy / Danger Zone',    global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
   ]},
   { group: 'User Management', rows: [
-    { label: 'View / manage users',             global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
-    { label: 'Assign / change roles',           global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
+    { label: 'View / manage users',             global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
+    { label: 'Assign / change roles',           global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
     { label: 'Edit own profile',                global: 'allow', admin: 'allow', helpdesk: 'allow' },
   ]},
 ]
@@ -2378,7 +2379,7 @@ function RolesSection() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
           <div>
             <p className="text-xs font-semibold text-slate-900">User Assignments</p>
-            <p className="text-[0.65rem] text-slate-500 mt-0.5">Change a user's role — only Global Admins can do this</p>
+            <p className="text-[0.65rem] text-slate-500 mt-0.5">Change a user's role — only Global Admins and IT Admins can do this</p>
           </div>
           <a
             href="#"

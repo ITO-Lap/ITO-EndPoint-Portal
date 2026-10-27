@@ -85,7 +85,7 @@ export function PatchOperationsPage({ viewerRole, userEmail, onBack }: { viewerR
   useEffect(() => { void load() }, [])
 
   const critical = useMemo(() => data?.devices.filter(d => d.criticalPatchCount > 0) ?? [], [data])
-  const admin = viewerRole === 'Global Admin' || viewerRole === 'IT Admin'
+  const admin = viewerRole === 'Global Admin' || viewerRole === 'IT Admin' || viewerRole === 'Helpdesk'
 
   const previewScan = async (device: EndpointHealthScore) => {
     setWorking(true); setError(null)

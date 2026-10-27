@@ -11,7 +11,8 @@ import { z } from 'zod'
 
 const router = Router()
 const VIEWS: MissingPatchView[] = ['critical', 'all', 'os', 'app']
-const ADMIN_ROLES = ['Global Admin', 'IT Admin']
+// Critical patching (scan / deploy, each behind a confirmation step) is open to the Desktop team (Helpdesk) too.
+const ADMIN_ROLES = ['Global Admin', 'IT Admin', 'Helpdesk']
 const idList = z.array(z.string().regex(/^\d{1,30}$/)).min(1).max(100)
 const remediationPreviewSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('scan'), resourceIds: idList }),
