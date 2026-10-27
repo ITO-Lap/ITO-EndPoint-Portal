@@ -90,32 +90,39 @@ describe('sendFleetDigest', () => {
     vi.mocked(buildFleetDigestWorkbook).mockResolvedValue(Buffer.from('xlsx'))
   })
 
-  it('posts the message, saves the snapshot, and uploads the workbook into the message thread', async () => {
+  it('sends one message: digest blocks with the workbook attached, and saves the snapshot', async () => {
     const result = await sendFleetDigest('C123')
     expect(result.ok).toBe(true)
     expect(saveSnapshot).toHaveBeenCalledOnce()
-    expect(uploadSlackFile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ channelId: 'C123', threadTs: '1700000000.000100', filename: expect.stringMatching(/^endpoint-fleet-health-\d{4}-\d{2}-\d{2}\.xlsx$/) }))
+    expect(sendSlackBlocks).not.toHaveBeenCalled()
+    expect(uploadSlackFile).toHaveBeenCalledOnce()
+    const upload = vi.mocked(uploadSlackFile).mock.calls[0]![1]
+    expect(upload).toMatchObject({ channelId: 'C123', filename: expect.stringMatching(/^endpoint-fleet-health-\d{4}-\d{2}-\d{2}\.xlsx$/) })
+    expect(upload.blocks?.length).toBeGreaterThan(0)
+    expect(upload).not.toHaveProperty('initialComment')
   })
 
   it('does not post or save a snapshot when no devices are returned', async () => {
     vi.mocked(fetchAllDevices).mockResolvedValue({ devices: [], mock: false })
     expect((await sendFleetDigest('C123')).ok).toBe(false)
-    expect(sendSlackBlocks).not.toHaveBeenCalled()
-    expect(saveSnapshot).not.toHaveBeenCalled()
-  })
-
-  it('does not save a snapshot when the Slack post fails', async () => {
-    vi.mocked(sendSlackBlocks).mockResolvedValue({ ok: false, error: 'channel_not_found' })
-    expect(await sendFleetDigest('C123')).toMatchObject({ ok: false, error: 'channel_not_found' })
-    expect(saveSnapshot).not.toHaveBeenCalled()
     expect(uploadSlackFile).not.toHaveBeenCalled()
+    expect(saveSnapshot).not.toHaveBeenCalled()
   })
 
-  it('reports a failed Excel upload after the message has posted', async () => {
+  it('reports an upload failure without saving a snapshot', async () => {
     vi.mocked(uploadSlackFile).mockResolvedValue({ ok: false, error: 'missing_scope' })
+    expect(await sendFleetDigest('C123')).toMatchObject({ ok: false, error: 'missing_scope' })
+    expect(saveSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a message without the file when the workbook cannot be built', async () => {
+    vi.mocked(buildFleetDigestWorkbook).mockRejectedValue(new Error('boom'))
     const result = await sendFleetDigest('C123')
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('Digest posted, but the Excel upload failed: missing_scope')
+    expect(result.error).toContain('Digest posted without the Excel report')
+    expect(sendSlackBlocks).toHaveBeenCalledOnce()
+    expect(uploadSlackFile).not.toHaveBeenCalled()
+    expect(saveSnapshot).toHaveBeenCalledOnce()
   })
 
   it('still sends when Patch Manager is down, with no patch metric', async () => {

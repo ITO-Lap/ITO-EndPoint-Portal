@@ -118,23 +118,23 @@ export async function sendFleetDigest(channelId: string): Promise<{ ok: boolean;
   const baseline = pickBaseline(current, listSnapshots())
   const { text, blocks } = buildDigestMessage(current, baseline)
 
-  const posted = await sendSlackBlocks(cfg, channelId, text, blocks)
-  if (!posted.ok) return { ok: false, ...(posted.error ? { error: posted.error } : {}), snapshot: current }
+  // One Slack message: the digest blocks with the workbook attached, so the
+  // channel gets a single notification instead of a message plus a thread reply.
+  let content: Buffer
+  try {
+    content = await buildFleetDigestWorkbook(data, current, baseline, buildActions(current), now)
+  } catch (error) {
+    // Don't lose the digest because the workbook failed: post it without the file.
+    const posted = await sendSlackBlocks(cfg, channelId, text, blocks)
+    if (posted.ok) saveSnapshot(current)
+    return { ok: false, error: `Digest posted without the Excel report, which could not be built: ${error instanceof Error ? error.message : String(error)}`, snapshot: current }
+  }
+  const uploaded = await uploadSlackFile(cfg, {
+    channelId, filename: `endpoint-fleet-health-${current.date}.xlsx`, title: `Endpoint Fleet Health ${current.date}`, content, blocks,
+  })
+  if (!uploaded.ok) return { ok: false, ...(uploaded.error ? { error: uploaded.error } : {}), snapshot: current }
   // Record only after a successful post and only for real data, so an outage
   // can never become a misleading 0-device baseline.
   saveSnapshot(current)
-
-  // The workbook rides along as a reply in the digest's thread.
-  try {
-    const content = await buildFleetDigestWorkbook(data, current, baseline, buildActions(current), now)
-    const uploaded = await uploadSlackFile(cfg, {
-      channelId, filename: `endpoint-fleet-health-${current.date}.xlsx`, title: `Endpoint Fleet Health ${current.date}`, content,
-      initialComment: 'Full detail behind this digest: summary, non-compliant devices, stale devices and missing critical patches.',
-      ...(posted.ts ? { threadTs: posted.ts } : {}),
-    })
-    if (!uploaded.ok) return { ok: false, error: `Digest posted, but the Excel upload failed: ${uploaded.error ?? 'unknown error'}`, snapshot: current }
-  } catch (error) {
-    return { ok: false, error: `Digest posted, but the Excel report could not be built: ${error instanceof Error ? error.message : String(error)}`, snapshot: current }
-  }
   return { ok: true, snapshot: current }
 }

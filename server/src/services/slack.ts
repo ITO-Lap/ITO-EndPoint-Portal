@@ -11,9 +11,9 @@ export interface SlackFileUpload {
   filename: string
   title: string
   content: Buffer
-  initialComment: string
-  /** Posts the file as a reply in this message's thread instead of the channel. */
-  threadTs?: string
+  initialComment?: string
+  /** Block Kit blocks for the message the file is attached to. Slack ignores them when `initialComment` is set. */
+  blocks?: unknown[]
 }
 
 /** Sends a small operational alert. Bot delivery targets a channel; webhook
@@ -147,7 +147,7 @@ export async function uploadSlackFile(cfg: RuntimeSlackConfig, upload: SlackFile
     const completeRequest = await fetchWithTimeout('https://slack.com/api/files.completeUploadExternal', {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.botToken}`, 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ files: [{ id: uploadInfo.file_id, title: upload.title }], channel_id: upload.channelId, initial_comment: upload.initialComment, ...(upload.threadTs ? { thread_ts: upload.threadTs } : {}) }),
+      body: JSON.stringify({ files: [{ id: uploadInfo.file_id, title: upload.title }], channel_id: upload.channelId, ...(upload.blocks ? { blocks: upload.blocks } : upload.initialComment ? { initial_comment: upload.initialComment } : {}) }),
     })
     const completeInfo = await completeRequest.json() as { ok: boolean; error?: string }
     return completeInfo.ok ? { ok: true, fileId: uploadInfo.file_id } : { ok: false, error: completeInfo.error ?? 'Slack could not complete the file upload.' }
