@@ -58,7 +58,6 @@ describe('signIn and fetchCurrentUser', () => {
     base.mockResolvedValue(ok({ success: true, data: { token: 't', user } }))
     expect(await signIn('avinash.verma@zinnia.com')).toEqual(user)
     expect(getSession()).toEqual({ token: 't', user })
-    expect(localStorage.getItem('ito.lastEmail')).toBe(user.email)
     expect(JSON.parse((base.mock.calls[0]![1] as RequestInit).body as string)).toEqual({ email: 'avinash.verma@zinnia.com' })
   })
 

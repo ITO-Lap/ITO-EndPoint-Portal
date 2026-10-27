@@ -12,7 +12,7 @@ beforeEach(() => {
   localStorage.clear()
   __resetRedirectForTests()
   window.history.replaceState(null, '', '/')
-  routes = { '/api/auth/config': () => json({ success: true, data: { passwordRequired: false } }) }
+  routes = { '/api/auth/config': () => json({ success: true, data: { passwordRequired: false, emailSignIn: true, microsoft: false } }) }
   window.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, 'http://localhost').pathname
     return (routes[path] ?? (() => json({ success: false }, 404)))()
@@ -49,7 +49,7 @@ describe('AuthGate', () => {
   })
 
   it('asks for a password when the server requires one', async () => {
-    routes['/api/auth/config'] = () => json({ success: true, data: { passwordRequired: true } })
+    routes['/api/auth/config'] = () => json({ success: true, data: { passwordRequired: true, emailSignIn: true, microsoft: false } })
     app()
     expect(await screen.findByLabelText('Password')).toBeInTheDocument()
     expect(screen.queryByText(/Passwordless sign-in/)).not.toBeInTheDocument()
@@ -123,5 +123,20 @@ describe('AuthGate', () => {
     app()
     expect(await screen.findByRole('alert')).toHaveTextContent('could not be completed')
     expect(getSession()).toBeNull()
+  })
+
+  it('shows only Microsoft sign-in by default, with no email box and nothing prefilled', async () => {
+    routes['/api/auth/config'] = () => json({ success: true, data: { passwordRequired: false, emailSignIn: false, microsoft: true } })
+    localStorage.setItem('ito.lastEmail', 'avinash.verma@zinnia.com')
+    app()
+    expect(await screen.findByRole('button', { name: /Sign in with Microsoft/ })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Work email')).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('avinash.verma@zinnia.com')).not.toBeInTheDocument()
+  })
+
+  it('leaves the email box empty when email sign-in is on', async () => {
+    localStorage.setItem('ito.lastEmail', 'avinash.verma@zinnia.com')
+    app()
+    expect(await screen.findByLabelText('Work email')).toHaveValue('')
   })
 })

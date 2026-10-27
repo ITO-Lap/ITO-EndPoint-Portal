@@ -6,7 +6,6 @@
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const SESSION_KEY = 'ito.session'
-const LAST_EMAIL_KEY = 'ito.lastEmail'
 
 export interface SessionUser { email: string; displayName: string; role: string }
 interface StoredSession { token: string; user: SessionUser }
@@ -19,12 +18,8 @@ export function getSession(): StoredSession | null {
     return null
   }
 }
-export const saveSession = (session: StoredSession): void => {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-  localStorage.setItem(LAST_EMAIL_KEY, session.user.email)
-}
+export const saveSession = (session: StoredSession): void => localStorage.setItem(SESSION_KEY, JSON.stringify(session))
 export const clearSession = (): void => localStorage.removeItem(SESSION_KEY)
-export const getLastEmail = (): string => localStorage.getItem(LAST_EMAIL_KEY) ?? ''
 
 let installed = false
 let originalFetch: typeof window.fetch | null = null
@@ -59,9 +54,9 @@ export interface AuthConfig { passwordRequired: boolean; emailSignIn: boolean; m
 export async function fetchAuthConfig(): Promise<AuthConfig> {
   try {
     const { data } = await readEnvelope<Partial<AuthConfig>>(await fetch(`${BASE_URL}/api/auth/config`))
-    return { passwordRequired: !!data?.passwordRequired, emailSignIn: data?.emailSignIn ?? true, microsoft: !!data?.microsoft }
+    return { passwordRequired: !!data?.passwordRequired, emailSignIn: data?.emailSignIn ?? false, microsoft: !!data?.microsoft }
   } catch {
-    return { passwordRequired: false, emailSignIn: true, microsoft: false }
+    return { passwordRequired: false, emailSignIn: false, microsoft: false }
   }
 }
 

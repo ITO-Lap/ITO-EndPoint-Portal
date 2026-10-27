@@ -54,7 +54,7 @@ describe('Microsoft sign-in', () => {
     expect(url.searchParams.get('redirect_uri')).toBe('http://localhost:4000/api/auth/callback')
     expect(url.searchParams.get('state')).toBeTruthy()
     const config = await realFetch(`${base}/api/auth/config`).then(r => r.json()) as { data: Record<string, unknown> }
-    expect(config.data).toMatchObject({ microsoft: true, emailSignIn: true })
+    expect(config.data).toMatchObject({ microsoft: true, emailSignIn: false })
   })
 
   it('signs a member of the IT Admin group in, returning the token in the URL fragment (not the query)', async () => {

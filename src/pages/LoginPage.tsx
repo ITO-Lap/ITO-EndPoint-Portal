@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react'
 import { ZinniaIcon } from '../components/ui/ZinniaLogo'
-import { fetchAuthConfig, getLastEmail, signIn, startMicrosoftSignIn, type AuthConfig, type SessionUser } from '../api/session'
+import { fetchAuthConfig, signIn, startMicrosoftSignIn, type AuthConfig, type SessionUser } from '../api/session'
 
 const MicrosoftLogo = () => (
   <svg viewBox="0 0 21 21" className="h-4 w-4" aria-hidden="true">
@@ -12,7 +12,7 @@ const MicrosoftLogo = () => (
 
 export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (user: SessionUser) => void; initialError?: string | null }) {
   const [config, setConfig] = useState<AuthConfig | null>(null)
-  const [email, setEmail] = useState(getLastEmail())
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(initialError)
   const [submitting, setSubmitting] = useState(false)
@@ -40,7 +40,7 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
   }
 
   const showMicrosoft = !!config?.microsoft
-  const showEmail = config ? config.emailSignIn : true
+  const showEmail = !!config?.emailSignIn
 
   return (
     <main className="grid min-h-screen place-items-center px-4 glass-bg">

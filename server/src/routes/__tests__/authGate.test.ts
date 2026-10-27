@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import express from 'express'
 import http from 'node:http'
 import type { AddressInfo } from 'net'
@@ -19,6 +19,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
 afterAll(() => new Promise<void>(r => server.close(() => r())))
+beforeEach(() => vi.stubEnv('AUTH_PASSWORDLESS', 'true')) // the tests below use email sign-in, which is off by default
 afterEach(() => vi.unstubAllEnvs())
 
 const call = async (method: string, path: string, opts: { headers?: Record<string, string>; body?: unknown } = {}) => {
@@ -46,6 +47,13 @@ describe('API gate', () => {
 })
 
 describe('sign-in endpoints', () => {
+  it('refuses email sign-in by default, even for the allow-listed email', async () => {
+    vi.stubEnv('AUTH_PASSWORDLESS', '')
+    const r = await call('POST', '/api/auth/session', { body: { email: 'avinash.verma@zinnia.com' } })
+    expect(r.status).toBe(403)
+    expect(r.json['data']).toBeUndefined()
+    expect((await call('GET', '/api/auth/config')).json['data']).toMatchObject({ emailSignIn: false })
+  })
   it('signs in the allow-listed email and returns the user', async () => {
     const r = await call('POST', '/api/auth/session', { body: { email: 'avinash.verma@zinnia.com' } })
     expect(r.status).toBe(200)

@@ -85,7 +85,7 @@ app.get('/health', (_req, res) => {
 // Everything under /api needs a signed-in session, except sign-in itself.
 app.use('/api', requireSessionExceptAuth)
 if (authEnforced() && emailSignInEnabled() && !passwordRequired()) {
-  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Set AUTH_PASSWORD, or AUTH_PASSWORDLESS=false to use Microsoft sign-in only, before exposing this beyond a trusted network.')
+  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Unset AUTH_PASSWORDLESS (Microsoft sign-in only) or set AUTH_PASSWORD before exposing this beyond a trusted network.')
 }
 if (!authEnforced()) console.warn('[auth] AUTH_ENFORCED=false: the API is NOT protected.')
 

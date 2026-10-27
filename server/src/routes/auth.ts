@@ -5,7 +5,7 @@
  *   http://localhost:4000/api/auth/callback
  *
  * Role mapping:
- *   emails in AUTH_ALLOWED_EMAILS   → Global Admin (default avinash.verma@zinnia.com)
+ *   emails in AUTH_ALLOWED_EMAILS   → Global Admin, after Microsoft has verified them
  *   member of "ITO EndPoint Portal" → IT Admin
  *   member of "Desktop Support"     → Helpdesk
  *   anyone else                     → 403

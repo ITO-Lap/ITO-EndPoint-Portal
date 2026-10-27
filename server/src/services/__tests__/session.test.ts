@@ -1,10 +1,11 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jwt from 'jsonwebtoken'
 import { authenticate, emailSignInEnabled, displayNameFor, signSession, verifySession, SESSION_SECRET } from '../session.js'
 
 afterEach(() => vi.unstubAllEnvs())
 
-describe('authenticate (passwordless)', () => {
+describe('authenticate (AUTH_PASSWORDLESS=true)', () => {
+  beforeEach(() => vi.stubEnv('AUTH_PASSWORDLESS', 'true'))
   it('signs in the default allow-listed email as Global Admin, ignoring case and spaces', () => {
     const r = authenticate('  Avinash.Verma@Zinnia.com ')
     expect(r).toEqual({ ok: true, claims: { email: 'avinash.verma@zinnia.com', displayName: 'Avinash Verma', role: 'Global Admin' } })
@@ -22,14 +23,15 @@ describe('authenticate (passwordless)', () => {
   })
 })
 
-describe('AUTH_PASSWORDLESS=false', () => {
-  it('turns email sign-in off, so only Microsoft sign-in works', () => {
-    vi.stubEnv('AUTH_PASSWORDLESS', 'false')
+describe('email sign-in is off by default', () => {
+  it('refuses even the allow-listed email: Microsoft sign-in is the only way in', () => {
     expect(emailSignInEnabled()).toBe(false)
-    expect(authenticate('avinash.verma@zinnia.com')).toMatchObject({ ok: false, status: 403, error: expect.stringContaining('Microsoft sign-in') })
+    expect(authenticate('avinash.verma@zinnia.com')).toMatchObject({ ok: false, status: 403, error: expect.stringContaining('Microsoft account') })
   })
-  it('keeps email + password sign-in available when a password is configured', () => {
-    vi.stubEnv('AUTH_PASSWORDLESS', 'false')
+  it('is turned on by AUTH_PASSWORDLESS=true, or by configuring a password', () => {
+    vi.stubEnv('AUTH_PASSWORDLESS', 'true')
+    expect(emailSignInEnabled()).toBe(true)
+    vi.stubEnv('AUTH_PASSWORDLESS', '')
     vi.stubEnv('AUTH_PASSWORD', 'pw')
     expect(emailSignInEnabled()).toBe(true)
     expect(authenticate('avinash.verma@zinnia.com', 'pw').ok).toBe(true)
