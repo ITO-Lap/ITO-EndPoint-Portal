@@ -5,6 +5,8 @@
 //
 // Install: cd server && npm install exceljs pdfkit pptxgenjs
 
+import { addDataQualitySheet, type DataCheck } from './dataQuality.js'
+
 export type ExportFormat = 'csv' | 'excel' | 'pdf' | 'pptx'
 
 export interface ReportColumn {
@@ -20,6 +22,8 @@ export interface ReportMeta {
   generatedBy?: string
   tenantName?: string
   recordCount: number
+  /** When present, Excel exports get a second "Data Quality" sheet listing every check. */
+  dataChecks?: DataCheck[]
 }
 
 export interface SummaryStat {
@@ -90,6 +94,8 @@ export async function exportToExcel(
     // Column widths + autofilter
     columns.forEach((col, i) => { ws.getColumn(i + 1).width = col.width ?? 22 })
     ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: columns.length } }
+
+    addDataQualitySheet(wb, meta.dataChecks)
 
     const buf = await wb.xlsx.writeBuffer()
     return Buffer.from(buf)

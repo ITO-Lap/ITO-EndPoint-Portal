@@ -39,8 +39,14 @@ function categorizeIssue(primaryIssue: string): string | null {
 // from Graph just to find one record, which took ~100s in practice.
 const CACHE_TTL_MS = 5 * 60 * 1000
 const SOURCE_FETCH_TIMEOUT_MS = 30_000
-let devicesCache: { devices: Device[]; mock: boolean; expiresAt: number } | null = null
-let devicesFetchInFlight: Promise<{ devices: Device[]; mock: boolean }> | null = null
+export interface FetchedDevices {
+  devices: Device[]
+  mock: boolean
+  /** Sources that were configured but failed this fetch; their devices are missing from `devices`. */
+  failedSources?: Array<{ source: 'intune' | 'manageengine'; error: string }>
+}
+let devicesCache: (FetchedDevices & { expiresAt: number }) | null = null
+let devicesFetchInFlight: Promise<FetchedDevices> | null = null
 
 async function fetchWithDeadline<T>(source: string, fetcher: () => Promise<T>): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
@@ -56,9 +62,9 @@ async function fetchWithDeadline<T>(source: string, fetcher: () => Promise<T>): 
   }
 }
 
-export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> {
+export async function fetchAllDevices(): Promise<FetchedDevices> {
   if (devicesCache && Date.now() < devicesCache.expiresAt) {
-    return { devices: devicesCache.devices, mock: devicesCache.mock }
+    return { devices: devicesCache.devices, mock: devicesCache.mock, ...(devicesCache.failedSources ? { failedSources: devicesCache.failedSources } : {}) }
   }
   if (devicesFetchInFlight) return devicesFetchInFlight
 
@@ -72,6 +78,7 @@ export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: bool
     ])
 
     const devices: Device[] = []
+    const failedSources: NonNullable<FetchedDevices['failedSources']> = []
     const sources = [
       { result: intuneResult,  key: 'intune'        },
       { result: meResult,      key: 'manageengine'  },
@@ -82,6 +89,7 @@ export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: bool
         devices.push(...result.value)
       } else {
         console.error(`[fetchAllDevices] ${key} error:`, result.reason)
+        failedSources.push({ source: key, error: result.reason instanceof Error ? result.reason.message : 'Unknown error' })
         recordFetchResult(key, {
           deviceCount: 0,
           lastFetchAt: Date.now(),
@@ -91,8 +99,9 @@ export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: bool
       }
     }
 
-    devicesCache = { devices, mock: false, expiresAt: Date.now() + CACHE_TTL_MS }
-    return { devices, mock: false }
+    const fetched: FetchedDevices = { devices, mock: false, ...(failedSources.length ? { failedSources } : {}) }
+    devicesCache = { ...fetched, expiresAt: Date.now() + CACHE_TTL_MS }
+    return fetched
   })()
 
   devicesFetchInFlight = fetchPromise

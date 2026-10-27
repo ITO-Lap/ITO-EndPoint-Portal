@@ -11,6 +11,7 @@ import type { MissingPatch, PatchSystemStatus } from './endpointCentralPatch.js'
 import { isSupportedCriticalPatchClient } from './criticalPatchReport.js'
 import { STALE_DAYS } from './staleDevicesReport.js'
 import type { FleetSnapshot } from '../store/fleetSnapshotStore.js'
+import { addDataQualitySheet, type DataCheck } from './dataQuality.js'
 
 const DAY_MS = 86_400_000
 const SEVERITY_RANK: Record<Device['severity'], number> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
@@ -21,6 +22,8 @@ export interface FleetReportData {
   patchSystems: PatchSystemStatus[] | null
   /** null when per-system patch detail could not be fetched. */
   patchesBySystem: Map<string, MissingPatch[]> | null
+  /** MDM sources that failed to return devices (see fetchAllDevices). */
+  failedSources?: Array<{ source: 'intune' | 'manageengine'; error: string }> | undefined
 }
 
 type Row = Record<string, string | number>
@@ -89,7 +92,7 @@ export function buildPatchDetailRows(systems: PatchSystemStatus[], patchesBySyst
 interface Column { header: string; key: string; width: number }
 const HEADER_FILL = 'FF0F172A'
 
-export async function buildFleetDigestWorkbook(data: FleetReportData, current: FleetSnapshot, baseline: FleetSnapshot | null, actions: string[], now = new Date()): Promise<Buffer> {
+export async function buildFleetDigestWorkbook(data: FleetReportData, current: FleetSnapshot, baseline: FleetSnapshot | null, actions: string[], now = new Date(), dataChecks: DataCheck[] = []): Promise<Buffer> {
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'ITO Endpoint'
@@ -210,5 +213,6 @@ export async function buildFleetDigestWorkbook(data: FleetReportData, current: F
   ], buildPatchDetailRows(systems, data.patchesBySystem, now),
   data.patchesBySystem ? 'No missing critical patch detail.' : 'Per-patch detail was unavailable for this run.')
 
+  addDataQualitySheet(wb, dataChecks)
   return Buffer.from(await wb.xlsx.writeBuffer())
 }

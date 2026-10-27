@@ -5,6 +5,7 @@
 
 import { collectDuplicateDeviceReport, INACTIVE_DAYS, osFamily, type DuplicateDeviceReport, type DuplicateObjectRow } from './entraDuplicateDevices.js'
 import { sendSlackBlocks, uploadSlackFile } from './slack.js'
+import { addDataQualitySheet, dataNotesText } from './dataQuality.js'
 import { getSlackConfig } from '../store/integrationStore.js'
 
 const HEADER_FILL = 'FF0F172A'
@@ -40,11 +41,12 @@ export function buildDuplicateMessage(report: DuplicateDeviceReport, date: strin
   const action = s.cleanupCandidates
     ? `Review ${s.cleanupCandidates} cleanup candidate${s.cleanupCandidates === 1 ? '' : 's'}${s.highConfidenceGroups ? `, starting with the ${s.highConfidenceGroups} high-confidence group${s.highConfidenceGroups === 1 ? '' : 's'}` : ''}. Disable first, delete after a hold period.`
     : s.groups ? 'Every duplicate object was recently active. Review the groups before removing anything.' : 'No duplicate device objects found.'
-  const note = report.intuneJoined ? '' : '\n_Intune was unavailable, so serial-number matching was skipped._'
+  const notes = dataNotesText(report.dataChecks)
   const blocks: unknown[] = [
     { type: 'header', text: { type: 'plain_text', text: `Duplicate Entra Device Objects · ${date}` } },
     { type: 'section', fields },
-    { type: 'section', text: { type: 'mrkdwn', text: `*Recommended action*\n${action}${note}` } },
+    { type: 'section', text: { type: 'mrkdwn', text: `*Recommended action*\n${action}` } },
+    ...(notes ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Data quality*\n${notes}` } }] : []),
     { type: 'context', elements: [{ type: 'mrkdwn', text: 'Matched on Device ID, serial number (via Intune) or device name · ITO Endpoint' }] },
   ]
   return { text: `Duplicate Entra device objects ${date}: ${s.groups} groups, ${s.cleanupCandidates} cleanup candidates`, blocks }
@@ -139,6 +141,7 @@ export async function buildDuplicateDevicesWorkbook(report: DuplicateDeviceRepor
   addDetail('Cleanup Candidates', allRows.filter(x => x.recommendation === 'Cleanup candidate')
     .sort((a, b) => (b.daysInactive ?? Infinity) - (a.daysInactive ?? Infinity)), `No cleanup candidates (objects inactive for ${INACTIVE_DAYS}+ days and older than the newest in their group).`)
 
+  addDataQualitySheet(wb, report.dataChecks)
   return Buffer.from(await wb.xlsx.writeBuffer())
 }
 

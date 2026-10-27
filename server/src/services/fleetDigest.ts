@@ -9,6 +9,8 @@ import { isSupportedCriticalPatchClient } from './criticalPatchReport.js'
 import { STALE_DAYS } from './staleDevicesReport.js'
 import { sendSlackBlocks, uploadSlackFile } from './slack.js'
 import { buildFleetDigestWorkbook, type FleetReportData } from './fleetDigestReport.js'
+import { collectFleetDataChecks, buildPatchDataChecks } from './fleetDataQuality.js'
+import { dataNotesText, warn, type DataCheck } from './dataQuality.js'
 import { getSlackConfig } from '../store/integrationStore.js'
 import { listSnapshots, saveSnapshot, type FleetSnapshot } from '../store/fleetSnapshotStore.js'
 
@@ -17,7 +19,7 @@ const TARGET_BASELINE_DAYS = 7
 const MAX_BASELINE_AGE_DAYS = 14
 
 export async function collectFleetData(): Promise<FleetReportData> {
-  const { devices } = await fetchAllDevices()
+  const { devices, failedSources } = await fetchAllDevices()
   let patchSystems: PatchSystemStatus[] | null = null
   let patchesBySystem: Map<string, MissingPatch[]> | null = null
   try {
@@ -29,7 +31,16 @@ export async function collectFleetData(): Promise<FleetReportData> {
     try { patchesBySystem = await getFleetCriticalPatches() }
     catch (error) { console.error('[fleet-digest] Per-patch detail unavailable:', error) }
   }
-  return { devices, patchSystems, patchesBySystem }
+  return { devices, patchSystems, patchesBySystem, failedSources }
+}
+
+/** Source, Graph-reconciliation and patch checks for the digest's figures. */
+export async function collectDigestDataChecks(data: FleetReportData): Promise<DataCheck[]> {
+  return [
+    ...await collectFleetDataChecks({ devices: data.devices, failedSources: data.failedSources }),
+    ...buildPatchDataChecks(data.devices, data.patchSystems),
+    ...(data.patchSystems && !data.patchesBySystem ? [warn('Patch detail', 'Per-patch detail was unavailable; the Critical Patches sheet lists devices without patch names, ages or CVEs.')] : []),
+  ]
 }
 
 export function buildSnapshot({ devices, patchSystems }: FleetReportData, now = new Date()): FleetSnapshot {
@@ -83,7 +94,8 @@ export function buildActions(s: FleetSnapshot): string[] {
   return actions.slice(0, 3)
 }
 
-export function buildDigestMessage(current: FleetSnapshot, baseline: FleetSnapshot | null): { text: string; blocks: unknown[] } {
+export function buildDigestMessage(current: FleetSnapshot, baseline: FleetSnapshot | null, dataChecks: DataCheck[] = []): { text: string; blocks: unknown[] } {
+  const notes = dataNotesText(dataChecks)
   const rate = Math.round(complianceRate(current) * 10) / 10
   const prevRate = baseline ? Math.round(complianceRate(baseline) * 10) / 10 : null
   const patchLine = current.criticalPatchDevices === null
@@ -103,6 +115,7 @@ export function buildDigestMessage(current: FleetSnapshot, baseline: FleetSnapsh
     { type: 'header', text: { type: 'plain_text', text: `Endpoint Fleet Health · ${current.date}` } },
     { type: 'section', fields },
     ...(actions.length ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Top actions*\n${actions.map((a, i) => `${i + 1}. ${a}`).join('\n')}` } }] : []),
+    ...(notes ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Data quality*\n${notes}` } }] : []),
     { type: 'context', elements: [{ type: 'mrkdwn', text: `Compared ${compared} · ITO Endpoint` }] },
   ]
   return { text: `Endpoint Fleet Health ${current.date}: ${rate}% compliant, ${current.nonCompliant} non-compliant, ${current.stale} stale`, blocks }
@@ -116,13 +129,14 @@ export async function sendFleetDigest(channelId: string): Promise<{ ok: boolean;
   const current = buildSnapshot(data, now)
   if (current.total === 0) return { ok: false, error: 'No device data available (no MDM source is connected or returned devices).' }
   const baseline = pickBaseline(current, listSnapshots())
-  const { text, blocks } = buildDigestMessage(current, baseline)
+  const dataChecks = await collectDigestDataChecks(data)
+  const { text, blocks } = buildDigestMessage(current, baseline, dataChecks)
 
   // One Slack message: the digest blocks with the workbook attached, so the
   // channel gets a single notification instead of a message plus a thread reply.
   let content: Buffer
   try {
-    content = await buildFleetDigestWorkbook(data, current, baseline, buildActions(current), now)
+    content = await buildFleetDigestWorkbook(data, current, baseline, buildActions(current), now, dataChecks)
   } catch (error) {
     // Don't lose the digest because the workbook failed: post it without the file.
     const posted = await sendSlackBlocks(cfg, channelId, text, blocks)

@@ -6,7 +6,7 @@ vi.mock('../fleetDigestReport.js', () => ({ buildFleetDigestWorkbook: vi.fn() })
 vi.mock('../criticalPatchReport.js', () => ({ isSupportedCriticalPatchClient: vi.fn(() => true) }))
 vi.mock('../staleDevicesReport.js', () => ({ STALE_DAYS: 30 }))
 vi.mock('../slack.js', () => ({ sendSlackBlocks: vi.fn(), uploadSlackFile: vi.fn() }))
-vi.mock('../../store/integrationStore.js', () => ({ getSlackConfig: vi.fn() }))
+vi.mock('../../store/integrationStore.js', () => ({ getSlackConfig: vi.fn(), getIntuneConfig: vi.fn(() => undefined) }))
 vi.mock('../../store/fleetSnapshotStore.js', () => ({ listSnapshots: vi.fn(() => []), saveSnapshot: vi.fn() }))
 
 import { pickBaseline, formatDelta, buildActions, buildDigestMessage, sendFleetDigest } from '../fleetDigest.js'
@@ -123,6 +123,18 @@ describe('sendFleetDigest', () => {
     expect(sendSlackBlocks).toHaveBeenCalledOnce()
     expect(uploadSlackFile).not.toHaveBeenCalled()
     expect(saveSnapshot).toHaveBeenCalledOnce()
+  })
+
+  it('puts data-quality warnings in the message and passes them to the workbook', async () => {
+    vi.mocked(fetchAllDevices).mockResolvedValue({
+      devices: [{ platform: 'Windows', complianceState: 'Compliant', lastCheckIn: new Date().toISOString(), managementSource: 'Microsoft Intune', serialNumber: 'A1' }] as never,
+      mock: false, failedSources: [{ source: 'manageengine', error: 'timed out' }],
+    })
+    await sendFleetDigest('C123')
+    const upload = vi.mocked(uploadSlackFile).mock.calls[0]![1]
+    expect(JSON.stringify(upload.blocks)).toContain('ManageEngine did not return data (timed out)')
+    const checks = vi.mocked(buildFleetDigestWorkbook).mock.calls[0]![5]
+    expect(checks?.some(c => c.label === 'Source completeness' && c.status === 'warn')).toBe(true)
   })
 
   it('still sends when Patch Manager is down, with no patch metric', async () => {

@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../graphApi.js', () => ({ credentialsFromEnv: vi.fn(() => ({ tenantId: 't', clientId: 'c', clientSecret: 's' })), getEntraDirectoryDevices: vi.fn(), getManagedDevices: vi.fn() }))
+vi.mock('../graphApi.js', () => ({ credentialsFromEnv: vi.fn(() => ({ tenantId: 't', clientId: 'c', clientSecret: 's' })), getEntraDirectoryDevices: vi.fn(), getManagedDevices: vi.fn(), getGraphCount: vi.fn() }))
 vi.mock('../../store/integrationStore.js', () => ({ getEntraConfig: vi.fn(() => undefined), getSlackConfig: vi.fn() }))
 vi.mock('../slack.js', () => ({ sendSlackBlocks: vi.fn(), uploadSlackFile: vi.fn() }))
 
 import ExcelJS from 'exceljs'
-import { detectDuplicateDevices, collectDuplicateDeviceReport, osFamily } from '../entraDuplicateDevices.js'
+import { detectDuplicateDevices, collectDuplicateDeviceReport, buildDuplicateChecks, osFamily } from '../entraDuplicateDevices.js'
 import { buildDuplicateDevicesWorkbook, buildDuplicateMessage, sendDuplicateDevicesReport } from '../entraDuplicateDevicesReport.js'
-import { getEntraDirectoryDevices, getManagedDevices, type GraphEntraDevice, type GraphManagedDevice } from '../graphApi.js'
+import { getEntraDirectoryDevices, getManagedDevices, getGraphCount, type GraphEntraDevice, type GraphManagedDevice } from '../graphApi.js'
 import { getSlackConfig } from '../../store/integrationStore.js'
 import { sendSlackBlocks, uploadSlackFile } from '../slack.js'
 
@@ -103,7 +103,7 @@ describe('osFamily', () => {
 })
 
 describe('collectDuplicateDeviceReport', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => { vi.clearAllMocks(); vi.mocked(getGraphCount).mockResolvedValue(null) })
   it('explains the missing permission on a 403', async () => {
     vi.mocked(getEntraDirectoryDevices).mockRejectedValue(new Error('Graph API 403 on /devices: Authorization_RequestDenied'))
     await expect(collectDuplicateDeviceReport(now)).rejects.toThrow('Device.Read.All')
@@ -147,6 +147,7 @@ describe('sendDuplicateDevicesReport', () => {
     vi.clearAllMocks()
     vi.mocked(getSlackConfig).mockReturnValue({ botToken: 'xoxb-test' } as never)
     vi.mocked(getManagedDevices).mockResolvedValue([])
+    vi.mocked(getGraphCount).mockResolvedValue(null)
     vi.mocked(sendSlackBlocks).mockResolvedValue({ ok: true })
     vi.mocked(uploadSlackFile).mockResolvedValue({ ok: true })
   })
@@ -171,5 +172,35 @@ describe('sendDuplicateDevicesReport', () => {
     vi.mocked(getEntraDirectoryDevices).mockResolvedValue([entra('a', { displayName: 'Q' }), entra('b', { displayName: 'Q' })])
     vi.mocked(uploadSlackFile).mockResolvedValue({ ok: false, error: 'missing_scope' })
     expect(await sendDuplicateDevicesReport('C1')).toMatchObject({ ok: false, error: 'missing_scope' })
+  })
+})
+
+describe('buildDuplicateChecks', () => {
+  const med = detectDuplicateDevices([entra('a', { displayName: 'N' }), entra('b', { displayName: 'N' }), entra('c', { deviceId: 'x', trustType: 'ServerAd', approximateLastSignInDateTime: daysAgo(1) }), entra('d', { deviceId: 'x', trustType: 'ServerAd', approximateLastSignInDateTime: daysAgo(90) })], [intune('dev-a', 'S1')], now)
+  const byLabel = (checks: ReturnType<typeof buildDuplicateChecks>, label: string) => checks.find(c => c.label === label)
+
+  it('reconciles the Entra count with Graph', () => {
+    expect(byLabel(buildDuplicateChecks(med, 4), 'Entra device count vs Microsoft Graph')?.status).toBe('ok')
+    expect(byLabel(buildDuplicateChecks(med, 400), 'Entra device count vs Microsoft Graph')).toMatchObject({ status: 'warn', detail: expect.stringContaining('Graph reports 400') })
+    expect(byLabel(buildDuplicateChecks(med, null), 'Entra device count vs Microsoft Graph')?.detail).toContain('Could not verify')
+  })
+  it('warns that name-only groups are not confirmed duplicates, with counts', () => {
+    expect(byLabel(buildDuplicateChecks(med, 4), 'Name-only matches')).toMatchObject({ status: 'warn', detail: expect.stringContaining('1 of 2 groups (2 objects) matched on device name alone') })
+  })
+  it('warns when few Entra objects have an Intune record, and when Intune was unavailable', () => {
+    expect(byLabel(buildDuplicateChecks(med, 4), 'Intune join coverage')).toMatchObject({ status: 'warn', detail: expect.stringContaining('Only 1 of 4') })
+    expect(byLabel(buildDuplicateChecks({ ...med, intuneJoined: false }, 4), 'Intune join')?.status).toBe('warn')
+  })
+  it('notes hybrid-joined cleanup candidates and the sign-in lag', () => {
+    const checks = buildDuplicateChecks(med, 4)
+    expect(byLabel(checks, 'Hybrid-joined cleanup')).toMatchObject({ status: 'info', detail: expect.stringContaining('1 cleanup candidate is hybrid joined') })
+    expect(byLabel(checks, 'Sign-in recency')?.detail).toContain('14 days')
+  })
+  it('flows into the Slack message and the workbook', async () => {
+    const withChecks = { ...med, dataChecks: buildDuplicateChecks(med, 4) }
+    expect(JSON.stringify(buildDuplicateMessage(withChecks, '2026-10-27').blocks)).toContain('matched on device name alone')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load((await buildDuplicateDevicesWorkbook(withChecks, now)) as unknown as ArrayBuffer)
+    expect(wb.worksheets.map(w => w.name)).toContain('Data Quality')
   })
 })

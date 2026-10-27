@@ -2,6 +2,8 @@ import { fetchAllDevices } from '../routes/devices.js'
 import { exportToExcel, type ReportColumn } from './reportExporter.js'
 import { getSlackConfig } from '../store/integrationStore.js'
 import { uploadSlackFile } from './slack.js'
+import { collectFleetDataChecks } from './fleetDataQuality.js'
+import type { DataCheck } from './dataQuality.js'
 import { buildOverviewMessage, countBy, formatCount, formatPercent, topBreakdown, type ReportOverview } from './reportOverview.js'
 
 export const STALE_DAYS = 30
@@ -19,7 +21,7 @@ function daysSince(value: string): number | null {
 
 interface StaleRow { deviceName: string; platform: string; source: string; daysSilent: number }
 
-export function buildStaleOverview(rows: StaleRow[], totalDevices: number): ReportOverview {
+export function buildStaleOverview(rows: StaleRow[], totalDevices: number, dataChecks: DataCheck[] = []): ReportOverview {
   const band = (min: number, max = Infinity) => rows.filter(r => r.daysSilent >= min && r.daysSilent < max).length
   const longest = rows[0] // rows are sorted longest-silent first
   const over90 = band(90)
@@ -39,11 +41,14 @@ export function buildStaleOverview(rows: StaleRow[], totalDevices: number): Repo
       : over90 ? `Retire or re-enrol the ${formatCount(over90)} device${over90 === 1 ? '' : 's'} silent for 90+ days, then confirm owners for the rest.`
       : `Confirm owners and last use for the ${formatCount(rows.length)} device${rows.length === 1 ? '' : 's'} silent for ${STALE_DAYS}+ days.`,
     footnote: `Last check-in across all connected MDM sources`,
+    dataChecks,
   }
 }
 
 export async function createStaleDevicesReport() {
-  const { devices } = await fetchAllDevices()
+  const fetched = await fetchAllDevices()
+  const { devices } = fetched
+  const dataChecks = await collectFleetDataChecks(fetched)
   const rows = devices.map(device => ({ device, daysSilent: daysSince(device.lastCheckIn) }))
     .filter((row): row is { device: typeof devices[number]; daysSilent: number } => row.daysSilent !== null && row.daysSilent >= STALE_DAYS)
     .sort((a, b) => b.daysSilent - a.daysSilent)
@@ -53,9 +58,9 @@ export async function createStaleDevicesReport() {
     }))
   const now = new Date()
   const content = await exportToExcel(rows, columns, {
-    title: 'Stale Devices Report', subtitle: `Devices without a check-in for ${STALE_DAYS}+ days`, generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length,
+    title: 'Stale Devices Report', subtitle: `Devices without a check-in for ${STALE_DAYS}+ days`, generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, dataChecks,
   })
-  return { content, rows, filename: `stale-devices-${now.toISOString().slice(0, 10)}.xlsx`, overview: buildStaleOverview(rows, devices.length) }
+  return { content, rows, filename: `stale-devices-${now.toISOString().slice(0, 10)}.xlsx`, overview: buildStaleOverview(rows, devices.length, dataChecks) }
 }
 
 export async function sendStaleDevicesReportToSlack(channelId: string): Promise<{ ok: boolean; error?: string; rows: number; filename?: string }> {

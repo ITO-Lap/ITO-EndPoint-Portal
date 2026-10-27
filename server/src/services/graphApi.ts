@@ -463,6 +463,24 @@ export async function getUsers(creds: TenantCredentials): Promise<GraphUser[]> {
   })
 }
 
+/**
+ * Number of items Graph reports for a collection, via `<path>/$count` — an
+ * independent check on how many rows a paged fetch should have returned.
+ * `/devices` needs `ConsistencyLevel: eventual`. Returns null when Graph cannot
+ * answer (permissions, throttling, network); callers treat that as "unverified".
+ */
+export async function getGraphCount(creds: TenantCredentials, path: string, opts: { eventual?: boolean } = {}): Promise<number | null> {
+  try {
+    const token = await getToken(creds)
+    const res = await fetch(`${GRAPH}${path}/$count`, { headers: { Authorization: `Bearer ${token}`, ...(opts.eventual ? { ConsistencyLevel: 'eventual' } : {}) } })
+    if (!res.ok) return null
+    const value = Number((await res.text()).trim())
+    return Number.isInteger(value) && value >= 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
 // ─── Entra ID directory device objects (Graph /devices) ──────────────────────
 // Needs the Device.Read.All application permission. `id` is the directory
 // object ID; `deviceId` is the device identity that Intune reports as azureADDeviceId.

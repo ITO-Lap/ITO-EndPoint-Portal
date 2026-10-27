@@ -2,6 +2,7 @@ import { getSlackConfig } from '../../store/integrationStore.js'
 import { sendSlackMessage } from '../slack.js'
 import { exportToExcel, type ReportColumn } from '../reportExporter.js'
 import { formatCount, type ReportOverview } from '../reportOverview.js'
+import { ok, warn, type DataCheck } from '../dataQuality.js'
 import { getAppIntelService } from './service.js'
 import { hasUpdateAvailable } from './query.js'
 import { compareVersions, parseVersion } from './version.js'
@@ -97,7 +98,26 @@ export async function sendUpdateReportToSlack(apps: AssessedApp[], meta: UpdateR
   return { ok: true, updatesAvailable: report.updatesAvailable, devicesBehind: report.devicesBehind }
 }
 
-export function buildUpdatesOverview(apps: AssessedApp[], meta: Pick<UpdateReportMeta, 'syncedAt' | 'errors'>): ReportOverview {
+/** What limits "apps behind": sync errors, inventory age, and apps whose latest version cannot be verified. */
+export function buildUpdatesChecks(apps: AssessedApp[], meta: Pick<UpdateReportMeta, 'syncedAt' | 'errors'>, now = new Date()): DataCheck[] {
+  const checks: DataCheck[] = []
+  const errors = Object.entries(meta.errors)
+  if (errors.length) for (const [provider, message] of errors) checks.push(warn('Inventory sync', `${provider}: ${message}`))
+  else checks.push(ok('Inventory sync', 'Every inventory provider synced without errors.'))
+  const ageHours = Math.floor((now.getTime() - Date.parse(meta.syncedAt)) / 3_600_000)
+  checks.push(Number.isFinite(ageHours) && ageHours > 24
+    ? warn('Inventory freshness', `The application inventory is ${ageHours} hours old; recent installs and updates are not reflected.`)
+    : ok('Inventory freshness', 'The application inventory was synced within the last 24 hours.'))
+  const unverifiable = apps.filter(a => !a.latest && a.status !== 'Native update').length
+  checks.push(unverifiable > 0
+    ? warn('Unverified apps', `${formatCount(unverifiable)} app${unverifiable === 1 ? ' has' : 's have'} no verified latest-version source, so updates for them cannot be confirmed; "apps behind" is a minimum.`)
+    : ok('Unverified apps', 'Every inventoried app has a verified latest-version source.'))
+  const review = apps.filter(a => a.status === 'Review required').length
+  if (review > 0) checks.push(warn('Manual review', `${formatCount(review)} app${review === 1 ? ' needs' : 's need'} manual review (version could not be compared or the package match is unclear).`))
+  return checks
+}
+
+export function buildUpdatesOverview(apps: AssessedApp[], meta: Pick<UpdateReportMeta, 'syncedAt' | 'errors'>, dataChecks: DataCheck[] = []): ReportOverview {
   const updates = apps.filter(hasUpdateAvailable)
   const devicesBehind = updates.reduce((n, a) => n + a.affectedDevices, 0)
   const count = (pred: (a: AssessedApp) => boolean) => updates.filter(pred).length
@@ -120,6 +140,7 @@ export function buildUpdatesOverview(apps: AssessedApp[], meta: Pick<UpdateRepor
     action: !updates.length ? 'No installed app is behind its latest verified version.'
       : `${needsPackage ? `Package ${formatCount(needsPackage)} app${needsPackage === 1 ? '' : 's'} first. ` : ''}Biggest gap: ${top!.identity.displayName} (${formatCount(top!.affectedDevices)} of ${formatCount(top!.totalDevices)} devices behind).`,
     footnote: `Inventory synced ${meta.syncedAt.slice(0, 16).replace('T', ' ')} UTC${problems ? ` · ${problems} sync warning${problems === 1 ? '' : 's'}, see workbook` : ''}`,
+    dataChecks,
   }
 }
 
@@ -142,10 +163,11 @@ export async function createAppUpdatesReport(): Promise<{ content: Buffer; filen
     behind: a.affectedDevices, total: a.totalDevices, status: a.status, action: a.action, source: a.latest!.versionSource, checked: a.lastCheckedAt ?? '',
   }))
   const caveats = Object.values(snap.errors)
+  const dataChecks = buildUpdatesChecks(snap.apps, snap)
   const content = await exportToExcel(rows, columns, {
     title: 'Verified Application Update Report',
     subtitle: `Apps behind the latest verified vendor version (winget-pkgs / Homebrew). Inventory synced ${snap.syncedAt}.${caveats.length ? ` Caveats: ${caveats.join(' | ')}` : ''}`,
-    generatedAt: new Date().toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length,
+    generatedAt: new Date().toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, dataChecks,
   })
-  return { content, filename: `verified-app-updates-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length, overview: buildUpdatesOverview(snap.apps, snap) }
+  return { content, filename: `verified-app-updates-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length, overview: buildUpdatesOverview(snap.apps, snap, dataChecks) }
 }

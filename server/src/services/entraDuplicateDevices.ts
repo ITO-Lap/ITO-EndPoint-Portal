@@ -8,8 +8,9 @@
 // and linked objects are merged into one group (so A~B by name and B~C by
 // serial gives a single group of three).
 
-import { credentialsFromEnv, getEntraDirectoryDevices, getManagedDevices, type GraphEntraDevice, type GraphManagedDevice, type TenantCredentials } from './graphApi.js'
+import { credentialsFromEnv, getEntraDirectoryDevices, getManagedDevices, getGraphCount, type GraphEntraDevice, type GraphManagedDevice, type TenantCredentials } from './graphApi.js'
 import { getEntraConfig } from '../store/integrationStore.js'
+import { ok, warn, info, reconcileCount, type DataCheck } from './dataQuality.js'
 
 const DAY_MS = 86_400_000
 export const INACTIVE_DAYS = 30
@@ -47,6 +48,9 @@ export interface DuplicateDeviceReport {
   groups: DuplicateGroup[]
   /** false when the Intune join (serial numbers) was unavailable; serial matching is then skipped. */
   intuneJoined: boolean
+  /** How many Entra objects have an Intune record (same Device ID); only these can be matched by serial number. */
+  intuneMatchedObjects: number
+  dataChecks: DataCheck[]
   generatedAt: string
 }
 
@@ -141,7 +145,33 @@ export function detectDuplicateDevices(entra: GraphEntraDevice[], intune: GraphM
     || a.rows[0]!.displayName.localeCompare(b.rows[0]!.displayName))
   groups.forEach((g, i) => { g.id = `DUP-${String(i + 1).padStart(3, '0')}`; g.rows.forEach(r => { r.groupId = g.id }) })
 
-  return { totalEntraDevices: entra.length, groups, intuneJoined: intune !== null, generatedAt: now.toISOString() }
+  const intuneMatchedObjects = entra.filter(d => intuneByDeviceId.has(norm(d.deviceId))).length
+  return { totalEntraDevices: entra.length, groups, intuneJoined: intune !== null, intuneMatchedObjects, dataChecks: [], generatedAt: now.toISOString() }
+}
+
+const n = (v: number) => v.toLocaleString('en-US')
+
+/** Reconciliation and confidence checks: what the grouping can and cannot prove. */
+export function buildDuplicateChecks(report: DuplicateDeviceReport, graphCount: number | null): DataCheck[] {
+  const checks: DataCheck[] = [reconcileCount('Entra device count vs Microsoft Graph', report.totalEntraDevices, graphCount)]
+  if (!report.intuneJoined) {
+    checks.push(warn('Intune join', 'Intune was unavailable, so serial-number matching was skipped; groups rest on Device ID and device name only.'))
+  } else {
+    const coverage = report.totalEntraDevices ? report.intuneMatchedObjects / report.totalEntraDevices : 0
+    const pct = `${Math.round(coverage * 1000) / 10}%`
+    checks.push(coverage < 0.6
+      ? warn('Intune join coverage', `Only ${n(report.intuneMatchedObjects)} of ${n(report.totalEntraDevices)} Entra objects (${pct}) have an Intune record, so serial-number matching covers just those; the rest can only match by Device ID or name.`)
+      : ok('Intune join coverage', `${n(report.intuneMatchedObjects)} of ${n(report.totalEntraDevices)} Entra objects (${pct}) have an Intune record for serial-number matching.`))
+  }
+  const medium = report.groups.filter(g => g.confidence === 'Medium')
+  const high = report.groups.length - medium.length
+  checks.push(medium.length > 0
+    ? warn('Name-only matches', `${n(medium.length)} of ${n(report.groups.length)} groups (${n(medium.reduce((s, g) => s + g.rows.length, 0))} objects) matched on device name alone. Names can be reused by different devices, so treat these as review items, not confirmed duplicates. Only ${n(high)} group${high === 1 ? ' has' : 's have'} Device ID or serial evidence.`)
+    : ok('Name-only matches', 'Every group has Device ID or serial-number evidence.'))
+  const hybrid = report.groups.flatMap(g => g.rows).filter(r => r.recommendation === 'Cleanup candidate' && r.joinType === 'Hybrid joined').length
+  if (hybrid > 0) checks.push(info('Hybrid-joined cleanup', `${n(hybrid)} cleanup candidate${hybrid === 1 ? ' is' : 's are'} hybrid joined: remove them from on-premises AD / sync scope, because deleting them in Entra alone may recreate them.`))
+  checks.push(info('Sign-in recency', "Entra's approximate last sign-in can lag by up to about 14 days, so recent activity may be understated. Keep / Cleanup / Review is a guide: disable first, delete after a hold period."))
+  return checks
 }
 
 function entraCredentials(): TenantCredentials {
@@ -163,5 +193,7 @@ export async function collectDuplicateDeviceReport(now = new Date()): Promise<Du
   let intune: GraphManagedDevice[] | null = null
   try { intune = await getManagedDevices(creds) }
   catch (error) { console.error('[entra-duplicates] Intune join unavailable, skipping serial matching:', error) }
-  return detectDuplicateDevices(entra, intune, now)
+  const report = detectDuplicateDevices(entra, intune, now)
+  report.dataChecks = buildDuplicateChecks(report, await getGraphCount(creds, '/devices', { eventual: true }))
+  return report
 }

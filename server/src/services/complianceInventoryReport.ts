@@ -5,7 +5,8 @@
 // Express req/res. Mirrors the shape of createCriticalPatchReport() /
 // createStaleDevicesReport() (criticalPatchReport.ts / staleDevicesReport.ts).
 
-import { credentialsFromEnv, getManagedDevices, type GraphManagedDevice } from './graphApi.js'
+import { credentialsFromEnv, getManagedDevices, getGraphCount, type GraphManagedDevice } from './graphApi.js'
+import { ok, warn, info, reconcileCount, type DataCheck } from './dataQuality.js'
 import { countBy, formatCount, formatPercent, topBreakdown, type ReportOverview } from './reportOverview.js'
 import { exportToCSV, exportToExcel, exportToPDF, exportToPPTX, type ExportFormat, type ReportColumn } from './reportExporter.js'
 
@@ -28,7 +29,22 @@ const osLabel = (os: string | null | undefined) => OS_LABELS[(os ?? '').toLowerC
 const OWNER_LABELS: Record<string, string> = { company: 'Corporate', personal: 'Personal' }
 const daysAgoOf = (iso: string | null | undefined): number | null => { const t = Date.parse(iso ?? ''); return Number.isFinite(t) ? Math.floor((Date.now() - t) / 86_400_000) : null }
 
-export function buildInventoryOverview(devices: GraphManagedDevice[]): ReportOverview {
+/** Reconciles the fetched Intune devices with Graph's own count and flags devices that cannot be classified. */
+export function buildDeviceReportChecks(devices: GraphManagedDevice[], graphCount: number | null): DataCheck[] {
+  const total = devices.length
+  const checks: DataCheck[] = [reconcileCount('Intune count vs Microsoft Graph', total, graphCount)]
+  const unclassified = devices.filter(d => d.complianceState !== 'compliant' && d.complianceState !== 'noncompliant').length
+  checks.push(unclassified > 0 && unclassified / Math.max(total, 1) > 0.05
+    ? warn('Unclassified compliance state', `${formatCount(unclassified)} of ${formatCount(total)} devices (${formatPercent(unclassified, total)}) are in grace period, unknown, conflict or error state; they count as neither compliant nor non-compliant, so the compliance rate understates risk.`)
+    : ok('Unclassified compliance state', `${formatCount(unclassified)} device${unclassified === 1 ? '' : 's'} in grace period, unknown, conflict or error state.`))
+  const noSync = devices.filter(d => daysAgoOf(d.lastSyncDateTime) === null).length
+  checks.push(noSync > 0 ? warn('Unreadable sync dates', `${formatCount(noSync)} device${noSync === 1 ? ' has' : 's have'} no readable last sync date.`) : ok('Unreadable sync dates', 'Every device has a readable last sync date.'))
+  const unencrypted = devices.filter(d => !d.isEncrypted)
+  if (unencrypted.length) checks.push(info('Encryption state', `Not encrypted by OS: ${topBreakdown(countBy(unencrypted, d => osLabel(d.operatingSystem)), 5)}. Encryption is reported per platform by Intune; confirm unexpected counts in the Intune portal before acting.`))
+  return checks
+}
+
+export function buildInventoryOverview(devices: GraphManagedDevice[], dataChecks: DataCheck[] = []): ReportOverview {
   const total = devices.length
   const notSynced = devices.filter(d => (daysAgoOf(d.lastSyncDateTime) ?? 0) >= 30).length
   const unencrypted = devices.filter(d => !d.isEncrypted).length
@@ -47,10 +63,11 @@ export function buildInventoryOverview(devices: GraphManagedDevice[]): ReportOve
       ? [notSynced ? `Check the ${formatCount(notSynced)} device${notSynced === 1 ? '' : 's'} that ${notSynced === 1 ? 'has' : 'have'} not synced in 30+ days` : '', unencrypted ? `${notSynced ? 'and enforce' : 'Enforce'} encryption on ${formatCount(unencrypted)} device${unencrypted === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ') + '.'
       : 'Inventory looks healthy. No action needed.',
     footnote: 'Source: Microsoft Intune',
+    dataChecks,
   }
 }
 
-export function buildComplianceOverview(devices: GraphManagedDevice[]): ReportOverview {
+export function buildComplianceOverview(devices: GraphManagedDevice[], dataChecks: DataCheck[] = []): ReportOverview {
   const total = devices.length
   const compliant = devices.filter(d => d.complianceState === 'compliant').length
   const nonCompliant = devices.filter(d => d.complianceState === 'noncompliant')
@@ -71,6 +88,7 @@ export function buildComplianceOverview(devices: GraphManagedDevice[]): ReportOv
       ? `Review the ${formatCount(nonCompliant.length)} non-compliant device${nonCompliant.length === 1 ? '' : 's'}${unencrypted ? ` and enforce encryption on ${formatCount(unencrypted)}` : ''}.`
       : 'All reported devices are compliant. No action needed.',
     footnote: 'Source: Microsoft Intune',
+    dataChecks,
   }
 }
 
@@ -78,7 +96,8 @@ const EXTENSIONS: Record<ExportFormat, string> = { csv: 'csv', excel: 'xlsx', pd
 
 async function createDeviceReport(reportType: 'compliance' | 'inventory', format: ExportFormat): Promise<{ content: Buffer; filename: string; rows: number; overview: ReportOverview }> {
   const creds = credentialsFromEnv()
-  const devices = await getManagedDevices(creds)
+  const [devices, graphCount] = await Promise.all([getManagedDevices(creds), getGraphCount(creds, '/deviceManagement/managedDevices')])
+  const dataChecks = buildDeviceReportChecks(devices, graphCount)
 
   const data = devices.map(d => ({ ...d, isEncrypted: d.isEncrypted ? 'Yes' : 'No' })) as Record<string, unknown>[]
 
@@ -88,6 +107,7 @@ async function createDeviceReport(reportType: 'compliance' | 'inventory', format
     generatedAt: new Date().toISOString(),
     generatedBy: 'Endpoint Intelligence Platform',
     recordCount: devices.length,
+    dataChecks,
   }
 
   const summary = [
@@ -106,7 +126,7 @@ async function createDeviceReport(reportType: 'compliance' | 'inventory', format
     format === 'pdf'   ? await exportToPDF(data, COLUMNS, meta) :
     await exportToPPTX(data, meta, summary)
 
-  return { content, filename, rows: devices.length, overview: reportType === 'compliance' ? buildComplianceOverview(devices) : buildInventoryOverview(devices) }
+  return { content, filename, rows: devices.length, overview: reportType === 'compliance' ? buildComplianceOverview(devices, dataChecks) : buildInventoryOverview(devices, dataChecks) }
 }
 
 export const createComplianceReport = (format: ExportFormat) => createDeviceReport('compliance', format)
