@@ -9,6 +9,7 @@ import { api } from '../api'
 import type { ApiDevice, ConfluencePage } from '../api'
 import { JiraModal } from '../components/runbooks/JiraModal'
 import { ConfluenceModal } from '../components/runbooks/ConfluenceModal'
+import { CopyText } from '../components/ui/CopyText'
 
 const PAGE_SIZE = 25
 
@@ -172,10 +173,10 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium text-slate-900">{score.deviceName}</span>
+                        <CopyText value={score.deviceName} label="Device name"><span className="text-sm font-medium text-slate-900">{score.deviceName}</span></CopyText>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${styles.badge}`}>{styles.label}</span>
                       </div>
-                      <p className="text-xs text-slate-500 truncate">{score.userEmail}</p>
+                      <CopyText value={score.userEmail} label="User"><p className="text-xs text-slate-500 truncate">{score.userEmail}</p></CopyText>
                     </div>
                     <div className="flex-shrink-0 text-xs text-slate-400 text-right hidden sm:block">
                       {score.factors.length} factor{score.factors.length !== 1 ? 's' : ''}

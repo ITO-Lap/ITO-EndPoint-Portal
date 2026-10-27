@@ -3,7 +3,6 @@
 
 const SERVER = import.meta.env.VITE_API_URL ?? ''
 const BASE = `${SERVER}/api/intelligence`
-const AUDIT = `${SERVER}/api/audit`
 const SCHEDULES = `${SERVER}/api/scheduled-reports`
 
 async function post<T>(url: string, body: object): Promise<T> {
@@ -82,22 +81,6 @@ export const intelApi = {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  },
-
-  // ─── Audit Log ───────────────────────────────────────────────────────────────
-  audit: {
-    list: (params?: { limit?: number; offset?: number; action?: string; resource_type?: string }): Promise<{ success: boolean; data: AuditEntry[]; count: number }> => {
-      const q = new URLSearchParams()
-      if (params?.limit)         q.set('limit', String(params.limit))
-      if (params?.offset)        q.set('offset', String(params.offset))
-      if (params?.action)        q.set('action', params.action)
-      if (params?.resource_type) q.set('resource_type', params.resource_type)
-      return get(`${AUDIT}?${q}`)
-    },
-    log: (entry: Omit<AuditEntry, 'id' | 'created_at'>): Promise<{ success: boolean }> =>
-      post(AUDIT, entry),
-    actions: (): Promise<{ success: boolean; data: string[] }> =>
-      get(`${AUDIT}/actions`),
   },
 
   // ─── Device Report ───────────────────────────────────────────────────────────
@@ -210,18 +193,6 @@ export interface RiskScore {
   computedAt: string
 }
 
-export interface AuditEntry {
-  id?: string
-  user_email?: string
-  action: string
-  resource_type?: string
-  resource_id?: string
-  old_value?: unknown
-  new_value?: unknown
-  ip_address?: string
-  created_at?: string
-}
-
 export interface ScheduledReport {
   id: string
   name: string
@@ -229,6 +200,7 @@ export interface ScheduledReport {
   schedule_cron: string
   format: string
   recipients: string[]
+  filters?: { slackChannelId?: string; timezone?: string }
   is_active: boolean
   last_run_at: string | null
   next_run_at: string | null
@@ -242,6 +214,7 @@ export interface CreateScheduleInput {
   schedule_cron: string
   format?: string
   recipients?: string[]
+  filters?: { slackChannelId?: string; timezone?: string }
   created_by?: string
 }
 

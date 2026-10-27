@@ -153,7 +153,7 @@ function RadioGroup({ options, value, onChange }: {
           onClick={() => onChange(o)}
           className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
             value === o
-              ? 'border-orange-300 bg-orange-50 text-orange-700'
+              ? 'is-selected'
               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
           }`}
         >
@@ -468,21 +468,43 @@ const INTEG_DEFS: IntegDef[] = [
     iconColor: 'text-teal-600',
     category: 'Collaboration',
     categoryColor: 'text-teal-700 bg-teal-50 border-teal-200',
-    description: 'Slack workspace integration — Audit Logs, login events, channel activity, user management, and compliance data via Slack Audit Logs API',
-    docsHint: 'Create a Slack App at api.slack.com/apps. Add scopes: auditlogs:read, channels:read, users:read. Install to workspace and copy the Bot OAuth Token. Signing Secret is found in App → Basic Information.',
+    description: 'Slack alerts via incoming webhook, with optional Audit Logs and workspace data through a Bot OAuth token.',
+    docsHint: 'For alert delivery, add an Incoming Webhook URL. For Audit Logs, create a Slack App at api.slack.com/apps with auditlogs:read, channels:read and users:read, then add its Bot OAuth Token.',
     defaultInterval: 'realtime',
     defaultDevices: 'N/A',
     defaultLastSync: 'On demand',
     fields: [
+      { key: 'webhookUrl',    label: 'Incoming Webhook URL', hint: 'For outbound automation alerts',              placeholder: 'https://hooks.slack.com/services/…',                         secret: true  },
       { key: 'botToken',      label: 'Bot OAuth Token',  hint: 'OAuth & Permissions → Bot Token Scopes',        placeholder: 'xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx', secret: true  },
       { key: 'signingSecret', label: 'Signing Secret',   hint: 'Basic Information → App Credentials',           placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',                          secret: true  },
       { key: 'workspaceId',   label: 'Workspace ID',     hint: 'Team ID — found in workspace URL or auth.test', placeholder: 'T0XXXXXXXXX',                                              secret: false },
     ],
     defaults: {
+      webhookUrl:    '',
       botToken:      '',
       signingSecret: '',
       workspaceId:   '',
     },
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    icon: Cpu,
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+    category: 'AI',
+    categoryColor: 'text-blue-700 bg-blue-50 border-blue-200',
+    description: 'Powers Endpoint Operations Copilot with approved internal endpoint-data tools and optional Google Search grounding for current public-web information.',
+    docsHint: 'Create a Google AI Studio API key. Google Search grounding can be disabled here to keep Copilot answers internal-data-only.',
+    defaultInterval: 'realtime',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'apiKey', label: 'Google AI Studio API Key', hint: 'Google AI Studio — starts with AIza', placeholder: 'AIza…', secret: true },
+      { key: 'model', label: 'Copilot Model', hint: 'Gemini model used only by Endpoint Operations Copilot', placeholder: 'gemini-2.5-flash', secret: false },
+      { key: 'enableGoogleSearch', label: 'Google Search Grounding', hint: 'Enable current public-web research and source citations', placeholder: 'true', secret: false },
+    ],
+    defaults: { apiKey: '', model: 'gemini-2.5-flash', enableGoogleSearch: 'true' },
   },
   {
     id: 'openai',
@@ -551,8 +573,9 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
     case 'intune':       return f['endpoint']?.value || 'zinnia.onmicrosoft.com'
     case 'entra':        return `Tenant: ${(f['tenantId']?.value || '').slice(0, 8) || 'not set'}…`
     case 'manageengine': return f['apiDomain']?.value || 'mdm.manageengine.com'
-    case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : 'auditlogs:read · channels:read'
+    case 'slack':        return f['workspaceId']?.value ? `Workspace ${f['workspaceId'].value}` : f['webhookUrl']?.value ? 'Incoming webhook alerts' : 'Audit logs · channels'
     case 'openai':       return `Model: ${f['model']?.value || 'gpt-4o-mini'}${f['orgId']?.value ? ' · ' + f['orgId'].value : ''}`
+    case 'gemini':       return `Copilot · ${f['model']?.value || 'gemini-2.5-flash'}${f['enableGoogleSearch']?.value !== 'false' ? ' · web enabled' : ' · internal only'}`
     default:             return ''
   }
 }
@@ -917,7 +940,8 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
 
     // Reject placeholder/empty credentials — they would overwrite real env-var config
     const secretField = def.fields.find(f => f.secret)
-    const secretVal = secretField ? (fields[secretField.key] ?? '') : ''
+    const slackCredential = fields['webhookUrl'] || fields['botToken']
+    const secretVal = def.id === 'slack' ? slackCredential : (secretField ? (fields[secretField.key] ?? '') : '')
     const isPlaceholder = !secretVal || secretVal.includes('replace') || secretVal.includes('placeholder') || secretVal.length < 10
     if (isPlaceholder) {
       notify('error', 'Push Blocked', `Enter a real ${secretField?.label ?? 'API key'} before pushing — placeholder values would overwrite active credentials`)
@@ -1048,7 +1072,11 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
           </div>
           <div>
             <p className="text-[0.58rem] text-slate-400 uppercase tracking-wide">API Status</p>
-            {liveStatus?.healthy === false ? (
+            {liveStatus?.connectionType === 'incoming_webhook' ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 mt-0.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />Webhook alerts active
+              </span>
+            ) : liveStatus?.healthy === false ? (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 mt-0.5">
                 <span className="h-2 w-2 rounded-full bg-red-500" />Error
               </span>
@@ -2615,6 +2643,7 @@ export function SettingsPage({ viewerRole = 'Global Admin' }: { viewerRole?: Use
                   type="button"
                   onClick={() => setActive(item.key)}
                   aria-current={isActive ? 'page' : undefined}
+                  data-selected-skip={isDanger ? '' : undefined}
                   className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
                     isActive
                       ? isDanger

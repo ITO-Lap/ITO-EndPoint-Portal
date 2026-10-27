@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ShieldCheck, ShieldAlert, ShieldX, RefreshCw, X, Laptop2, Apple, Clock, Download } from 'lucide-react'
 import { api } from '../../api'
 import type { EndpointProtectionCoverageResult, PlatformCoverage, MissingAgentDevice, CoverageHealth } from '../../api'
+import { SortableHeader } from '../ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../../lib/tableSorting'
 
 const HEALTH_META: Record<CoverageHealth, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
   Healthy:  { label: 'Healthy',  color: '#10B981', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: <ShieldCheck className="h-4 w-4" /> },
@@ -9,11 +11,11 @@ const HEALTH_META: Record<CoverageHealth, { label: string; color: string; bg: st
   Critical: { label: 'Critical', color: '#EF4444', bg: 'bg-red-50',     border: 'border-red-200',     icon: <ShieldX className="h-4 w-4" /> },
 }
 
-function RingProgress({ pct, color, label }: { pct: number; color: string; label: string }) {
+function RingProgress({ pct, color, label }: { pct: number | null; color: string; label: string }) {
   const size = 64, stroke = 7
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
-  const dash = (pct / 100) * circumference
+  const dash = pct === null ? 0 : (pct / 100) * circumference
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="relative" style={{ width: size, height: size }}>
@@ -23,7 +25,7 @@ function RingProgress({ pct, color, label }: { pct: number; color: string; label
             strokeDasharray={`${dash} ${circumference - dash}`} strokeLinecap="round" />
         </svg>
         <div className="absolute inset-0 grid place-items-center">
-          <span className="text-sm font-black text-slate-700">{pct}%</span>
+          <span className="text-sm font-black text-slate-700">{pct === null ? 'N/A' : `${pct}%`}</span>
         </div>
       </div>
       <span className="text-[0.62rem] font-semibold text-slate-500">{label}</span>
@@ -44,7 +46,22 @@ function downloadCsv(filename: string, rows: MissingAgentDevice[]) {
 
 function MissingDevicesModal({ platform, agent, onClose }: { platform: 'Windows' | 'macOS'; agent: 'zscaler' | 'crowdstrike'; onClose: () => void }) {
   const [devices, setDevices] = useState<MissingAgentDevice[] | null>(null)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const agentLabel = agent === 'zscaler' ? 'Zscaler' : 'CrowdStrike Falcon'
+  const sortedDevices = useMemo(() => !devices || !sortKey ? devices : sortRows(devices, device => {
+    switch (sortKey) {
+      case 'deviceName': return device.deviceName
+      case 'primaryUser': return device.primaryUser
+      case 'connector': return device.connector
+      case 'lastSync': return Date.parse(device.lastSync) || device.lastSync
+      default: return ''
+    }
+  }, sortDirection), [devices, sortKey, sortDirection])
+  const handleSort = (key: string) => {
+    setSortDirection(direction => toggleSortDirection(sortKey, direction, key))
+    setSortKey(key)
+  }
 
   useEffect(() => {
     api.fetchDevicesMissingAgent(platform, agent).then(setDevices).catch(() => setDevices([]))
@@ -78,9 +95,14 @@ function MissingDevicesModal({ platform, agent, onClose }: { platform: 'Windows'
             </div>
           ) : (
             <table className="z-table">
-              <thead><tr>{['Device', 'Primary User', 'Connector', 'Last Sync'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+              <thead><tr>
+                <SortableHeader label="Device" sortKey="deviceName" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Primary User" sortKey="primaryUser" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Connector" sortKey="connector" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Last Sync" sortKey="lastSync" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              </tr></thead>
               <tbody>
-                {devices.map(d => (
+                {sortedDevices?.map(d => (
                   <tr key={d.deviceId}>
                     <td className="font-semibold text-slate-700">{d.deviceName || '—'}</td>
                     <td className="text-slate-500">{d.primaryUser || '—'}</td>
@@ -122,6 +144,11 @@ function PlatformCard({ coverage, icon, accent }: { coverage: PlatformCoverage; 
           <RingProgress pct={coverage.falconCoveragePct} color="#EF4444" label="Falcon" />
           <RingProgress pct={coverage.zscalerCoveragePct} color="#0EA5E9" label="Zscaler" />
         </div>
+        {coverage.inventoryUnavailableDevices > 0 && (
+          <p className="mt-2 text-[0.62rem] text-amber-700" role="status">
+            Inventory unavailable for {coverage.inventoryUnavailableDevices} device{coverage.inventoryUnavailableDevices === 1 ? '' : 's'}; excluded from coverage.
+          </p>
+        )}
 
         <div className="grid grid-cols-2 gap-2 mt-3">
           <button type="button" onClick={() => coverage.falconMissing > 0 && setDrilldown('crowdstrike')} disabled={coverage.falconMissing === 0}
@@ -166,7 +193,7 @@ export function EndpointProtectionCoverage() {
         <div>
           <div className="flex items-center gap-2">
             <p className="text-sm font-bold text-slate-700">Endpoint Protection Coverage</p>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.58rem] font-bold text-emerald-700">● Live</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 border border-sky-200 px-2 py-0.5 text-[0.58rem] font-bold text-sky-700">MDM app inventory</span>
           </div>
           <p className="text-[0.65rem] text-slate-400 flex items-center gap-1 mt-0.5">
             <Clock className="h-3 w-3" />

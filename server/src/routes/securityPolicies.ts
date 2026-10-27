@@ -65,6 +65,8 @@ const listQuerySchema = z.object({
   platform: z.string().max(40).optional(),
   status:   z.enum(['enabled', 'disabled', 'unknown']).optional(),
   search:   z.string().max(200).optional(),
+  sortBy: z.enum(['name', 'category', 'platform', 'enabled', 'assignments', 'modified']).optional(),
+  sortDirection: z.enum(['asc', 'desc']).optional(),
   page:     z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
 })

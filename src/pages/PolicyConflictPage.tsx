@@ -118,7 +118,7 @@ export function PolicyConflictPage({ onBack }: { onBack: () => void }) {
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === f ? 'bg-orange-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === f ? 'is-selected' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                 >
                   {f === 'all' ? 'All' : TYPE_LABELS[f] ?? f.charAt(0).toUpperCase() + f.slice(1)}
                   {f !== 'all' && <span className="ml-1 opacity-70">({conflicts.filter(c => c.severity === f || c.type === f).length})</span>}

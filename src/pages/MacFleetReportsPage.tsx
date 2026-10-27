@@ -9,9 +9,9 @@ import { KpiModal } from '../components/reports/KpiModal'
 import type { KpiId, KpiFilterOpts } from '../lib/kpiConfig'
 import {
   KPI_CONFIGS, KPI_GROUPS, KPI_IDS_BY_GROUP,
-  CURRENT_MACOS, isHealthy, isEol, isNearEol, isActive,
-  daysSinceCheckIn, versionsBehind,
+  isActive, daysSinceCheckIn, attachPatchStatus,
 } from '../lib/kpiConfig'
+import { attachPosture } from '../lib/macPostureScore'
 import { generateKpiExcel } from '../lib/kpiExport'
 import { useToast } from '../components/ui/ToastProvider'
 
@@ -19,7 +19,6 @@ import { useToast } from '../components/ui/ToastProvider'
 
 interface Props { onBack?: () => void }
 
-type TimeRange = '7d' | '30d' | '90d' | '6mo' | 'all'
 type StaleThreshold = 7 | 14 | 30 | 60 | 90
 
 const STALE_OPTIONS: StaleThreshold[] = [7, 14, 30, 60, 90]
@@ -59,6 +58,10 @@ function KpiCard({ kpiId, devices, opts, onClick, loading }: {
   const config    = KPI_CONFIGS[kpiId]
   const kpiValue  = useMemo(() => config.getValue(devices, opts), [config, devices, opts])
   const kpiCount  = useMemo(() => config.filterFn(devices, opts).length, [config, devices, opts])
+  const populationSize = config.getPopulationSize?.(devices) ?? devices.length
+  const countSize = config.getCountSize?.(devices) ?? kpiCount
+  const unavailableReason = config.getUnavailableReason?.(devices) ?? config.unavailableReason
+  const isUnavailable = kpiValue === 'N/A' || !!unavailableReason
 
   return (
     <button
@@ -97,19 +100,29 @@ function KpiCard({ kpiId, devices, opts, onClick, loading }: {
           {loading ? '—' : String(kpiValue)}
         </p>
 
+        {config.caption && (
+          <p className="text-[0.58rem] font-semibold uppercase tracking-wide text-sky-600 mt-1">{config.caption}</p>
+        )}
+
         {/* Device count sub-label (for score cards) */}
         {typeof kpiValue === 'string' && kpiValue.includes('%') && (
           <p className="text-[0.6rem] text-slate-400 mt-0.5">
-            {kpiCount.toLocaleString()} of {devices.length.toLocaleString()} devices
+            {countSize.toLocaleString()} of {populationSize.toLocaleString()} devices with this data
           </p>
         )}
-        {typeof kpiValue !== 'string' && !config.isInfoCard && (
+        {!isUnavailable && config.id === 'device-security-posture' && (
           <p className="text-[0.6rem] text-slate-400 mt-0.5">
-            {devices.length > 0
-              ? `${((kpiCount / devices.length) * 100).toFixed(1)}% of fleet`
+            {countSize.toLocaleString()} of {populationSize.toLocaleString()} scored Macs rated Strong
+          </p>
+        )}
+        {!isUnavailable && typeof kpiValue !== 'string' && !config.isInfoCard && (
+          <p className="text-[0.6rem] text-slate-400 mt-0.5">
+            {populationSize > 0
+              ? `${((countSize / populationSize) * 100).toFixed(1)}% of applicable devices`
               : 'No data'}
           </p>
         )}
+        {isUnavailable && <p className="text-[0.6rem] text-slate-500 mt-0.5">Click for data availability details</p>}
 
         {/* Click hint */}
         <p className="text-[0.55rem] text-slate-300 mt-2 group-hover:text-[#7C5CFC] transition-colors">
@@ -140,54 +153,32 @@ function AiInsightsButton({ devices, opts }: { devices: ApiDevice[]; opts: KpiFi
   const { insights, allClear } = useMemo(() => {
     if (!devices.length) return { insights: [], allClear: false }
 
-    const total       = devices.length
-    const compliant   = devices.filter(d => d.complianceState === 'Compliant').length
-    const pct         = Math.round(compliant / total * 100)
-    const critPatch   = devices.filter(d => d.severity === 'Critical' && d.complianceState !== 'Compliant')
-    const highPatch   = devices.filter(d => d.severity === 'High'     && d.complianceState !== 'Compliant')
-    const stale       = devices.filter(d => daysSinceCheckIn(d.lastCheckIn) > (opts.staleThresholdDays ?? 30))
-    const eolDevices  = devices.filter(d => isEol(d))
-    const nearEol     = devices.filter(d => isNearEol(d))
-    const v1behind    = devices.filter(d => versionsBehind(d.osVersion) === 1)
-    const v2behind    = devices.filter(d => versionsBehind(d.osVersion) >= 2)
-    const nonCompliant= devices.filter(d => d.complianceState === 'Non-Compliant')
-    const warnings    = devices.filter(d => d.complianceState === 'Warning')
+    const nativeComplianceDevices = devices.filter(d => d.managementSource !== 'ManageEngine')
+    const compliant   = nativeComplianceDevices.filter(d => d.complianceState === 'Compliant').length
+    const pct         = nativeComplianceDevices.length ? Math.round(compliant / nativeComplianceDevices.length * 100) : null
+    const stale       = devices.filter(d => {
+      const days = daysSinceCheckIn(d.lastCheckIn)
+      return days !== 999 && days > (opts.staleThresholdDays ?? 30)
+    })
+    const nonCompliant= nativeComplianceDevices.filter(d => d.complianceState === 'Non-Compliant')
+    const warnings    = nativeComplianceDevices.filter(d => d.complianceState === 'Warning')
 
     const result: { type: 'Critical'|'High'|'Opportunity'|'Healthy'; text: string; action: string }[] = []
 
     // ── Fleet health summary (always first) ──────────────────────────────────
-    if (pct >= 95) {
-      result.push({ type: 'Healthy', text: `Excellent! ${pct}% of your ${total.toLocaleString()} macOS devices are fully compliant — your fleet is in great shape.`, action: 'Keep maintaining your current patch and update schedules.' })
+    if (pct === null) {
+      result.push({ type: 'Opportunity', text: 'Native overall MDM compliance is unavailable for this fleet through the documented Endpoint Central API. Profile results appear in device details only when returned by the API.', action: 'Open a device’s Compliance tab to inspect any returned profile data.' })
+    } else if (pct >= 95) {
+      result.push({ type: 'Healthy', text: `Excellent! ${pct}% of ${nativeComplianceDevices.length.toLocaleString()} devices with native compliance data are compliant.`, action: 'Continue monitoring native compliance in Intune.' })
     } else if (pct >= 80) {
-      result.push({ type: 'Healthy', text: `${pct}% compliance across ${total.toLocaleString()} devices. ${nonCompliant.length} devices need attention, ${warnings.length} have warnings.`, action: 'Review the Non-Compliant and Warning KPI cards below.' })
+      result.push({ type: 'Healthy', text: `${pct}% native compliance across ${nativeComplianceDevices.length.toLocaleString()} devices. ${nonCompliant.length} are non-compliant and ${warnings.length} have warnings.`, action: 'Review the non-compliant and warning device details.' })
     } else {
-      result.push({ type: 'High', text: `Fleet compliance is ${pct}% across ${total.toLocaleString()} devices. ${nonCompliant.length} non-compliant, ${warnings.length} warning.`, action: 'Prioritise the Non-Compliant Devices KPI for immediate remediation.' })
-    }
-
-    // ── Critical patches ─────────────────────────────────────────────────────
-    if (critPatch.length > 0) {
-      result.push({ type: 'Critical', text: `${critPatch.length} device${critPatch.length > 1 ? 's are' : ' is'} missing critical security patches with potential CVE 9.0+ exposure.`, action: 'Deploy emergency patches to critical devices immediately via your MDM.' })
-    } else if (highPatch.length > 0) {
-      result.push({ type: 'High', text: `${highPatch.length} device${highPatch.length > 1 ? 's have' : ' has'} high-severity patch gaps that should be addressed within 7 days.`, action: 'Schedule a patch deployment for high-severity devices this week.' })
+      result.push({ type: 'High', text: `Native compliance is ${pct}% across ${nativeComplianceDevices.length.toLocaleString()} devices. ${nonCompliant.length} are non-compliant and ${warnings.length} have warnings.`, action: 'Prioritise the non-compliant devices for remediation.' })
     }
 
     // ── Stale check-ins ──────────────────────────────────────────────────────
     if (stale.length > 0) {
       result.push({ type: 'High', text: `${stale.length} device${stale.length > 1 ? 's have' : ' has'} not checked in for over ${opts.staleThresholdDays ?? 30} days — possible loss or connectivity failure.`, action: 'Send check-in reminders; escalate devices offline > 60 days.' })
-    }
-
-    // ── EOL / Near EOL ───────────────────────────────────────────────────────
-    if (eolDevices.length > 0) {
-      result.push({ type: 'High', text: `${eolDevices.length} device${eolDevices.length > 1 ? 's are' : ' is'} past Apple End-of-Life and receiving no security updates.`, action: `Submit hardware replacement budget (~$${(eolDevices.length * 1499).toLocaleString()} est.) and retire these devices.` })
-    } else if (nearEol.length > 0) {
-      result.push({ type: 'Opportunity', text: `${nearEol.length} device${nearEol.length > 1 ? 's are' : ' is'} approaching End-of-Life within 90 days.`, action: 'Plan replacement procurement now to avoid security coverage gaps.' })
-    }
-
-    // ── macOS currency ───────────────────────────────────────────────────────
-    if (v2behind.length > 0) {
-      result.push({ type: 'Opportunity', text: `${v2behind.length} device${v2behind.length > 1 ? 's are' : ' is'} running macOS 2+ major versions behind ${CURRENT_MACOS.name} — missing significant security improvements.`, action: `Upgrading to ${CURRENT_MACOS.version} would improve fleet compliance by ~${Math.max(5, Math.round(v2behind.length / total * 15))}%.` })
-    } else if (v1behind.length > 0) {
-      result.push({ type: 'Opportunity', text: `${v1behind.length} device${v1behind.length > 1 ? 's are' : ' is'} one macOS version behind. Consider scheduling an upgrade in your next maintenance window.`, action: `Schedule a ${CURRENT_MACOS.name} upgrade campaign for ${v1behind.length} eligible devices.` })
     }
 
     const warnings_ = result.filter(r => r.type !== 'Healthy')
@@ -251,7 +242,7 @@ function AiInsightsButton({ devices, opts }: { devices: ApiDevice[]; opts: KpiFi
               <p className="text-xs font-black text-slate-700">AI Fleet Insights</p>
             </div>
             <p className="text-[0.65rem] text-slate-400 mt-0.5 leading-relaxed">
-              Real-time analysis of your macOS fleet — compliance status, patch gaps, device lifecycle risks, and recommended actions based on live device data.
+              Real-time analysis of your macOS fleet — available compliance data, profile results, patch gaps, device lifecycle risks, and recommended actions.
             </p>
           </div>
 
@@ -303,7 +294,6 @@ export function MacFleetReportsPage({ onBack }: Props) {
   const [loading,      setLoading]      = useState(true)
   const [lastUpdated,  setLastUpdated]  = useState<Date | null>(null)
   const [openKpi,      setOpenKpi]      = useState<KpiId | null>(null)
-  const [timeRange,    setTimeRange]    = useState<TimeRange>('all')
   const [staleThresh,  setStaleThresh]  = useState<StaleThreshold>(30)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
@@ -313,9 +303,19 @@ export function MacFleetReportsPage({ onBack }: Props) {
   const fetchDevices = useCallback(() => {
     setLoading(true)
     api.fetchAllDevicesRaw({ platform: 'macOS', limit: 500 })
-      .then(r => {
-        setDevices(r.devices)
+      .then(async r => {
+        // Patch data is best-effort: devices without a Patch Manager agent simply have no patchStatus.
+        const patch = await api.fetchPatchSystems('Mac').catch(() => null)
+        const withPatch = patch?.systems.length ? attachPatchStatus(r.devices, patch.systems) : r.devices
+        setDevices(attachPosture(withPatch))
         setLastUpdated(new Date())
+        // Profile results are slower (one call per device); fold them into the posture score when they arrive.
+        void api.fetchManageEngineFleetProfileResults()
+          .then(res => {
+            const byDevice = Object.fromEntries(res.results.map(x => [x.deviceId, x]))
+            setDevices(prev => attachPosture(prev, byDevice))
+          })
+          .catch(() => { /* posture stays calculated from the signals that are available */ })
       })
       .catch(() => {
         setDevices([])
@@ -354,7 +354,7 @@ export function MacFleetReportsPage({ onBack }: Props) {
   // ── Open KPI modal ─────────────────────────────────────────────────────────
   const openKpiModal = (id: KpiId) => setOpenKpi(id)
 
-  const appliedFilters = `Platform: macOS${timeRange !== 'all' ? ` | Last ${timeRange}` : ''} | Stale threshold: ${staleThresh}d`
+  const appliedFilters = `Platform: macOS | Stale threshold: ${staleThresh}d`
 
   return (
     <div className="flex flex-col gap-5 w-full page-enter">

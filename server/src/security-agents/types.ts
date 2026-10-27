@@ -42,6 +42,7 @@ export interface DeviceSecurityStatus {
   connector: Device['managementSource']
   lastSync: string
   scanTime: string
+  inventoryAvailable: boolean
   agents: SecurityAgentInfo[]
   overallHealth: OverallHealth
   securityScore: number
@@ -55,12 +56,14 @@ export type CoverageHealth = 'Healthy' | 'Warning' | 'Critical'
 export interface PlatformCoverage {
   platform: 'Windows' | 'macOS'
   totalDevices: number
+  inventoryAvailableDevices: number
+  inventoryUnavailableDevices: number
   falconInstalled: number
   zscalerInstalled: number
   falconMissing: number
   zscalerMissing: number
-  falconCoveragePct: number
-  zscalerCoveragePct: number
+  falconCoveragePct: number | null
+  zscalerCoveragePct: number | null
   health: CoverageHealth
 }
 

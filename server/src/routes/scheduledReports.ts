@@ -1,13 +1,18 @@
 // Scheduled report management routes.
-// Stores schedules in PostgreSQL; requires DATABASE_URL.
-// Actual job execution is triggered by a scheduler (node-cron or external).
+// Persists via server/src/store/scheduledReportsStore.ts — PostgreSQL when
+// DATABASE_URL is set, otherwise a JSON file, no database required.
+// Execution is driven by server/src/services/scheduledReportRunner.ts.
 
 import { Router } from 'express'
-import { isDbAvailable, query } from '../db/index.js'
+import * as store from '../store/scheduledReportsStore.js'
+import type { ReportFormat, ReportType } from '../store/scheduledReportsStore.js'
+import { runScheduledReportNow } from '../services/scheduledReportRunner.js'
+import { asyncHandler } from '../middleware/errorHandler.js'
 
 const router = Router()
 
-const NO_DB = { success: false, error: 'Database not configured. Set DATABASE_URL to enable scheduled reports.' }
+const VALID_TYPES: ReportType[] = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest']
+const VALID_FORMATS: ReportFormat[] = ['pdf', 'excel', 'csv', 'pptx']
 
 // Validate a 5-field cron expression (lightweight — not a full parser)
 function isValidCron(expr: string): boolean {
@@ -16,144 +21,89 @@ function isValidCron(expr: string): boolean {
 }
 
 // GET /api/scheduled-reports
-router.get('/', async (_req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.json({ success: true, data: [], message: NO_DB.error })
-
-    const result = await query(
-      `SELECT id, name, report_type, schedule_cron, format, recipients, is_active,
-              last_run_at, next_run_at, created_by, created_at
-       FROM scheduled_reports ORDER BY created_at DESC`
-    )
-    res.json({ success: true, data: result.rows })
-  } catch (err) { next(err) }
-})
+router.get('/', asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await store.listReports() })
+}))
 
 // GET /api/scheduled-reports/:id
-router.get('/:id', async (req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.status(503).json(NO_DB)
-
-    const result = await query('SELECT * FROM scheduled_reports WHERE id=$1', [req.params.id])
-    if (!result.rows[0]) return res.status(404).json({ success: false, error: 'Schedule not found' })
-    res.json({ success: true, data: result.rows[0] })
-  } catch (err) { next(err) }
-})
+router.get('/:id', asyncHandler(async (req, res) => {
+  const report = await store.getReport(req.params.id as string)
+  if (!report) { res.status(404).json({ success: false, error: 'Schedule not found' }); return }
+  res.json({ success: true, data: report })
+}))
 
 // POST /api/scheduled-reports
-router.post('/', async (req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.status(503).json(NO_DB)
+router.post('/', asyncHandler(async (req, res) => {
+  const {
+    name, report_type, schedule_cron,
+    format = 'excel', recipients = ['ITO_Endpoint@zinnia.com'], filters = {}, created_by,
+  } = req.body as {
+    name: string; report_type: string; schedule_cron: string
+    format?: string; recipients?: string[]; filters?: Record<string, unknown>; created_by?: string
+  }
 
-    const {
-      name, report_type, schedule_cron,
-      format = 'pdf', recipients = [], filters = {}, created_by,
-    } = req.body as {
-      name: string; report_type: string; schedule_cron: string
-      format?: string; recipients?: string[]; filters?: object; created_by?: string
-    }
+  if (!name || !report_type || !schedule_cron) {
+    res.status(400).json({ success: false, error: 'name, report_type, schedule_cron are required' }); return
+  }
+  if (!isValidCron(schedule_cron)) {
+    res.status(400).json({ success: false, error: 'schedule_cron must be a valid 5-field cron expression (e.g. "0 8 * * 1")' }); return
+  }
+  if (!VALID_TYPES.includes(report_type as ReportType)) {
+    res.status(400).json({ success: false, error: `report_type must be one of: ${VALID_TYPES.join(', ')}` }); return
+  }
+  if (!VALID_FORMATS.includes(format as ReportFormat)) {
+    res.status(400).json({ success: false, error: `format must be one of: ${VALID_FORMATS.join(', ')}` }); return
+  }
+  const slackChannelId = (filters as { slackChannelId?: unknown }).slackChannelId
+  const hasSlack = typeof slackChannelId === 'string' && slackChannelId.trim().length > 0
+  if (!hasSlack && recipients.length === 0) {
+    res.status(400).json({ success: false, error: 'A Slack channel or at least one email recipient is required.' }); return
+  }
 
-    if (!name || !report_type || !schedule_cron) {
-      return res.status(400).json({ success: false, error: 'name, report_type, schedule_cron are required' })
-    }
-    if (!isValidCron(schedule_cron)) {
-      return res.status(400).json({ success: false, error: 'schedule_cron must be a valid 5-field cron expression (e.g. "0 8 * * 1")' })
-    }
-
-    const validTypes    = ['compliance', 'inventory', 'app-deployment', 'risk', 'executive']
-    const validFormats  = ['pdf', 'excel', 'csv', 'pptx']
-    if (!validTypes.includes(report_type))  return res.status(400).json({ success: false, error: `report_type must be one of: ${validTypes.join(', ')}` })
-    if (!validFormats.includes(format))     return res.status(400).json({ success: false, error: `format must be one of: ${validFormats.join(', ')}` })
-
-    const result = await query(
-      `INSERT INTO scheduled_reports (name, report_type, schedule_cron, format, recipients, filters, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       RETURNING id, name, report_type, schedule_cron, format, created_at`,
-      [name, report_type, schedule_cron, format, JSON.stringify(recipients), JSON.stringify(filters), created_by ?? null]
-    )
-
-    res.status(201).json({ success: true, data: result.rows[0] })
-  } catch (err) { next(err) }
-})
+  const report = await store.createReport({
+    name, report_type: report_type as ReportType, schedule_cron, format: format as ReportFormat,
+    recipients, filters, created_by: created_by ?? null,
+  })
+  res.status(201).json({ success: true, data: report })
+}))
 
 // PUT /api/scheduled-reports/:id
-router.put('/:id', async (req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.status(503).json(NO_DB)
+router.put('/:id', asyncHandler(async (req, res) => {
+  const { name, schedule_cron, format, recipients, is_active } = req.body as {
+    name?: string; schedule_cron?: string; format?: string; recipients?: string[]; is_active?: boolean
+  }
 
-    const { name, schedule_cron, format, recipients, is_active } = req.body as {
-      name?: string; schedule_cron?: string; format?: string; recipients?: string[]; is_active?: boolean
-    }
+  if (schedule_cron && !isValidCron(schedule_cron)) {
+    res.status(400).json({ success: false, error: 'Invalid cron expression' }); return
+  }
 
-    if (schedule_cron && !isValidCron(schedule_cron)) {
-      return res.status(400).json({ success: false, error: 'Invalid cron expression' })
-    }
+  const patch: Record<string, unknown> = {}
+  if (name !== undefined) patch.name = name
+  if (schedule_cron !== undefined) patch.schedule_cron = schedule_cron
+  if (format !== undefined) patch.format = format
+  if (recipients !== undefined) patch.recipients = recipients
+  if (is_active !== undefined) patch.is_active = is_active
 
-    await query(
-      `UPDATE scheduled_reports SET
-         name          = COALESCE($2, name),
-         schedule_cron = COALESCE($3, schedule_cron),
-         format        = COALESCE($4, format),
-         recipients    = COALESCE($5, recipients),
-         is_active     = COALESCE($6, is_active),
-         updated_at    = NOW()
-       WHERE id = $1`,
-      [req.params.id, name ?? null, schedule_cron ?? null, format ?? null,
-       recipients ? JSON.stringify(recipients) : null, is_active ?? null]
-    )
-
-    res.json({ success: true })
-  } catch (err) { next(err) }
-})
+  const updated = await store.updateReport(req.params.id as string, patch)
+  if (!updated) { res.status(404).json({ success: false, error: 'Schedule not found' }); return }
+  res.json({ success: true })
+}))
 
 // DELETE /api/scheduled-reports/:id
-router.delete('/:id', async (req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.status(503).json(NO_DB)
-    await query('DELETE FROM scheduled_reports WHERE id=$1', [req.params.id])
-    res.json({ success: true })
-  } catch (err) { next(err) }
-})
+router.delete('/:id', asyncHandler(async (req, res) => {
+  await store.deleteReport(req.params.id as string)
+  res.json({ success: true })
+}))
 
-// POST /api/scheduled-reports/:id/run — trigger immediately (records a manual run)
-router.post('/:id/run', async (req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.status(503).json(NO_DB)
-
-    const schedResult = await query('SELECT * FROM scheduled_reports WHERE id=$1', [req.params.id])
-    const schedule    = schedResult.rows[0]
-    if (!schedule) return res.status(404).json({ success: false, error: 'Schedule not found' })
-
-    const runResult = await query(
-      `INSERT INTO report_runs (scheduled_report_id, format, triggered_by)
-       VALUES ($1,$2,'manual') RETURNING id`,
-      [schedule.id, schedule.format]
-    )
-
-    await query('UPDATE scheduled_reports SET last_run_at=NOW() WHERE id=$1', [schedule.id])
-
-    res.json({
-      success:     true,
-      runId:       runResult.rows[0]?.id,
-      reportType:  schedule.report_type,
-      format:      schedule.format,
-      message:     'Report queued for immediate generation',
-    })
-  } catch (err) { next(err) }
-})
+// POST /api/scheduled-reports/:id/run — generate and deliver the selected report now.
+router.post('/:id/run', asyncHandler(async (req, res) => {
+  const delivered = await runScheduledReportNow(req.params.id as string)
+  res.json({ success: true, runId: delivered.runId, message: `Delivered ${delivered.filename} (${delivered.rows} rows).` })
+}))
 
 // GET /api/scheduled-reports/:id/runs — run history for a schedule
-router.get('/:id/runs', async (req, res, next) => {
-  try {
-    if (!isDbAvailable()) return res.json({ success: true, data: [] })
-
-    const result = await query(
-      `SELECT id, status, format, record_count, file_size_bytes, error_message, triggered_by, started_at, completed_at
-       FROM report_runs WHERE scheduled_report_id=$1 ORDER BY started_at DESC LIMIT 50`,
-      [req.params.id]
-    )
-    res.json({ success: true, data: result.rows })
-  } catch (err) { next(err) }
-})
+router.get('/:id/runs', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await store.listReportRuns(req.params.id as string) })
+}))
 
 export default router

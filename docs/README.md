@@ -41,7 +41,8 @@ docs/
 - [Local Setup](06-development/SETUP.md) — install, run, mock data mode
 - [Environment Variables](06-development/README.md) — all env vars explained
 - [Quick Modifications Cookbook](06-development/QUICK-MODS.md) — common change recipes
-- [IIS Deployment Guide](06-development/IIS-DEPLOYMENT.md) — step-by-step, no prior IIS experience needed ← **New**
+- [IIS Deployment Guide](06-development/IIS-DEPLOYMENT.md) — step-by-step, no prior IIS experience needed
+- [Zipping for DeployHub](06-development/ZIP-FOR-DEPLOYHUB.md) — SOP for packaging source for upload ← **New**
 
 ### Build or modify something
 - [Frontend Components](02-frontend/COMPONENTS.md) — every component, props, location
@@ -65,8 +66,9 @@ docs/
 - [Mac Fleet Reports](07-features/MAC-FLEET-REPORTS.md) ← **New**
 - [Intune Devices Page](07-features/ENDPOINT-PAGES.md) ← **New**
 - [Automation Engine](07-features/AUTOMATION-ENGINE.md) ← **New**
+- [App Intelligence](07-features/APP-INTELLIGENCE.md)
+- [Stale Devices](07-features/STALE-DEVICES.md)
 - [Entra Intelligence Dashboard](07-features/ENTRA-INTELLIGENCE.md) ← **New**
-- [Users Management](07-features/USERS.md)
 
 ### Design & UI guidelines
 - [Design System](08-design/DESIGN-SYSTEM.md) ← **New**
@@ -93,8 +95,8 @@ docs/
 ## Complete Page Map
 
 Sidebar navigation groups and pages, from `navItems` in `src/data/dashboardData.ts` and the page
-router in `src/App.tsx`. A few pages (Entra Intelligence, Mac Fleet Reports, User Intelligence,
-Documentation, Scheduled Reports) are reached by drill-down from another page rather than a direct
+router in `src/App.tsx`. A few pages (Entra Intelligence, Mac Fleet Reports,
+Documentation) are reached by drill-down from another page rather than a direct
 sidebar entry, and are noted as such below.
 
 ### Overview
@@ -110,6 +112,8 @@ sidebar entry, and are noted as such below.
 | Mac Devices | `Mac Devices` | ManageEngine macOS fleet — devices, apps, security, automation, reports |
 | Intune Devices | `Intune Devices` | Microsoft Intune Windows/cross-platform device dashboard |
 | ManageEngine App Inventory | `ManageEngine App Inventory` | Cross-platform app catalog + install counts |
+| Stale Devices | `Stale Devices` | Read-only list of devices with no verified Intune / Endpoint Central check-in for 21+ days — see [STALE-DEVICES.md](07-features/STALE-DEVICES.md) |
+| App Intelligence | `ManageEngine App Inventory` → Verified updates tab | Read-only Intune + ManageEngine app correlation with verified latest versions and packaging decisions — see [APP-INTELLIGENCE.md](07-features/APP-INTELLIGENCE.md) |
 | Mac Fleet Reports | `Mac Fleet Reports` | KPI-card fleet report, reached from Mac Devices — see [MAC-FLEET-REPORTS.md](07-features/MAC-FLEET-REPORTS.md) |
 
 ### Security & Compliance
@@ -119,13 +123,6 @@ sidebar entry, and are noted as such below.
 | Security Posture | `Security Posture` | Fleet-wide security scoring |
 | Role Activity Audit | `Role Activity Audit` | Admin/role action audit trail |
 | Security Policies | `Security Policies` | Compliance policy configuration |
-
-### Users & Identity
-
-| Page | Route key | Description |
-|---|---|---|
-| Users | `Users` | User management with risk scoring and device associations |
-| User Intelligence | `User Intelligence` | Per-user drill-down, reached from Users |
 
 ### Automation
 
@@ -139,18 +136,19 @@ sidebar entry, and are noted as such below.
 |---|---|---|
 | Reports & Analytics | `Reports & Analytics` | Report hub |
 | Report Builder | `Report Builder` | Custom report builder |
-| Scheduled Reports | `Scheduled Reports` | Scheduled report delivery, reached from Reports & Analytics |
+| Scheduled Reports | `Scheduled Reports` | Scheduled report delivery |
 
-### Intelligence Platform
+### Policy & Risk
 
 | Page | Route key | Description |
 |---|---|---|
-| Intelligence Hub | `Intelligence Hub` | Cross-cutting intelligence dashboard |
-| Compliance Intelligence | `Compliance Intelligence` | AI-generated executive compliance summary |
 | Policy Conflicts | `Policy Conflicts` | Conflicting/overlapping policy detection |
 | Risk Scoring | `Risk Scoring` | Per-device risk scores, AI narrative, Jira ticket + Confluence article actions |
-| Report Builder | `Report Builder` | (see Analytics & Reports) |
-| Audit Log | `Audit Log` | Intune audit log export/schedule |
+
+### Other
+
+| Page | Route key | Description |
+|---|---|---|
 | Entra Intelligence | `Entra Intelligence` | Microsoft Entra/Intune device platform distribution + stale check-in — see [ENTRA-INTELLIGENCE.md](07-features/ENTRA-INTELLIGENCE.md) |
 
 ### Platform

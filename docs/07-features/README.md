@@ -12,7 +12,8 @@ Each feature in the dashboard has its own deep-dive doc.
 | Mac Devices (ManageEngine) | `Mac Devices` | Live | [mac-devices.md](mac-devices.md) |
 | Mac Fleet Reports | `Mac Fleet Reports` | Live | [MAC-FLEET-REPORTS.md](MAC-FLEET-REPORTS.md) |
 | Intune Devices | `Intune Devices` | Live | [ENDPOINT-PAGES.md](ENDPOINT-PAGES.md) |
-| Users | `Users` | Live | [USERS.md](USERS.md) |
+| Stale Devices | `Stale Devices` | Live | [STALE-DEVICES.md](STALE-DEVICES.md) |
+| App Intelligence | `ManageEngine App Inventory` → **Verified updates** tab | Live | [APP-INTELLIGENCE.md](APP-INTELLIGENCE.md) |
 | Automation Engine | `Automation` | Live | [AUTOMATION-ENGINE.md](AUTOMATION-ENGINE.md) |
 | Entra Intelligence | `Entra Intelligence` | Live | [ENTRA-INTELLIGENCE.md](ENTRA-INTELLIGENCE.md) |
 | Endpoint Operations Copilot | (cross-cutting) | Live | [AI-COPILOT.md](AI-COPILOT.md) |

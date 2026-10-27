@@ -23,6 +23,7 @@
 // double-checks inside write-tool preview logic, not as the primary gate.
 
 import { isDbAvailable, query } from '../db/index.js'
+import * as scheduledReportsStore from '../store/scheduledReportsStore.js'
 import { credentialsFromEnv, getManagedDevices, getCompliancePolicies, getConfigurationProfiles } from './graphApi.js'
 import { batchComputeRiskScores } from './riskScoring.js'
 import { detectConflicts, conflictSummary } from './policyConflict.js'
@@ -47,6 +48,8 @@ export interface CopilotCitation {
   source: string       // 'Intune' | 'Entra' | 'ManageEngine' | 'Jira' | 'internal' | ...
   recordId: string
   freshness: string     // ISO timestamp of when the underlying tool call ran
+  /** Present only for a public web source. */
+  url?: string
 }
 
 export interface ToolContext {
@@ -87,6 +90,7 @@ export interface ToolDefinition {
 const SECRET_PATTERNS: RegExp[] = [
   /\bBearer\s+[A-Za-z0-9\-_.=]{10,}\b/gi,
   /\bsk-[A-Za-z0-9]{16,}\b/g,                      // OpenAI-style API keys
+  /\bAIza[A-Za-z0-9_-]{20,}\b/g,                   // Google AI Studio API keys
   /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/gi,            // Slack tokens
   /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g,               // GitHub tokens
   /\bglpat-[A-Za-z0-9-_]{16,}\b/g,                 // GitLab tokens
@@ -275,23 +279,18 @@ const getEndpointProtectionCoverage: ToolDefinition = {
 
 const getScheduledReports: ToolDefinition = {
   name: 'get_scheduled_reports',
-  description: 'List configured scheduled reports (compliance, inventory, app-deployment, risk, executive). Requires DATABASE_URL.',
+  description: 'List configured scheduled reports (critical patching, stale devices, compliance, inventory).',
   rbac: 'read',
   parameters: { type: 'object', properties: {} },
   run: async () => {
-    if (!isDbAvailable()) {
-      return { result: { configured: false, message: 'Scheduled reports require DATABASE_URL, which is not configured.', data: [] }, citations: [] }
-    }
-    const result = await query<{
-      id: string; name: string; report_type: string; schedule_cron: string; format: string
-      is_active: boolean; last_run_at: string | null; next_run_at: string | null
-    }>(
-      `SELECT id, name, report_type, schedule_cron, format, is_active, last_run_at, next_run_at
-       FROM scheduled_reports ORDER BY created_at DESC LIMIT 50`
-    )
+    const reports = (await scheduledReportsStore.listReports()).slice(0, 50)
     const freshness = now()
-    const citations: CopilotCitation[] = result.rows.map(r => ({ source: 'internal', recordId: r.id, freshness }))
-    return { result: { data: result.rows }, citations }
+    const citations: CopilotCitation[] = reports.map(r => ({ source: 'internal', recordId: r.id, freshness }))
+    const data = reports.map(r => ({
+      id: r.id, name: r.name, report_type: r.report_type, schedule_cron: r.schedule_cron, format: r.format,
+      is_active: r.is_active, last_run_at: r.last_run_at, next_run_at: r.next_run_at,
+    }))
+    return { result: { data }, citations }
   },
 }
 

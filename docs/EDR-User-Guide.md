@@ -1,4 +1,4 @@
-# Endpoint Detection & Response (EDR) — User Guide
+Detection & Response (EDR) — User Guide
 
 > **Document type:** UX Design Reference · Quick-View Guide  
 > **Product:** iru Security Platform  

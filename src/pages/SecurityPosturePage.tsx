@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Shield, HardDrive, Flame, Download, UserCheck, ClipboardCheck,
-  AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Minus,
-  Clock, Target, Globe, Monitor, Server,
-  X, Info, Wrench, ChevronDown,
+  Shield, HardDrive, Download, ClipboardCheck, CheckCircle, AlertTriangle, Clock,
+  Globe, Monitor, Server, X, Info, Wrench, ChevronDown, RefreshCw, Search,
+  FileDown, HelpCircle,
 } from 'lucide-react'
+import { api } from '../api'
+import type { PillarDeviceList, PillarDevicesParams, PosturePillar, PosturePillarDevice, PostureSource, SecurityPostureResult } from '../api'
 import { EndpointProtectionCoverage } from '../components/security/EndpointProtectionCoverage'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
+import { deriveRisks, describeSegment, devicesToCsv, scoreBand, type PostureRisk, type RiskSeverity, type SegmentStatus } from '../lib/securityPosture'
+import { CopyText } from '../components/ui/CopyText'
 
 // ─── Remediation step library ──────────────────────────────────────────────────
 
@@ -73,6 +78,12 @@ const PILLAR_REMEDIATION: Record<string, string[]> = {
     'Set a registration campaign in Entra ID: Security → Authentication Methods → Registration Campaign.',
     'After grace period, set CA policy to Block for non-MFA-enrolled users.',
   ],
+  checkin: [
+    'Filter the device list by last check-in older than 7 days and group by user and platform.',
+    'Ask owners of long-offline devices to connect to the network/VPN and open the Company Portal or MDM agent to sync.',
+    'Force a sync from the MDM console (Intune → Devices → Sync, or ManageEngine → Devices → Scan).',
+    'Retire or wipe devices that have been offline for more than 30 days and are confirmed lost or replaced.',
+  ],
   compliance: [
     'Review compliance policy failures in Intune: Devices → Monitor → Device Compliance or ManageEngine: Devices → Compliance.',
     'Identify the most common failing policies and prioritize those for remediation.',
@@ -90,46 +101,11 @@ function getPillarSteps(pillarId: string): string[] {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type MDMSource = 'all' | 'intune' | 'manageengine'
-
-interface Pillar {
-  id: string
-  label: string
-  score: number
-  passing: number
-  failing: number
-  trend: string
-  positive: boolean
-  color: string
-  icon: typeof Shield
-  description: string
-  weight: number
-}
-
-interface RiskItem {
-  severity: 'Critical' | 'High' | 'Medium' | 'Low'
-  title: string
-  pillar: string
-  count: number
-}
-
 interface CisControl {
   number: number
   name: string
   coverage: number
   status: 'Implemented' | 'Partial' | 'Not Started'
-}
-
-interface SourceConfig {
-  id: MDMSource
-  label: string
-  shortLabel: string
-  icon: typeof Globe
-  deviceCount: number
-  platform: string
-  pillars: Pillar[]
-  risks: RiskItem[]
-  lastAssessed: string
 }
 
 // ─── CIS Controls (org-level, shared) ─────────────────────────────────────────
@@ -147,137 +123,36 @@ const CIS_CONTROLS: CisControl[] = [
   { number: 10, name: 'Security Awareness Training',     coverage: 61, status: 'Partial'     },
 ]
 
-// ─── Source Configurations ─────────────────────────────────────────────────────
+// ─── Pillar presentation ───────────────────────────────────────────────────────
 
-const SOURCE_CONFIGS: Record<MDMSource, SourceConfig> = {
-  all: {
-    id: 'all',
-    label: 'All Sources',
-    shortLabel: 'All',
-    icon: Globe,
-    deviceCount: 447,
-    platform: 'All Platforms',
-    lastAssessed: 'May 11, 2026 at 09:14 AM',
-    pillars: [
-      { id: 'encryption', label: 'Disk Encryption', score: 87, passing: 389, failing: 58,  trend: '+3%',  positive: true,  color: 'emerald', icon: HardDrive,      description: 'FileVault & BitLocker coverage',         weight: 0.20 },
-      { id: 'edr',        label: 'EDR / Antivirus', score: 93, passing: 416, failing: 31,  trend: '+1%',  positive: true,  color: 'blue',    icon: Shield,         description: 'CrowdStrike & Defender active',           weight: 0.22 },
-      { id: 'firewall',   label: 'Firewall',         score: 96, passing: 429, failing: 18,  trend: '→ 0%', positive: true,  color: 'sky',     icon: Flame,          description: 'Host-based firewall enabled',             weight: 0.15 },
-      { id: 'patching',   label: 'OS Patching',      score: 74, passing: 331, failing: 116, trend: '-2%',  positive: false, color: 'amber',   icon: Download,       description: 'Critical patches applied',                weight: 0.22 },
-      { id: 'identity',   label: 'Identity & MFA',   score: 89, passing: 398, failing: 49,  trend: '+5%',  positive: true,  color: 'violet',  icon: UserCheck,      description: 'MFA enrolled & active',                   weight: 0.11 },
-      { id: 'compliance', label: 'MDM Compliance',   score: 91, passing: 407, failing: 40,  trend: '+2%',  positive: true,  color: 'green',   icon: ClipboardCheck, description: 'Policy & config compliance',               weight: 0.10 },
-    ],
-    risks: [
-      { severity: 'Critical', title: '117 devices missing critical OS updates',          pillar: 'Patching',   count: 117 },
-      { severity: 'High',     title: '58 devices without disk encryption enabled',       pillar: 'Encryption', count: 58  },
-      { severity: 'High',     title: '49 users without MFA enrolled',                   pillar: 'Identity',   count: 49  },
-      { severity: 'Medium',   title: '31 endpoints with inactive EDR agent',             pillar: 'EDR',        count: 31  },
-      { severity: 'Medium',   title: '18 devices with firewall disabled',                pillar: 'Firewall',   count: 18  },
-      { severity: 'Low',      title: '12 devices overdue for MDM check-in (>7 days)',    pillar: 'MDM',        count: 12  },
-    ],
-  },
-
-  intune: {
-    id: 'intune',
-    label: 'Microsoft Intune',
-    shortLabel: 'Intune',
-    icon: Monitor,
-    deviceCount: 212,
-    platform: 'Windows',
-    lastAssessed: 'May 12, 2026 at 07:22 AM',
-    pillars: [
-      { id: 'bitlocker',   label: 'BitLocker',         score: 82, passing: 174, failing: 38, trend: '+2%',  positive: true,  color: 'amber',  icon: HardDrive,      description: 'BitLocker encryption on Windows',        weight: 0.20 },
-      { id: 'defender',    label: 'MS Defender',       score: 91, passing: 193, failing: 19, trend: '+1%',  positive: true,  color: 'blue',   icon: Shield,         description: 'Microsoft Defender active & updated',    weight: 0.22 },
-      { id: 'winfirewall', label: 'Windows Firewall',  score: 95, passing: 201, failing: 11, trend: '→ 0%', positive: true,  color: 'sky',    icon: Flame,          description: 'Firewall enabled (all profiles)',        weight: 0.15 },
-      { id: 'winupdate',   label: 'Windows Update',    score: 68, passing: 144, failing: 68, trend: '-2%',  positive: false, color: 'amber',  icon: Download,       description: 'Critical patches via WU / WSUS',        weight: 0.22 },
-      { id: 'aadmfa',      label: 'Azure AD MFA',      score: 87, passing: 184, failing: 28, trend: '+4%',  positive: true,  color: 'violet', icon: UserCheck,      description: 'Entra ID MFA enrolled & enforced',      weight: 0.11 },
-      { id: 'intunecomp',  label: 'Intune Compliance', score: 90, passing: 191, failing: 21, trend: '+2%',  positive: true,  color: 'green',  icon: ClipboardCheck, description: 'Intune compliance policies passing',     weight: 0.10 },
-    ],
-    risks: [
-      { severity: 'Critical', title: '68 Windows devices missing critical OS patches',    pillar: 'Patching',   count: 68 },
-      { severity: 'High',     title: '38 Windows devices without BitLocker enabled',      pillar: 'Encryption', count: 38 },
-      { severity: 'High',     title: '28 users without Azure AD MFA enrolled',            pillar: 'Identity',   count: 28 },
-      { severity: 'Medium',   title: '19 endpoints with Microsoft Defender inactive',     pillar: 'EDR',        count: 19 },
-      { severity: 'Medium',   title: '11 devices with Windows Firewall disabled',         pillar: 'Firewall',   count: 11 },
-      { severity: 'Low',      title: '8 devices overdue for Intune check-in (>7 days)',   pillar: 'MDM',        count: 8  },
-    ],
-  },
-
-  manageengine: {
-    id: 'manageengine',
-    label: 'ManageEngine',
-    shortLabel: 'ME',
-    icon: Server,
-    deviceCount: 235,
-    platform: 'Mixed (Windows & macOS)',
-    lastAssessed: 'May 11, 2026 at 06:30 PM',
-    pillars: [
-      { id: 'me_encrypt', label: 'Disk Encryption', score: 90, passing: 211, failing: 24, trend: '+1%',  positive: true,  color: 'amber',  icon: HardDrive,      description: 'Full-disk encryption coverage (BitLocker & FileVault)', weight: 0.20 },
-      { id: 'me_av',      label: 'EDR / AV Protection', score: 94, passing: 222, failing: 13, trend: '+2%',  positive: true,  color: 'blue',   icon: Shield,         description: 'Antivirus & endpoint protection active', weight: 0.22 },
-      { id: 'me_fw',      label: 'Host Firewall',   score: 96, passing: 226, failing: 9,  trend: '→ 0%', positive: true,  color: 'sky',    icon: Flame,          description: 'Host-based firewall enforcement',        weight: 0.15 },
-      { id: 'me_patch',   label: 'OS Patching',     score: 79, passing: 185, failing: 50, trend: '-3%',  positive: false, color: 'amber',  icon: Download,       description: 'Patches via ManageEngine UEM',           weight: 0.22 },
-      { id: 'me_mfa',     label: 'MFA Enrollment',  score: 90, passing: 212, failing: 23, trend: '+3%',  positive: true,  color: 'violet', icon: UserCheck,      description: 'Multi-factor authentication enrolled',   weight: 0.11 },
-      { id: 'me_comp',    label: 'MDM Compliance',  score: 91, passing: 215, failing: 20, trend: '+1%',  positive: true,  color: 'green',  icon: ClipboardCheck, description: 'ManageEngine UEM policy compliance',     weight: 0.10 },
-    ],
-    risks: [
-      { severity: 'Critical', title: '50 devices missing critical OS patches',                pillar: 'Patching',   count: 50 },
-      { severity: 'High',     title: '24 devices without full-disk encryption enabled',       pillar: 'Encryption', count: 24 },
-      { severity: 'High',     title: '23 users without MFA enrolled',                         pillar: 'Identity',   count: 23 },
-      { severity: 'Medium',   title: '13 endpoints with EDR / antivirus protection inactive', pillar: 'AV',         count: 13 },
-      { severity: 'Medium',   title: '9 devices with host firewall disabled',                 pillar: 'Firewall',   count: 9  },
-      { severity: 'Low',      title: '7 devices overdue for MDM check-in (>10 days)',         pillar: 'MDM',        count: 7  },
-    ],
-  },
+const PILLAR_META: Record<PosturePillar['id'], { icon: typeof Shield; bar: string; iconBg: string; icon_c: string }> = {
+  encryption: { icon: HardDrive,      bar: 'bg-emerald-500', iconBg: 'bg-emerald-100', icon_c: 'text-emerald-600' },
+  patching:   { icon: Download,       bar: 'bg-amber-500',   iconBg: 'bg-amber-100',   icon_c: 'text-amber-600'   },
+  compliance: { icon: ClipboardCheck, bar: 'bg-green-500',   iconBg: 'bg-green-100',   icon_c: 'text-green-600'   },
+  checkin:    { icon: Clock,          bar: 'bg-orange-500',  iconBg: 'bg-orange-100',  icon_c: 'text-orange-600'  },
 }
 
-// ─── Source tab styling ────────────────────────────────────────────────────────
+const SOURCE_TABS: { id: PostureSource; label: string; icon: typeof Globe }[] = [
+  { id: 'all',          label: 'All Sources',      icon: Globe   },
+  { id: 'intune',       label: 'Microsoft Intune', icon: Monitor },
+  { id: 'manageengine', label: 'ManageEngine',     icon: Server  },
+]
 
-function sourceTabStyle(src: MDMSource, isActive: boolean): { tab: string; count: string; dot: string } {
-  if (!isActive) {
-    return {
-      tab: 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700',
-      count: 'bg-slate-100 text-slate-500',
-      dot: 'bg-slate-300',
-    }
-  }
-  switch (src) {
-    case 'all':          return { tab: 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm', count: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400' }
-    case 'intune':       return { tab: 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm', count: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400' }
-    case 'manageengine': return { tab: 'border-lime-500 bg-lime-50 text-lime-700 shadow-sm',       count: 'bg-lime-100 text-lime-700',     dot: 'bg-lime-500'   }
+function scoreColor(score: number | null): { stroke: string; text: string; bg: string; border: string } {
+  switch (scoreBand(score)) {
+    case 'good': return { stroke: '#22c55e', text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' }
+    case 'fair': return { stroke: '#f59e0b', text: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-amber-200'   }
+    case 'poor': return { stroke: '#ef4444', text: 'text-red-600',     bg: 'bg-red-50',     border: 'border-red-200'     }
+    default:     return { stroke: '#cbd5e1', text: 'text-slate-500',   bg: 'bg-slate-50',   border: 'border-slate-200'   }
   }
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function computeScore(pillars: Pillar[]): number {
-  return Math.round(pillars.reduce((acc, p) => acc + p.score * p.weight, 0))
+function scoreGrade(score: number | null): string {
+  if (score === null) return '—'
+  return score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : 'D'
 }
 
-function scoreGrade(score: number): string {
-  if (score >= 90) return 'A'
-  if (score >= 80) return 'B'
-  if (score >= 70) return 'C'
-  return 'D'
-}
-
-function scoreColor(score: number): { stroke: string; text: string; bg: string; border: string } {
-  if (score >= 90) return { stroke: '#22c55e', text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' }
-  if (score >= 70) return { stroke: '#f59e0b', text: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-amber-200'   }
-  return               { stroke: '#ef4444', text: 'text-red-600',     bg: 'bg-red-50',     border: 'border-red-200'     }
-}
-
-function pillarColorClasses(color: string): { bar: string; icon: string; iconBg: string; badge: string } {
-  const map: Record<string, { bar: string; icon: string; iconBg: string; badge: string }> = {
-    emerald: { bar: 'bg-emerald-500', icon: 'text-emerald-600', iconBg: 'bg-emerald-100', badge: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-    blue:    { bar: 'bg-orange-500',  icon: 'text-orange-600',  iconBg: 'bg-orange-100',  badge: 'bg-orange-50 border-orange-200 text-orange-700'    },
-    sky:     { bar: 'bg-orange-500',  icon: 'text-orange-600',  iconBg: 'bg-orange-100',  badge: 'bg-orange-50 border-orange-200 text-orange-700'    },
-    amber:   { bar: 'bg-amber-500',   icon: 'text-amber-600',   iconBg: 'bg-amber-100',   badge: 'bg-amber-50 border-amber-200 text-amber-700'       },
-    violet:  { bar: 'bg-lime-500',    icon: 'text-lime-600',    iconBg: 'bg-lime-100',    badge: 'bg-lime-50 border-lime-200 text-lime-700'          },
-    green:   { bar: 'bg-green-500',   icon: 'text-green-600',   iconBg: 'bg-green-100',   badge: 'bg-green-50 border-green-200 text-green-700'       },
-  }
-  return map[color] ?? map['sky']
-}
-
-function severityCfg(severity: RiskItem['severity']): { badge: string; dot: string } {
+function severityCfg(severity: RiskSeverity): { badge: string; dot: string } {
   switch (severity) {
     case 'Critical': return { badge: 'bg-red-100 border-red-200 text-red-700',         dot: 'bg-red-500'    }
     case 'High':     return { badge: 'bg-orange-100 border-orange-200 text-orange-700', dot: 'bg-orange-500' }
@@ -285,6 +160,16 @@ function severityCfg(severity: RiskItem['severity']): { badge: string; dot: stri
     case 'Low':      return { badge: 'bg-slate-100 border-slate-200 text-slate-600',   dot: 'bg-slate-400'  }
   }
 }
+
+function downloadCsv(filename: string, devices: PosturePillarDevice[]): void {
+  const blob = new Blob([devicesToCsv(devices)], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename })
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const fmtTime = (iso: string): string => new Date(iso).toLocaleString()
 
 function cisBadge(status: CisControl['status']): string {
   switch (status) {
@@ -303,7 +188,7 @@ function cisCoverageColor(coverage: number): string {
 
 // ─── SVG Gauge ─────────────────────────────────────────────────────────────────
 
-function ScoreGauge({ score }: { score: number }) {
+function ScoreGauge({ score }: { score: number | null }) {
   const radius = 44
   const circumference = 2 * Math.PI * radius
   const { stroke, text } = scoreColor(score)
@@ -317,14 +202,14 @@ function ScoreGauge({ score }: { score: number }) {
           <circle
             cx="60" cy="60" r={radius} fill="none" stroke={stroke}
             strokeWidth="10" strokeLinecap="round"
-            strokeDasharray={`${circumference * score / 100} ${circumference}`}
+            strokeDasharray={`${circumference * (score ?? 0) / 100} ${circumference}`}
             strokeDashoffset={0}
             transform="rotate(-90 60 60)"
             style={{ transition: 'stroke-dasharray 0.8s ease' }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-3xl font-black ${text}`}>{score}</span>
+          <span className={`text-3xl font-black ${text}`}>{score ?? 'N/A'}</span>
           <span className={`text-xs font-bold ${text} -mt-0.5`}>{grade}</span>
         </div>
       </div>
@@ -335,56 +220,73 @@ function ScoreGauge({ score }: { score: number }) {
 
 // ─── Pillar Card ───────────────────────────────────────────────────────────────
 
-function PillarCard({ pillar, isSelected, onClick }: { pillar: Pillar; isSelected: boolean; onClick: () => void }) {
-  const cls = pillarColorClasses(pillar.color)
-  const PillarIcon = pillar.icon
-  const TrendIcon = pillar.positive
-    ? (pillar.trend.startsWith('→') ? Minus : TrendingUp)
-    : TrendingDown
+function PillarCard({ pillar, isSelected, onClick }: { pillar: PosturePillar; isSelected: boolean; onClick: () => void }) {
+  const meta = PILLAR_META[pillar.id]
+  const Icon = meta.icon
+  const coveragePct = pillar.inScope ? Math.round((pillar.assessed / pillar.inScope) * 100) : 0
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`text-left bg-white rounded-2xl border shadow-sm px-4 py-4 flex flex-col gap-3 transition-all hover:shadow-md ${isSelected ? 'border-orange-400 ring-2 ring-orange-200' : 'border-slate-200 hover:border-orange-200'}`}
+      aria-expanded={isSelected}
+      aria-label={`${pillar.label}: ${pillar.scorePct === null ? 'no data' : `${pillar.scorePct}%`}. ${isSelected ? 'Hide' : 'Show'} details`}
+      className={`text-left bg-white rounded-2xl border shadow-sm px-4 py-4 flex flex-col gap-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${isSelected ? 'is-selected' : 'border-slate-200 hover:border-orange-200'}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className={`rounded-xl p-2 ${isSelected ? 'bg-orange-100' : cls.iconBg} flex-shrink-0 transition-colors`}>
-            <PillarIcon className={`h-4 w-4 ${isSelected ? 'text-orange-600' : cls.icon}`} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-800">{pillar.label}</p>
-            <p className="text-[0.65rem] text-slate-400 mt-0.5">{pillar.description}</p>
-          </div>
+      <div className="flex items-start gap-2.5">
+        <div className={`rounded-xl p-2 ${isSelected ? 'bg-sky-100' : meta.iconBg} flex-shrink-0 transition-colors`}>
+          <Icon className={`h-4 w-4 ${isSelected ? 'text-orange-600' : meta.icon_c}`} />
         </div>
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.62rem] font-bold flex-shrink-0 ${cls.badge}`}>
-          <TrendIcon className="h-2.5 w-2.5" />
-          {pillar.trend}
-        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-slate-800">{pillar.label}</p>
+          <p className="text-[0.65rem] text-slate-400 mt-0.5">{pillar.description}</p>
+        </div>
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[0.65rem] font-semibold text-slate-500">Coverage</span>
-          <span className="text-sm font-black text-slate-800">{pillar.score}%</span>
+          <span className="text-[0.65rem] font-semibold text-slate-500">Passing</span>
+          <span className="text-sm font-black text-slate-800">{pillar.scorePct === null ? 'N/A' : `${pillar.scorePct}%`}</span>
         </div>
         <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-          <div className={`h-2 rounded-full ${cls.bar} transition-all duration-700`} style={{ width: `${pillar.score}%` }} />
+          <div className={`h-2 rounded-full ${meta.bar} transition-all duration-700`} style={{ width: `${pillar.scorePct ?? 0}%` }} />
         </div>
       </div>
 
-      <div className="flex items-center gap-3 pt-0.5">
+      <p className="text-[0.62rem] text-slate-500">
+        {pillar.assessed.toLocaleString()} of {pillar.inScope.toLocaleString()} in-scope devices assessed
+        {pillar.inScope > 0 && <span className="text-slate-400"> ({coveragePct}% coverage)</span>}
+      </p>
+
+      {pillar.topFindings.length > 0 && (
+        <div className="rounded-lg bg-red-50/60 border border-red-100 px-2.5 py-1.5">
+          <p className="text-[0.58rem] font-bold uppercase tracking-wide text-red-700 mb-0.5">Top missing critical patches</p>
+          <ul className="space-y-0.5">
+            {pillar.topFindings.slice(0, 2).map(f => (
+              <li key={f.label} className="flex items-start justify-between gap-2 text-[0.62rem] text-slate-600">
+                <span className="line-clamp-2 min-w-0">{f.label}</span>
+                <span className="flex-shrink-0 font-semibold text-red-700">{f.devices.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 pt-0.5 flex-wrap">
         <div className="flex items-center gap-1">
           <CheckCircle className="h-3 w-3 text-emerald-500" />
           <span className="text-[0.68rem] font-semibold text-slate-700">{pillar.passing.toLocaleString()}</span>
           <span className="text-[0.62rem] text-slate-400">passing</span>
         </div>
-        <div className="h-3 w-px bg-slate-200" />
         <div className="flex items-center gap-1">
           <AlertTriangle className="h-3 w-3 text-red-400" />
           <span className="text-[0.68rem] font-semibold text-slate-700">{pillar.failing.toLocaleString()}</span>
           <span className="text-[0.62rem] text-slate-400">failing</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <HelpCircle className="h-3 w-3 text-slate-400" />
+          <span className="text-[0.68rem] font-semibold text-slate-700">{pillar.notReported.toLocaleString()}</span>
+          <span className="text-[0.62rem] text-slate-400">not reported</span>
         </div>
         <div className="ml-auto flex items-center gap-1 text-[0.6rem] text-slate-400">
           <ChevronDown className={`h-3 w-3 transition-transform ${isSelected ? 'rotate-180 text-orange-500' : ''}`} />
@@ -395,69 +297,311 @@ function PillarCard({ pillar, isSelected, onClick }: { pillar: Pillar; isSelecte
   )
 }
 
+// ─── Drill-down filter ─────────────────────────────────────────────────────────
+
+interface Segment { platform?: string; sourceKey?: string; status?: SegmentStatus }
+const DEFAULT_SEGMENT: Segment = { status: 'fail' }
+
+const STATUS_STYLE: Record<SegmentStatus, { label: string; chip: string }> = {
+  pass:    { label: 'Passing',      chip: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  fail:    { label: 'Failing',      chip: 'bg-red-50 text-red-700 border-red-200'             },
+  unknown: { label: 'Not reported', chip: 'bg-slate-50 text-slate-500 border-slate-200'       },
+}
+
+const sameSegment = (a: Segment, b: Segment): boolean =>
+  a.platform === b.platform && a.sourceKey === b.sourceKey && a.status === b.status
+
+/** A count that opens the matching devices below. Highlights while its segment is the active one. */
+function CountButton({ n, label, active, tone, onClick }: { n: number; label: string; active: boolean; tone: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} disabled={n === 0} aria-pressed={active} aria-label={label}
+      className={`rounded-md px-1.5 py-0.5 font-semibold tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 disabled:cursor-default disabled:opacity-50 ${tone} ${active ? 'bg-orange-100 ring-1 ring-orange-400' : 'hover:bg-slate-100 underline decoration-dotted underline-offset-2'}`}>
+      {n.toLocaleString()}
+    </button>
+  )
+}
+
+function BreakdownTable({ title, dimension, rows, segment, onSelect }: {
+  title: string
+  dimension: 'platform' | 'sourceKey'
+  rows: PosturePillar['byPlatform']
+  segment: Segment
+  onSelect: (s: Segment) => void
+}) {
+  if (!rows.length) return null
+  return (
+    <div>
+      <p className="text-[0.65rem] font-bold text-slate-700 uppercase tracking-wide mb-2">{title}</p>
+      <div className="space-y-2.5">
+        {rows.map(r => {
+          const total = r.assessed + r.notReported
+          const w = (n: number) => (total ? `${(n / total) * 100}%` : '0%')
+          const target = (status?: SegmentStatus): Segment => ({ [dimension]: r.key, ...(status ? { status } : {}) })
+          const isActive = (status?: SegmentStatus) => sameSegment(segment, target(status))
+          const labelOf = (kind: string, n: number) => `${r.key}: ${n.toLocaleString()} ${kind} — show devices`
+          return (
+            <div key={r.key}>
+              <div className="flex items-center justify-between gap-2 text-[0.65rem] mb-1">
+                <button type="button" onClick={() => onSelect(target())} aria-pressed={isActive()}
+                  aria-label={`${r.key}: show all ${total.toLocaleString()} in-scope devices`}
+                  className={`font-semibold rounded-md px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${isActive() ? 'bg-orange-100 text-orange-800' : 'text-slate-700 hover:bg-slate-100'}`}>
+                  {r.key}
+                </button>
+                <span className="text-slate-400 flex items-center gap-0.5 flex-wrap justify-end">
+                  <CountButton n={r.passing} label={labelOf('passing', r.passing)} active={isActive('pass')} tone="text-emerald-600" onClick={() => onSelect(target('pass'))} />pass ·
+                  <CountButton n={r.failing} label={labelOf('failing', r.failing)} active={isActive('fail')} tone="text-red-500" onClick={() => onSelect(target('fail'))} />fail ·
+                  <CountButton n={r.notReported} label={labelOf('not reported', r.notReported)} active={isActive('unknown')} tone="text-slate-600" onClick={() => onSelect(target('unknown'))} />n/r
+                </span>
+              </div>
+              <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100" role="img"
+                aria-label={`${r.key}: ${r.passing} passing, ${r.failing} failing, ${r.notReported} not reported`}>
+                <div className="bg-emerald-500" style={{ width: w(r.passing) }} />
+                <div className="bg-red-400" style={{ width: w(r.failing) }} />
+                <div className="bg-slate-300" style={{ width: w(r.notReported) }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Finding cell: summary + itemised findings (e.g. the missing patches) ──────
+
+const ITEMS_COLLAPSED = 3
+
+function FindingCell({ row }: { row: PosturePillarDevice }) {
+  const [itemsVisible, setItemsVisible] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const items = row.items ?? []
+  const shown = showAll ? items : items.slice(0, ITEMS_COLLAPSED)
+  return (
+    <div>
+      <p className="text-slate-700">{row.detail}</p>
+      {items.length > 0 && (
+        <>
+          <button type="button" onClick={() => { setItemsVisible(visible => !visible); setShowAll(false) }} aria-expanded={itemsVisible}
+            className="mt-1 text-[0.65rem] font-semibold text-orange-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
+            {itemsVisible ? 'Hide missing patches' : `Show ${items.length.toLocaleString()} missing critical patch${items.length === 1 ? '' : 'es'}`}
+          </button>
+          {itemsVisible && <>
+            <ul className="mt-1 space-y-0.5 list-disc pl-4 text-[0.65rem] text-slate-500" aria-label="Missing critical patches">
+              {shown.map((it, i) => <li key={i}>{it}</li>)}
+            </ul>
+            {items.length > ITEMS_COLLAPSED && (
+              <button type="button" onClick={() => setShowAll(open => !open)} aria-expanded={showAll}
+                className="mt-0.5 text-[0.65rem] font-semibold text-orange-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
+                {showAll ? 'Show fewer' : `+${items.length - ITEMS_COLLAPSED} more`}
+              </button>
+            )}
+          </>}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Pillar Detail Panel ────────────────────────────────────────────────────────
 
-function PillarDetailPanel({ pillar, onClose }: { pillar: Pillar; onClose: () => void }) {
-  const cls = pillarColorClasses(pillar.color)
-  const PillarIcon = pillar.icon
+const PAGE_SIZE = 25
+
+function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar; source: PostureSource; onClose: () => void }) {
+  const meta = PILLAR_META[pillar.id]
+  const Icon = meta.icon
   const steps = getPillarSteps(pillar.id)
-  const failPct = Math.round((pillar.failing / (pillar.passing + pillar.failing)) * 100)
+  const [segment, setSegment] = useState<Segment>(DEFAULT_SEGMENT)
+  const [query, setQuery] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<NonNullable<PillarDevicesParams['sortKey']> | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [list, setList] = useState<PillarDeviceList | null>(null)
+  const [listState, setListState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [reload, setReload] = useState(0)
+  const seq = useRef(0)
+
+  useEffect(() => {
+    const t = setTimeout(() => { setDebounced(query.trim()); setPage(1) }, 250)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const params = useMemo<PillarDevicesParams>(() => ({
+    source, ...segment, q: debounced, page, pageSize: PAGE_SIZE,
+    ...(sortKey ? { sortKey, sortDir: sortDirection } : {}),
+  }), [source, segment, debounced, page, sortKey, sortDirection])
+
+  useEffect(() => {
+    const mine = ++seq.current
+    api.fetchPillarDevices(pillar.id, params)
+      .then(r => { if (mine === seq.current) { setList(r); setListState('ready') } })
+      .catch(() => { if (mine === seq.current) setListState('error') })
+  }, [pillar.id, params, reload])
+
+  const select = (next: Segment) => { setListState('loading'); setSegment(next); setPage(1) }
+  const handleSort = (key: string) => {
+    setListState('loading')
+    setSortDirection(dir => toggleSortDirection(sortKey, dir, key))
+    setSortKey(key as NonNullable<PillarDevicesParams['sortKey']>)
+    setPage(1)
+  }
+  const exportCsv = async () => {
+    try {
+      const all = await api.fetchPillarDevices(pillar.id, { ...params, page: 1, pageSize: 5000 })
+      downloadCsv(`security-posture-${pillar.id}-${segment.status ?? 'all'}.csv`, all.rows)
+    } catch { setListState('error') }
+  }
+  const th = 'px-3 py-2 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide'
+  const isDefault = sameSegment(segment, DEFAULT_SEGMENT)
+  const statusTile = (status: SegmentStatus, n: number, tone: string) => (
+    <button type="button" onClick={() => select({ ...(segment.platform ? { platform: segment.platform } : {}), ...(segment.sourceKey ? { sourceKey: segment.sourceKey } : {}), status })}
+      aria-pressed={segment.status === status} disabled={n === 0} aria-label={`Show ${n.toLocaleString()} ${STATUS_STYLE[status].label.toLowerCase()} devices`}
+      className={`rounded-xl border px-3 py-2.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 disabled:opacity-60 ${tone} ${segment.status === status ? 'ring-2 ring-orange-400' : 'hover:shadow-sm'}`}>
+      <p className="text-lg font-black">{n.toLocaleString()}</p>
+      <p className="text-[0.58rem] font-medium opacity-70">{STATUS_STYLE[status].label}</p>
+    </button>
+  )
 
   return (
-    <div className="bg-white rounded-2xl border border-orange-200 shadow-md overflow-hidden">
+    <section aria-label={`${pillar.label} details`} className="bg-white rounded-2xl border border-orange-200 shadow-md overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 bg-orange-50 border-b border-orange-100">
         <div className="flex items-center gap-2.5">
-          <div className={`rounded-xl p-2 ${cls.iconBg}`}>
-            <PillarIcon className={`h-4 w-4 ${cls.icon}`} />
-          </div>
+          <div className={`rounded-xl p-2 ${meta.iconBg}`}><Icon className={`h-4 w-4 ${meta.icon_c}`} /></div>
           <div>
             <p className="text-sm font-bold text-slate-800">{pillar.label}</p>
-            <p className="text-[0.62rem] text-slate-500">{pillar.description}</p>
+            <p className="text-[0.62rem] text-slate-500">{pillar.description} · Scope: {pillar.scope}</p>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-100 hover:text-slate-600 transition">
+        <button type="button" onClick={onClose} aria-label={`Close ${pillar.label} details`}
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-100 hover:text-slate-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-        {/* Stats */}
-        <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-center">
-              <p className="text-lg font-black text-slate-800">{pillar.score}%</p>
-              <p className="text-[0.58rem] text-slate-400 font-medium">Coverage</p>
-            </div>
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center">
-              <p className="text-lg font-black text-emerald-600">{pillar.passing}</p>
-              <p className="text-[0.58rem] text-emerald-600/70 font-medium">Passing</p>
-            </div>
-            <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center">
-              <p className="text-lg font-black text-red-600">{pillar.failing}</p>
-              <p className="text-[0.58rem] text-red-500/70 font-medium">Failing</p>
-            </div>
+
+      <div className="p-5 space-y-5">
+        {pillar.unavailableReason && (
+          <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-[0.68rem] text-amber-800">{pillar.unavailableReason}</p>
           </div>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-center">
+            <p className="text-lg font-black text-slate-800">{pillar.scorePct === null ? 'N/A' : `${pillar.scorePct}%`}</p>
+            <p className="text-[0.58rem] text-slate-400 font-medium">Passing (of assessed)</p>
+          </div>
+          {statusTile('pass', pillar.passing, 'border-emerald-100 bg-emerald-50 text-emerald-600')}
+          {statusTile('fail', pillar.failing, 'border-red-100 bg-red-50 text-red-600')}
+          {statusTile('unknown', pillar.notReported, 'border-slate-200 bg-white text-slate-600')}
+        </div>
+        <p className="text-[0.65rem] text-slate-500 -mt-2">
+          Only the {pillar.assessed.toLocaleString()} devices that report this signal are scored. The {pillar.notReported.toLocaleString()} "not reported" devices are never counted as passing or failing. Click any number to see those devices below.
+        </p>
+
+        {pillar.topFindings.length > 0 && (
           <div>
-            <div className="flex items-center justify-between text-[0.62rem] text-slate-500 mb-1">
-              <span>Devices meeting this control</span>
-              <span className="font-bold">{100 - failPct}%</span>
-            </div>
-            <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div className={`h-2.5 rounded-full ${cls.bar} transition-all duration-700`} style={{ width: `${pillar.score}%` }} />
-            </div>
+            <p className="text-[0.65rem] font-bold text-slate-700 uppercase tracking-wide mb-2">Most common missing critical patches</p>
+            <ul className="space-y-1">
+              {pillar.topFindings.map(f => (
+                <li key={f.label}>
+                  <button type="button" onClick={() => { setQuery(f.label); setDebounced(f.label); select({ status: 'fail' }) }}
+                    aria-label={`${f.label} — missing on ${f.devices.toLocaleString()} devices — show devices`}
+                    className="w-full flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-1.5 text-left text-xs hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                    <span className="text-slate-700 min-w-0 break-words">{f.label}</span>
+                    <span className="flex-shrink-0 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.62rem] font-bold text-red-700">{f.devices.toLocaleString()} devices</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className={`rounded-xl border px-3 py-2 flex items-center gap-2 ${pillar.positive ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-            {pillar.positive
-              ? <TrendingUp className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-              : <TrendingDown className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-            }
-            <p className="text-[0.68rem] font-semibold text-slate-700">
-              Trend: <span className={pillar.positive ? 'text-emerald-600' : 'text-red-500'}>{pillar.trend}</span>
-              {' '}{pillar.positive ? '— improving' : '— needs attention'}
-            </p>
-          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <BreakdownTable title="By platform" dimension="platform" rows={pillar.byPlatform} segment={segment} onSelect={select} />
+          <BreakdownTable title="By management source" dimension="sourceKey" rows={pillar.bySource} segment={segment} onSelect={select} />
         </div>
 
-        {/* Remediation steps */}
+        {/* Devices for the active segment */}
+        <div aria-live="polite">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <p className="text-[0.65rem] font-bold text-slate-700 uppercase tracking-wide">
+              Showing: <span className="text-orange-700 normal-case">{describeSegment(segment)}</span>
+              {list && <span className="text-slate-400 normal-case font-semibold"> — {list.total.toLocaleString()} device{list.total === 1 ? '' : 's'}</span>}
+            </p>
+            {!isDefault && (
+              <button type="button" onClick={() => { setQuery(''); setDebounced(''); select(DEFAULT_SEGMENT) }}
+                className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[0.62rem] font-semibold text-orange-700 hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                Reset filter
+              </button>
+            )}
+            <label className="relative ml-auto">
+              <span className="sr-only">Search devices</span>
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+              <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search device, user, serial, patch…"
+                className="rounded-lg border border-slate-200 py-1 pl-7 pr-2 text-xs w-60 focus:outline-none focus:ring-2 focus:ring-orange-300" />
+            </label>
+            <button type="button" disabled={!list?.total} onClick={exportCsv}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              <FileDown className="h-3 w-3" />Export CSV
+            </button>
+          </div>
+
+          {listState === 'error' ? (
+            <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-xs text-red-700">The device list could not be loaded.</p>
+              <button type="button" onClick={() => { setListState('loading'); setReload(n => n + 1) }}
+                className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Retry</button>
+            </div>
+          ) : listState === 'loading' && !list ? (
+            <div aria-busy="true" className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-9 animate-pulse rounded-lg bg-slate-100" />)}</div>
+          ) : list && list.total === 0 ? (
+            <p role="status" className={`rounded-xl border px-4 py-3 text-xs ${segment.status === 'fail' && !debounced ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+              {segment.status === 'fail' && !debounced && isDefault ? 'No failing devices — every assessed device passes this check.' : 'No devices match this filter.'}
+            </p>
+          ) : list && (
+            <div className={`overflow-x-auto rounded-xl border border-slate-100 transition-opacity ${listState === 'loading' ? 'opacity-60' : ''}`}>
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <SortableHeader label="Device" sortKey="deviceName" activeSortKey={sortKey ?? null} direction={sortDirection} onSort={handleSort} className={th} />
+                    <SortableHeader label="User" sortKey="user" activeSortKey={sortKey ?? null} direction={sortDirection} onSort={handleSort} className={th} />
+                    <SortableHeader label="Platform" sortKey="platform" activeSortKey={sortKey ?? null} direction={sortDirection} onSort={handleSort} className={th} />
+                    <SortableHeader label="Source" sortKey="source" activeSortKey={sortKey ?? null} direction={sortDirection} onSort={handleSort} className={th} />
+                    <th className={th}>Status</th>
+                    <SortableHeader label="Finding" sortKey="detail" activeSortKey={sortKey ?? null} direction={sortDirection} onSort={handleSort} className={th} />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {list.rows.map(d => (
+                    <tr key={d.id} className="align-top hover:bg-slate-50/60">
+                      <td className="px-3 py-2 font-semibold text-slate-700"><CopyText value={d.deviceName} label="Device name">{d.deviceName}</CopyText></td>
+                      <td className="px-3 py-2 text-slate-500"><CopyText value={d.user} label="User">{d.user}</CopyText></td>
+                      <td className="px-3 py-2 text-slate-500">{d.platform}</td>
+                      <td className="px-3 py-2 text-slate-500">{d.source}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${STATUS_STYLE[d.status].chip}`}>{STATUS_STYLE[d.status].label}</span>
+                      </td>
+                      <td className="px-3 py-2"><FindingCell row={d} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {list && list.totalPages > 1 && (
+            <div className="mt-2 flex items-center justify-end gap-2 text-xs text-slate-500">
+              <button type="button" disabled={list.page <= 1} onClick={() => { setListState('loading'); setPage(list.page - 1) }}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Previous</button>
+              <span>Page {list.page} of {list.totalPages}</span>
+              <button type="button" disabled={list.page >= list.totalPages} onClick={() => { setListState('loading'); setPage(list.page + 1) }}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Next</button>
+            </div>
+          )}
+        </div>
+
+        {/* Remediation */}
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <Wrench className="h-3.5 w-3.5 text-orange-500" />
@@ -473,73 +617,70 @@ function PillarDetailPanel({ pillar, onClose }: { pillar: Pillar; onClose: () =>
           </ol>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Source Tab Bar ─────────────────────────────────────────────────────────────
-
-const SOURCES: MDMSource[] = ['all', 'intune', 'manageengine']
-
-function SourceTabBar({ active, onChange }: { active: MDMSource; onChange: (s: MDMSource) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {SOURCES.map(src => {
-        const cfg = SOURCE_CONFIGS[src]
-        const SrcIcon = cfg.icon
-        const isActive = active === src
-        const style = sourceTabStyle(src, isActive)
-
-        return (
-          <button
-            key={src}
-            type="button"
-            onClick={() => onChange(src)}
-            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all ${style.tab}`}
-          >
-            <SrcIcon className="h-3.5 w-3.5 flex-shrink-0" />
-            <span className="hidden sm:inline">{cfg.label}</span>
-            <span className="sm:hidden">{cfg.shortLabel}</span>
-            {cfg.platform !== 'All Platforms' && (
-              <span className="hidden md:inline text-[0.58rem] font-medium opacity-60">· {cfg.platform}</span>
-            )}
-            <span className={`rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold ${style.count}`}>
-              {cfg.deviceCount.toLocaleString()}
-            </span>
-          </button>
-        )
-      })}
-    </div>
+    </section>
   )
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export function SecurityPosturePage() {
-  const [activeSource, setActiveSource] = useState<MDMSource>('all')
-  const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null)
-  const [expandedRisk, setExpandedRisk]   = useState<number | null>(null)
-
-  const sourceCfg = SOURCE_CONFIGS[activeSource]
-  const { pillars, risks } = sourceCfg
-
-  const overallScore = computeScore(pillars)
-  const { text: scoreText, bg: scoreBg, border: scoreBorder } = scoreColor(overallScore)
-  const totalDevices = pillars[0].passing + pillars[0].failing
-  const criticalCount = risks.filter(r => r.severity === 'Critical').length
-  const atRiskCount = risks.reduce((acc, r) => Math.max(acc, r.count), 0)
-  const passingControls = CIS_CONTROLS.filter(c => c.status === 'Implemented').length
-
-  const handleSourceChange = (s: MDMSource) => {
-    setActiveSource(s)
-    setSelectedPillar(null)
-    setExpandedRisk(null)
+  const [controlSortKey, setControlSortKey] = useState<string | null>(null)
+  const [controlSortDirection, setControlSortDirection] = useState<SortDirection>('asc')
+  const sortedControls = controlSortKey ? sortRows(CIS_CONTROLS, control => {
+    switch (controlSortKey) {
+      case 'number': return Number(control.number)
+      case 'name': return control.name
+      case 'coverage': return control.coverage
+      case 'status': return control.status
+      default: return ''
+    }
+  }, controlSortDirection) : CIS_CONTROLS
+  const handleControlSort = (key: string) => {
+    setControlSortDirection(direction => toggleSortDirection(controlSortKey, direction, key))
+    setControlSortKey(key)
   }
 
-  // Per-source accent for non-all sources
-  const sourcePlatformBadge =
-    activeSource === 'intune'       ? 'bg-orange-50 border-orange-200 text-orange-700' :
-    activeSource === 'manageengine' ? 'bg-lime-50 border-lime-200 text-lime-700'       : ''
+  const [activeSource, setActiveSource] = useState<PostureSource>('all')
+  const [data, setData] = useState<SecurityPostureResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<PosturePillar['id'] | null>(null)
+  const [expandedRisk, setExpandedRisk] = useState<PosturePillar['id'] | null>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
+  const requestSeq = useRef(0)
+
+  const load = useCallback((source: PostureSource, refresh: boolean) => {
+    const seq = ++requestSeq.current
+    api.fetchSecurityPosture(source, refresh)
+      .then(r => { if (seq === requestSeq.current) { setData(r); setError(null) } })
+      .catch(() => { if (seq === requestSeq.current) setError('Security posture data could not be loaded.') })
+      .finally(() => { if (seq === requestSeq.current) setLoading(false) })
+  }, [])
+
+  useEffect(() => { load(activeSource, false) }, [activeSource, load])
+
+  const changeSource = (s: PostureSource) => {
+    if (s === activeSource) return
+    setLoading(true); setSelectedId(null); setExpandedRisk(null); setActiveSource(s)
+  }
+  const refresh = () => { setLoading(true); load(activeSource, true) }
+
+  const pillars = useMemo(() => data?.pillars ?? [], [data])
+  const selected = pillars.find(p => p.id === selectedId) ?? null
+  const risks: PostureRisk[] = useMemo(() => deriveRisks(pillars), [pillars])
+  const overall = data?.overall.score ?? null
+  const { text: scoreText, bg: scoreBg, border: scoreBorder } = scoreColor(overall)
+  const needAttention = pillars.filter(p => p.scorePct !== null && p.scorePct < 70).length
+  const failingChecks = pillars.reduce((n, p) => n + p.failing, 0)
+  const notReportedChecks = pillars.reduce((n, p) => n + p.notReported, 0)
+
+  const selectPillar = (id: PosturePillar['id']) => {
+    setSelectedId(cur => (cur === id ? null : id))
+  }
+  const viewDevices = (id: PosturePillar['id']) => {
+    setSelectedId(id)
+    requestAnimationFrame(() => detailRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
+  }
 
   return (
     <div className="flex flex-col gap-5 w-full">
@@ -552,131 +693,139 @@ export function SecurityPosturePage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Security Posture</h1>
-            <p className="mt-0.5 text-sm text-slate-500">Real-time security health across all managed endpoints</p>
+            <p className="mt-0.5 text-sm text-slate-500">Live security health computed from your connected MDM sources</p>
           </div>
         </div>
-        {activeSource !== 'all' && (
-          <div className={`hidden sm:flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${sourcePlatformBadge}`}>
-            {(() => { const I = SOURCE_CONFIGS[activeSource].icon; return <I className="h-3.5 w-3.5" /> })()}
-            <span>{sourceCfg.label}</span>
-            <span className="opacity-60">· {sourceCfg.platform}</span>
-          </div>
-        )}
+        <button type="button" onClick={refresh} disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh
+        </button>
       </div>
 
-      {/* ── Mock data notice ── */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-        <Info className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <p className="text-[0.68rem] text-amber-800 leading-snug">
-          <span className="font-bold">Baseline estimates</span> — scores are derived from your fleet configuration. Entra ID is connected for live data; Intune and ManageEngine figures are estimated from mock device data. Connect all integrations in Settings for fully live posture tracking.
+      {/* ── How to read this page ── */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+        <Info className="h-4 w-4 text-sky-600 flex-shrink-0 mt-0.5" />
+        <p className="text-[0.68rem] text-sky-900 leading-snug">
+          <span className="font-bold">Live data.</span> Each tile scores only the devices that actually report that signal; devices that don't are shown as <em>not reported</em>, never as passing or failing. Click a tile to see the failing devices behind it. Firewall, EDR and MFA signals are not returned by the connected device APIs — endpoint protection coverage is shown separately below.
         </p>
       </div>
 
-      {/* ── Endpoint Protection Coverage (live — Falcon/Zscaler on physical Windows & macOS devices) ── */}
-      <EndpointProtectionCoverage />
+      {error && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-xs text-red-700">{error}</p>
+          <button type="button" onClick={refresh} className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Retry</button>
+        </div>
+      )}
 
       {/* ── MDM Source Tabs ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
         <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Filter by MDM Source</p>
-        <SourceTabBar active={activeSource} onChange={handleSourceChange} />
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="MDM source">
+          {SOURCE_TABS.map(tab => {
+            const Icon = tab.icon
+            const active = activeSource === tab.id
+            const count = !data ? null : tab.id === 'all' ? data.sourceCounts.intune + data.sourceCounts.manageengine : data.sourceCounts[tab.id]
+            return (
+              <button key={tab.id} type="button" role="tab" aria-selected={active} onClick={() => changeSource(tab.id)}
+                className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${active ? 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
+                <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>{tab.label}</span>
+                {count !== null && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold ${active ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>{count.toLocaleString()}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* ── Row 1: Score card + 3 mini stats ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Overall score card */}
+      {/* ── Row 1: Score card + mini stats ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" aria-busy={loading}>
         <div className={`bg-white rounded-2xl border ${scoreBorder} shadow-sm px-6 py-5 flex flex-col items-center gap-4`}>
-          <ScoreGauge score={overallScore} />
+          <ScoreGauge score={overall} />
           <div className={`w-full rounded-xl ${scoreBg} border ${scoreBorder} px-4 py-2.5 flex items-center gap-2`}>
             <Clock className={`h-3.5 w-3.5 ${scoreText} flex-shrink-0`} />
             <div>
               <p className="text-[0.6rem] font-semibold text-slate-500 uppercase tracking-wide">Last Assessed</p>
-              <p className={`text-[0.72rem] font-bold ${scoreText}`}>{sourceCfg.lastAssessed}</p>
+              <p className={`text-[0.72rem] font-bold ${scoreText}`}>{data ? fmtTime(data.generatedAt) : loading ? 'Loading…' : '—'}</p>
             </div>
           </div>
           <div className="w-full grid grid-cols-2 gap-2">
             <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center">
-              <p className="text-xs font-black text-slate-800">{totalDevices.toLocaleString()}</p>
+              <p className="text-xs font-black text-slate-800">{data ? data.deviceCount.toLocaleString() : '—'}</p>
               <p className="text-[0.6rem] text-slate-400 font-medium">Total Devices</p>
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center">
-              <p className="text-xs font-black text-slate-800">{scoreGrade(overallScore)}</p>
+              <p className="text-xs font-black text-slate-800">{scoreGrade(overall)}</p>
               <p className="text-[0.6rem] text-slate-400 font-medium">Letter Grade</p>
             </div>
           </div>
+          {data && (
+            <p className="text-[0.6rem] text-slate-400 text-center">
+              Weighted average of {data.overall.assessedPillars} of {data.overall.totalPillars} pillars that could be assessed
+            </p>
+          )}
         </div>
 
-        {/* 3 mini stat cards + pillar summary */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-red-200 shadow-sm px-4 py-3 flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <div className="rounded-xl bg-red-100 p-2"><AlertTriangle className="h-4 w-4 text-red-600" /></div>
-              <p className="text-xs font-semibold text-slate-600">Critical Issues</p>
+              <p className="text-xs font-semibold text-slate-600">Pillars Below 70%</p>
             </div>
-            <p className="text-3xl font-black text-red-600">{criticalCount}</p>
-            <p className="text-[0.65rem] text-slate-400">Require immediate attention</p>
+            <p className="text-3xl font-black text-red-600">{needAttention}</p>
+            <p className="text-[0.65rem] text-slate-400">Need attention</p>
           </div>
-
           <div className="bg-white rounded-2xl border border-orange-200 shadow-sm px-4 py-3 flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-xl bg-orange-100 p-2"><Target className="h-4 w-4 text-orange-600" /></div>
-              <p className="text-xs font-semibold text-slate-600">Devices at Risk</p>
+              <div className="rounded-xl bg-orange-100 p-2"><Shield className="h-4 w-4 text-orange-600" /></div>
+              <p className="text-xs font-semibold text-slate-600">Failing Checks</p>
             </div>
-            <p className="text-3xl font-black text-orange-600">{atRiskCount}</p>
-            <p className="text-[0.65rem] text-slate-400">Highest single risk count</p>
+            <p className="text-3xl font-black text-orange-600">{failingChecks.toLocaleString()}</p>
+            <p className="text-[0.65rem] text-slate-400">Across pillars — a device can fail several</p>
           </div>
-
-          <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm px-4 py-3 flex flex-col gap-2">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-xl bg-emerald-100 p-2"><CheckCircle className="h-4 w-4 text-emerald-600" /></div>
-              <p className="text-xs font-semibold text-slate-600">Controls Passing</p>
+              <div className="rounded-xl bg-slate-100 p-2"><HelpCircle className="h-4 w-4 text-slate-500" /></div>
+              <p className="text-xs font-semibold text-slate-600">Not Reported</p>
             </div>
-            <p className="text-3xl font-black text-emerald-600">
-              {passingControls}<span className="text-lg text-slate-400">/{CIS_CONTROLS.length}</span>
-            </p>
-            <p className="text-[0.65rem] text-slate-400">CIS controls implemented</p>
+            <p className="text-3xl font-black text-slate-600">{notReportedChecks.toLocaleString()}</p>
+            <p className="text-[0.65rem] text-slate-400">Device checks with no data from the source</p>
           </div>
 
-          {/* Pillar health mini bars */}
           <div className="sm:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
             <p className="text-[0.65rem] font-semibold text-slate-500 uppercase tracking-wide mb-3">Pillar Health Overview</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2">
-              {pillars.map(p => {
-                const cls = pillarColorClasses(p.color)
-                return (
-                  <div key={p.id} className="flex items-center gap-2">
-                    <span className="text-[0.62rem] font-semibold text-slate-500 w-24 shrink-0 truncate">{p.label}</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                      <div className={`h-1.5 rounded-full ${cls.bar}`} style={{ width: `${p.score}%` }} />
-                    </div>
-                    <span className={`text-[0.62rem] font-bold w-8 text-right ${cls.icon}`}>{p.score}%</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+              {pillars.map(p => (
+                <button key={p.id} type="button" onClick={() => viewDevices(p.id)} aria-label={`Open ${p.label} details`}
+                  className="flex items-center gap-2 rounded-lg text-left hover:bg-slate-50 px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                  <span className="text-[0.62rem] font-semibold text-slate-500 w-28 shrink-0 truncate">{p.label}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className={`h-1.5 rounded-full ${PILLAR_META[p.id].bar}`} style={{ width: `${p.scorePct ?? 0}%` }} />
                   </div>
-                )
-              })}
+                  <span className={`text-[0.62rem] font-bold w-9 text-right ${PILLAR_META[p.id].icon_c}`}>{p.scorePct === null ? 'N/A' : `${p.scorePct}%`}</span>
+                </button>
+              ))}
+              {!pillars.length && <p className="text-xs text-slate-400">{loading ? 'Loading pillars…' : 'No pillar data.'}</p>}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Row 2: 6 pillar cards ── */}
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {pillars.map(pillar => (
-            <PillarCard
-              key={pillar.id}
-              pillar={pillar}
-              isSelected={selectedPillar?.id === pillar.id}
-              onClick={() => setSelectedPillar(selectedPillar?.id === pillar.id ? null : pillar)}
-            />
-          ))}
+      {/* ── Row 2: pillar cards + detail ── */}
+      <div className="space-y-4" ref={detailRef}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {loading && !pillars.length
+            ? [0, 1, 2, 3].map(i => <div key={i} className="h-44 animate-pulse rounded-2xl bg-slate-100" aria-hidden />)
+            : pillars.map(pillar => (
+                <PillarCard key={pillar.id} pillar={pillar} isSelected={selectedId === pillar.id} onClick={() => selectPillar(pillar.id)} />
+              ))}
         </div>
-        {selectedPillar && (
-          <PillarDetailPanel
-            pillar={selectedPillar}
-            onClose={() => setSelectedPillar(null)}
-          />
-        )}
+        {selected && <PillarDetailPanel key={`${activeSource}-${selected.id}`} pillar={selected} source={activeSource} onClose={() => setSelectedId(null)} />}
       </div>
+
+      {/* ── Endpoint Protection Coverage (live — Falcon/Zscaler on physical Windows & macOS devices) ── */}
+      <EndpointProtectionCoverage />
 
       {/* ── Row 3: Top Risks + CIS Controls ── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -687,7 +836,7 @@ export function SecurityPosturePage() {
             <div>
               <h2 className="text-sm font-bold text-slate-800">Top Risks</h2>
               <p className="text-[0.65rem] text-slate-400 mt-0.5">
-                {activeSource === 'all' ? 'Prioritized issues across all sources' : `Issues specific to ${sourceCfg.label}`}
+                Derived from the live pillars{activeSource === 'all' ? '' : ` for ${SOURCE_TABS.find(t => t.id === activeSource)?.label}`}
               </p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2.5 py-1 text-[0.65rem] font-bold text-red-600">
@@ -696,25 +845,20 @@ export function SecurityPosturePage() {
             </span>
           </div>
           <div className="divide-y divide-slate-100">
-            {risks.map((risk, i) => {
+            {!risks.length && <p className="px-5 py-4 text-xs text-slate-400">{loading ? 'Loading…' : 'No failing devices found in the assessed pillars.'}</p>}
+            {risks.map(risk => {
               const sc = severityCfg(risk.severity)
-              const isExpanded = expandedRisk === i
-              const steps = getPillarSteps(risk.pillar.toLowerCase())
+              const isExpanded = expandedRisk === risk.pillarId
+              const steps = getPillarSteps(risk.pillarId)
               return (
-                <div key={i}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedRisk(isExpanded ? null : i)}
-                    className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition ${isExpanded ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}
-                  >
+                <div key={risk.pillarId}>
+                  <button type="button" onClick={() => setExpandedRisk(isExpanded ? null : risk.pillarId)} aria-expanded={isExpanded}
+                    className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-400 ${isExpanded ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
                     <span className={`flex-shrink-0 mt-1.5 h-2 w-2 rounded-full ${sc.dot}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${sc.badge}`}>
-                          {risk.severity}
-                        </span>
-                        <span className="text-[0.62rem] text-slate-400">{risk.pillar}</span>
-                        <span className="text-[0.6rem] text-slate-400">· {risk.count} device{risk.count !== 1 ? 's' : ''}</span>
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${sc.badge}`}>{risk.severity}</span>
+                        <span className="text-[0.62rem] text-slate-400">{pillars.find(p => p.id === risk.pillarId)?.label}</span>
                       </div>
                       <p className="text-xs text-slate-700 font-medium leading-snug">{risk.title}</p>
                     </div>
@@ -722,9 +866,15 @@ export function SecurityPosturePage() {
                   </button>
                   {isExpanded && (
                     <div className="px-5 pb-4 bg-orange-50/40 border-t border-orange-100">
-                      <div className="pt-3 flex items-center gap-1.5 mb-2">
-                        <Wrench className="h-3 w-3 text-orange-500" />
-                        <p className="text-[0.6rem] font-bold text-slate-600 uppercase tracking-wide">Recommended Remediation</p>
+                      <div className="pt-3 flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <Wrench className="h-3 w-3 text-orange-500" />
+                          <p className="text-[0.6rem] font-bold text-slate-600 uppercase tracking-wide">Recommended Remediation</p>
+                        </div>
+                        <button type="button" onClick={() => viewDevices(risk.pillarId)}
+                          className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-[0.65rem] font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                          View {risk.count.toLocaleString()} devices
+                        </button>
                       </div>
                       <ol className="space-y-1.5">
                         {steps.slice(0, 4).map((step, j) => (
@@ -747,7 +897,7 @@ export function SecurityPosturePage() {
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-slate-800">CIS Controls Coverage</h2>
-              <p className="text-[0.65rem] text-slate-400 mt-0.5">CIS v8 implementation status — org-level</p>
+              <p className="text-[0.65rem] text-slate-400 mt-0.5">Static reference values — not calculated from your fleet</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700">
@@ -762,14 +912,14 @@ export function SecurityPosturePage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-4 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide w-10">#</th>
-                  <th className="px-3 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide">Control Name</th>
-                  <th className="px-3 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide w-28">Coverage</th>
-                  <th className="px-4 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide text-right">Status</th>
+                  <SortableHeader label="#" sortKey="number" activeSortKey={controlSortKey} direction={controlSortDirection} onSort={handleControlSort} className="px-4 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide w-10" />
+                  <SortableHeader label="Control Name" sortKey="name" activeSortKey={controlSortKey} direction={controlSortDirection} onSort={handleControlSort} className="px-3 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide" />
+                  <SortableHeader label="Coverage" sortKey="coverage" activeSortKey={controlSortKey} direction={controlSortDirection} onSort={handleControlSort} className="px-3 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide w-28" />
+                  <SortableHeader label="Status" sortKey="status" activeSortKey={controlSortKey} direction={controlSortDirection} onSort={handleControlSort} className="px-4 py-2.5 text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide text-right" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {CIS_CONTROLS.map(ctrl => (
+                {sortedControls.map(ctrl => (
                   <tr key={ctrl.number} className="hover:bg-slate-50/60 transition">
                     <td className="px-4 py-2.5">
                       <span className="inline-flex items-center justify-center h-5 w-5 rounded-lg bg-slate-100 text-[0.62rem] font-bold text-slate-600">

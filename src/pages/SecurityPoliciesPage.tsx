@@ -14,6 +14,8 @@ import type {
 import type { UserToolRole } from '../types'
 import { Badge } from '../components/ui/Badge'
 import { Pagination } from '../components/ui/Pagination'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { useToast } from '../components/ui/ToastProvider'
 
 const PAGE_SIZE = 25
@@ -163,6 +165,8 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
   const [status, setStatus] = useState<'all' | 'enabled' | 'disabled' | 'unknown'>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<'name' | 'category' | 'platform' | 'enabled' | 'assignments' | 'modified'>('name')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   const [detailTarget, setDetailTarget] = useState<{ source: PolicySource; category: PolicyCategory; policyId: string } | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncRunSummary | null>(null)
@@ -181,7 +185,7 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
         category: category === 'all' ? undefined : category,
         status: status === 'all' ? undefined : status,
         search: search.trim() || undefined,
-        page, pageSize: PAGE_SIZE,
+        page, pageSize: PAGE_SIZE, sortBy: sortKey, sortDirection,
       })
       setItems(res.data)
       setTotal(res.pagination.total)
@@ -191,7 +195,7 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [tab, category, status, search, page])
+  }, [tab, category, status, search, page, sortKey, sortDirection])
 
   const loadSyncStatus = useCallback(async () => {
     try {
@@ -244,6 +248,11 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const isLive = syncStatus !== null
+  const handleSort = (key: typeof sortKey) => {
+    setSortDirection(direction => toggleSortDirection(sortKey, direction, key))
+    setSortKey(key)
+    setPage(1)
+  }
 
   return (
     <div className="space-y-5">
@@ -323,23 +332,23 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
         <>
           <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
             <button type="button" onClick={() => setTab('intune')}
-              className={`rounded-xl px-4 py-1.5 text-xs font-bold transition-all ${tab === 'intune' ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`rounded-xl px-4 py-1.5 text-xs font-bold transition-all ${tab === 'intune' ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
               Intune
             </button>
             <button type="button" onClick={() => setTab('entra')}
-              className={`rounded-xl px-4 py-1.5 text-xs font-bold transition-all ${tab === 'entra' ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`rounded-xl px-4 py-1.5 text-xs font-bold transition-all ${tab === 'entra' ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
               Entra ID
             </button>
           </div>
 
           <div className="flex gap-1 glass rounded-2xl p-1 flex-wrap">
             <button type="button" onClick={() => setCategory('all')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === 'all' ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === 'all' ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
               All
             </button>
             {categoriesForTab.map(c => (
               <button key={c} type="button" onClick={() => setCategory(c)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === c ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === c ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
                 {CATEGORY_LABELS[c]}
               </button>
             ))}
@@ -384,7 +393,12 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
                   <table className="z-table">
                     <thead>
                       <tr>
-                        {['Name', 'Category', 'Platform', 'State', 'Assignments', 'Last Modified'].map(h => <th key={h}>{h}</th>)}
+                        <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Category" sortKey="category" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Platform" sortKey="platform" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="State" sortKey="enabled" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Assignments" sortKey="assignments" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Last Modified" sortKey="modified" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
                       </tr>
                     </thead>
                     <tbody>

@@ -16,8 +16,11 @@ import {
   Monitor, Activity,
   ChevronDown, Loader2, AlertTriangle, PlugZap,
 } from 'lucide-react'
+import { SortableHeader } from '../ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../../lib/tableSorting'
 import { api } from '../../api'
 import type { EntraDevice } from '../../data/entraData'
+import { CopyText } from '../ui/CopyText'
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
@@ -86,7 +89,21 @@ function PlatformDistribution({ devices }: { devices: EntraDevice[] }) {
 // ── Stale devices ─────────────────────────────────────────────────────────────
 
 function StaleDevicesTable({ devices }: { devices: EntraDevice[] }) {
-  const stale = [...devices].filter(d => d.daysSinceCheckIn > 7).sort((a, b) => b.daysSinceCheckIn - a.daysSinceCheckIn)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const staleDevices = devices.filter(d => d.daysSinceCheckIn > 7)
+  const stale = sortKey ? sortRows(staleDevices, device => {
+    switch (sortKey) {
+      case 'device': return device.deviceName
+      case 'user': return device.primaryUser
+      case 'checkin': return device.daysSinceCheckIn
+      case 'os': return device.os
+      case 'compliance': return device.complianceState
+      case 'issues': return device.openIssues.length
+      default: return ''
+    }
+  }, sortDirection) : [...staleDevices].sort((a, b) => b.daysSinceCheckIn - a.daysSinceCheckIn)
+  const handleSort = (key: string) => { setSortDirection(direction => toggleSortDirection(sortKey, direction, key)); setSortKey(key) }
   if (!stale.length) return <p className="text-xs text-emerald-400 py-4 text-center">✓ No stale devices — all devices have checked in within 7 days.</p>
 
   const compBg = (c: string) =>
@@ -99,16 +116,19 @@ function StaleDevicesTable({ devices }: { devices: EntraDevice[] }) {
       <table className="w-full text-xs">
         <thead>
           <tr className="bg-slate-800/80 border-b border-slate-700">
-            {['Device', 'User', 'Last Check-In', 'OS', 'Compliance', 'Issues'].map(h => (
-              <th key={h} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400">{h}</th>
-            ))}
+            <SortableHeader label="Device" sortKey="device" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400" />
+            <SortableHeader label="User" sortKey="user" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400" />
+            <SortableHeader label="Last Check-In" sortKey="checkin" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400" />
+            <SortableHeader label="OS" sortKey="os" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400" />
+            <SortableHeader label="Compliance" sortKey="compliance" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400" />
+            <SortableHeader label="Issues" sortKey="issues" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 text-left text-[0.6rem] font-bold uppercase tracking-wider text-slate-400" />
           </tr>
         </thead>
         <tbody>
           {stale.map((d, i) => (
             <tr key={d.id} className={`border-b border-slate-800 hover:bg-slate-800/60 transition-colors ${i % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'}`}>
-              <td className="px-3 py-2.5 font-bold text-slate-200">{d.deviceName}</td>
-              <td className="px-3 py-2.5"><p className="text-slate-300">{d.primaryUser}</p><p className="text-[0.6rem] text-slate-500">{d.upn}</p></td>
+              <td className="px-3 py-2.5 font-bold text-slate-200"><CopyText value={d.deviceName} label="Device name">{d.deviceName}</CopyText></td>
+              <td className="px-3 py-2.5"><CopyText value={d.primaryUser} label="User"><p className="text-slate-300">{d.primaryUser}</p></CopyText><CopyText value={d.upn} label="User email"><p className="text-[0.6rem] text-slate-500">{d.upn}</p></CopyText></td>
               <td className="px-3 py-2.5">
                 <span className={`font-bold ${d.daysSinceCheckIn > 14 ? 'text-red-400' : d.daysSinceCheckIn > 7 ? 'text-amber-400' : 'text-slate-300'}`}>
                   {d.daysSinceCheckIn}d ago

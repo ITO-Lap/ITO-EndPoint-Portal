@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { RefreshCw, ChevronUp, ChevronDown, Columns3, Loader2 } from 'lucide-react'
 import type { RoleActivityEvent } from '../../api/roleActivity'
 import { Pagination } from '../ui/Pagination'
+import { SortableHeader } from '../ui/SortableHeader'
 import { ALL_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from './auditColumns'
 
 interface Props {
@@ -89,15 +90,9 @@ export function AuditEventsTable({
             <thead>
               <tr className="bg-slate-50 text-left text-slate-500 font-semibold">
                 {columns.map(c => (
-                  <th key={c.key} scope="col" className="px-3 py-2.5 whitespace-nowrap">
-                    {c.sortable ? (
-                      <button type="button" onClick={() => handleSort(c.key)}
-                        className="flex items-center gap-1 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-orange-300 rounded">
-                        {c.label}
-                        {sortField === c.key && (sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" aria-hidden="true" /> : <ChevronDown className="h-3 w-3" aria-hidden="true" />)}
-                      </button>
-                    ) : c.label}
-                  </th>
+                  c.sortable
+                    ? <SortableHeader key={c.key} label={c.label} sortKey={c.key} activeSortKey={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-2.5 whitespace-nowrap" />
+                    : <th key={c.key} scope="col" className="px-3 py-2.5 whitespace-nowrap">{c.label}</th>
                 ))}
               </tr>
             </thead>

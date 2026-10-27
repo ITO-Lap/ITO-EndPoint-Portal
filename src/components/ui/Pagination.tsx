@@ -46,7 +46,7 @@ export function Pagination({ page, totalPages, onPageChange, totalItems, pageSiz
         ) : (
           <button key={p} type="button" onClick={() => onPageChange(p)}
             className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
-              p === page ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              p === page ? 'is-selected' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
             }`}>
             {p}
           </button>

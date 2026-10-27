@@ -53,6 +53,28 @@ Settings → Integrations → ManageEngine → fill in Client ID, Client Secret,
 | `GET /api/v1/mdm/devices/:id/apps` | Installed application inventory |
 | `GET /api/v1/mdm/devices/:id/profiles` | Applied configuration/compliance profiles (policy status) |
 
+The [official Devices API reference](https://www.manageengine.com/mobile-device-management/api/devices/)
+documents the per-device profiles endpoint, which returns association results such as `profile_id`,
+profile_name`, `status`, `remarks`, `localized_remarks`, and `applied_time` (scope:
+`MDMOnDemand.MDMInventory.READ`). The Mac inventory now fetches these results for active
+ManageEngine Macs in batches of eight and displays each device's returned profile status in the
+MDM Status / Profiles column. Device details show all fields. Status values are passed through and
+are not translated into a pass/fail or overall device-compliance verdict.
+
+The backend coalesces concurrent requests for the same tenant/device and caches successful
+responses in memory for five minutes. If a refresh fails after cached data expires, the last
+successful response is returned marked stale; an individual API failure does not prevent other
+devices in the fleet batch from returning results. This cache is process-local and is cleared on
+server restart. `GET /api/devices/manageengine/profile-results` returns the fleet result envelope;
+`GET /api/devices/:id/profile-results` returns one device's cached/refreshed snapshot.
+
+The published API's `/api/v1/mdm/compliance` resource is for geofencing compliance policy
+management, not an overall device-compliance verdict. The documented device detail and profile
+resources do not provide a native aggregate MDM compliance status or a timestamp for an overall
+compliance synchronization. The Mac inventory therefore reports overall MDM compliance as
+Unavailable; profile `applied_time` is the vendor's profile timestamp, not a sync timestamp. No
+compliance database fields or migration are added.
+
 Device-list rows only include devices with `managed_status: "2"` (actively enrolled) — the API also
 returns unenrolled/removed devices with just an id and status, which are filtered out rather than
 shown as broken rows. Security detail is fetched per-device (batched, 8 concurrent) since MDM
@@ -64,14 +86,9 @@ detail panel surfaces its real Applications and Compliance/Policy tabs.
 
 ---
 
-## Compliance state mapping
-
-| Condition | Mapped state |
-|---|---|
-| Rooted/jailbroken device | Non-Compliant |
-| Storage encryption disabled | Non-Compliant |
-| No passcode set | Warning |
-| Otherwise | Compliant |
+The existing normalized device model still contains security-derived fields used by other
+application areas. They are not presented as Endpoint Central's native MDM compliance verdict in
+the Mac inventory or device Compliance tab.
 
 ---
 

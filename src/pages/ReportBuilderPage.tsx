@@ -61,7 +61,7 @@ export function ReportBuilderPage({ onBack }: { onBack: () => void }) {
               onClick={() => setReportType(rt.id as ReportType)}
               className={`rounded-xl border p-4 text-left transition ${
                 reportType === rt.id
-                  ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-300'
+                  ? 'is-selected'
                   : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
@@ -82,7 +82,7 @@ export function ReportBuilderPage({ onBack }: { onBack: () => void }) {
               onClick={() => setFormat(f.id)}
               className={`rounded-xl border p-4 text-left transition ${
                 format === f.id
-                  ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-300'
+                  ? 'is-selected'
                   : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >

@@ -1,31 +1,41 @@
-import { useState, useEffect } from 'react'
-import { Calendar, Plus, RefreshCw, Trash2, Play, CheckCircle, XCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Calendar, Plus, RefreshCw, Trash2, Play, CheckCircle, MessageSquare } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { ScheduledReport, CreateScheduleInput } from '../api/intelligence'
+import { setNotificationScheduleActor } from '../api/notificationSchedule'
+import { SlackScheduleSection } from '../components/notifications/SlackScheduleSection'
 
-const REPORT_TYPES = ['compliance', 'inventory', 'app-deployment', 'risk', 'executive']
+const REPORT_TYPES = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest']
 const FORMATS      = ['pdf', 'excel', 'csv', 'pptx']
+const DEFAULT_RECIPIENT = 'ITO_Endpoint@zinnia.com'
+const DEFAULT_SLACK_CHANNEL = 'C08S9K7G2AH'
 
 const CRON_PRESETS = [
   { label: 'Daily at 8am',        value: '0 8 * * *'   },
   { label: 'Weekly (Mon 8am)',     value: '0 8 * * 1'   },
+  { label: 'Weekly (Mon 11am)',    value: '0 11 * * 1'  },
   { label: 'Monthly (1st, 8am)',   value: '0 8 1 * *'   },
   { label: 'Every weekday at 7am', value: '0 7 * * 1-5' },
 ]
 
-export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
+export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', userEmail }: { onBack: () => void; viewerRole?: string; userEmail?: string }) {
+  useEffect(() => { setNotificationScheduleActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
+
   const [schedules, setSchedules] = useState<ScheduledReport[]>([])
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [running, setRunning]     = useState<string | null>(null)
   const [runMsg, setRunMsg]       = useState<Record<string, string>>({})
-  const [dbMissing, setDbMissing] = useState(false)
 
-  const [form, setForm] = useState<CreateScheduleInput>({
-    name: '', report_type: 'compliance', schedule_cron: '0 8 * * 1',
-    format: 'pdf', recipients: [], created_by: '',
+  const defaultForm = (): CreateScheduleInput => ({
+    name: '', report_type: 'critical-patching', schedule_cron: '0 8 * * 1',
+    format: 'excel', recipients: [DEFAULT_RECIPIENT], created_by: '',
   })
+
+  const [form, setForm] = useState<CreateScheduleInput>(defaultForm())
   const [recipientInput, setRecipientInput] = useState('')
+  const [delivery, setDelivery] = useState<'email' | 'slack'>('email')
+  const [slackChannelId, setSlackChannelId] = useState(DEFAULT_SLACK_CHANNEL)
   const [saving, setSaving]                 = useState(false)
   const [formErr, setFormErr]               = useState<string | null>(null)
 
@@ -34,7 +44,6 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
     try {
       const res = await intelApi.schedules.list()
       setSchedules(res.data ?? [])
-      if ('message' in res && res.message) setDbMissing(true)
     } catch {
       // silent
     } finally {
@@ -42,19 +51,32 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   const handleAdd = async () => {
     if (!form.name || !form.report_type || !form.schedule_cron) {
       setFormErr('Name, report type, and schedule are required.')
       return
     }
+    if (delivery === 'slack' && !slackChannelId.trim()) {
+      setFormErr('A Slack channel ID is required for Slack delivery.')
+      return
+    }
+    if (delivery === 'email' && (form.recipients ?? []).length === 0) {
+      setFormErr('At least one email recipient is required.')
+      return
+    }
     setSaving(true); setFormErr(null)
     try {
-      const res = await intelApi.schedules.create(form)
+      const res = await intelApi.schedules.create({
+        ...form,
+        recipients: delivery === 'email' ? form.recipients : [],
+        filters: delivery === 'slack' ? { slackChannelId: slackChannelId.trim(), timezone: 'Asia/Kolkata' } : {},
+      })
       if (res.success) {
         setShowForm(false)
-        setForm({ name: '', report_type: 'compliance', schedule_cron: '0 8 * * 1', format: 'pdf', recipients: [] })
+        setForm(defaultForm())
+        setDelivery('email'); setSlackChannelId(DEFAULT_SLACK_CHANNEL)
         await load()
       } else {
         setFormErr(res.error ?? 'Failed to create schedule.')
@@ -100,7 +122,7 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
               <Calendar className="h-4 w-4 text-teal-500" /> Scheduled Reports
             </span>
           </div>
-          <p className="text-xs text-slate-500">Automate report generation and delivery to email recipients on a recurring schedule.</p>
+          <p className="text-xs text-slate-500">Schedule report delivery to a Slack channel or email recipients. Default format is Excel.</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={load} className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
@@ -111,14 +133,6 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
           </button>
         </div>
       </div>
-
-      {/* DB warning */}
-      {dbMissing && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
-          <p className="font-semibold mb-0.5">Database not configured</p>
-          Scheduled reports require PostgreSQL. Set <code className="font-mono">DATABASE_URL</code> in <code className="font-mono">server/.env</code>.
-        </div>
-      )}
 
       {/* Add form */}
       {showForm && (
@@ -132,7 +146,7 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Report Type *</label>
               <select value={form.report_type} onChange={e => setForm(p => ({ ...p, report_type: e.target.value }))} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:outline-none">
-                {REPORT_TYPES.map(t => <option key={t} value={t}>{t.replace('-', ' ')}</option>)}
+                {REPORT_TYPES.map(t => <option key={t} value={t}>{t === 'app-updates' ? 'verified app updates' : t === 'fleet-digest' ? 'fleet health digest (Slack only)' : t.replace('-', ' ')}</option>)}
               </select>
             </div>
             <div>
@@ -142,22 +156,36 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
               </select>
             </div>
             <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-700 mb-1">Delivery</label>
+              <div className="flex gap-2 mb-2">
+                <button type="button" onClick={() => setDelivery('email')} className={`rounded-lg border px-3 py-2 text-xs font-medium ${delivery === 'email' ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-600'}`}>Email recipients</button>
+                <button type="button" onClick={() => setDelivery('slack')} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${delivery === 'slack' ? 'border-[#4A154B] bg-[#4A154B]/5 text-[#4A154B]' : 'border-slate-200 text-slate-600'}`}><MessageSquare className="h-3.5 w-3.5" />Slack channel</button>
+              </div>
+              {delivery === 'slack' && (
+                <div className="rounded-lg border border-[#4A154B]/15 bg-[#4A154B]/[0.03] p-3">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Slack channel ID *</label>
+                  <input value={slackChannelId} onChange={e => setSlackChannelId(e.target.value)} placeholder="C08S9K7G2AH" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:border-[#4A154B]" />
+                  <p className="mt-1 text-[10px] text-slate-500">The Slack bot must be invited to this channel.</p>
+                </div>
+              )}
+            </div>
+            <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-700 mb-1">Schedule *</label>
               <div className="flex flex-wrap gap-2 mb-2">
                 {CRON_PRESETS.map(p => (
                   <button key={p.value} onClick={() => setForm(f => ({ ...f, schedule_cron: p.value }))}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${form.schedule_cron === p.value ? 'border-orange-400 bg-orange-50 text-orange-700 font-semibold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                    className={`rounded-full border px-3 py-1 text-xs transition ${form.schedule_cron === p.value ? 'is-selected font-semibold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                     {p.label}
                   </button>
                 ))}
               </div>
               <input value={form.schedule_cron} onChange={e => setForm(p => ({ ...p, schedule_cron: e.target.value }))} placeholder="0 8 * * 1" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono focus:outline-none focus:border-orange-400" />
-              <p className="text-[10px] text-slate-400 mt-1">5-field cron: minute hour day month weekday · e.g. "0 8 * * 1" = Monday 8am</p>
+              <p className="text-[10px] text-slate-400 mt-1">5-field cron: minute hour day month weekday · Slack reports use India Standard Time (Asia/Kolkata).</p>
             </div>
-            <div className="sm:col-span-2">
+            {delivery === 'email' && <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-700 mb-1">Recipients</label>
               <div className="flex gap-2 mb-2">
-                <input value={recipientInput} onChange={e => setRecipientInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRecipient()} placeholder="admin@company.com" className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:outline-none focus:border-orange-400" />
+                <input value={recipientInput} onChange={e => setRecipientInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRecipient()} placeholder="avinash.verma@zinnia.com" className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:outline-none focus:border-orange-400" />
                 <button onClick={addRecipient} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">Add</button>
               </div>
               {(form.recipients ?? []).length > 0 && (
@@ -170,7 +198,7 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
           {formErr && <p className="mt-3 text-xs text-red-600">{formErr}</p>}
           <div className="mt-4 flex gap-2">
@@ -207,6 +235,7 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
                   <p className="text-xs text-slate-500">
                     {s.report_type} · <code className="font-mono text-slate-600">{s.schedule_cron}</code>
                     {s.recipients?.length > 0 && ` · ${s.recipients.length} recipient${s.recipients.length !== 1 ? 's' : ''}`}
+                    {s.filters?.slackChannelId && <> · <span className="inline-flex items-center gap-1 text-[#4A154B]"><MessageSquare className="h-3 w-3" />Slack</span></>}
                   </p>
                   {s.last_run_at && (
                     <p className="text-xs text-slate-400 mt-0.5">Last run: {new Date(s.last_run_at).toLocaleString()}</p>
@@ -226,6 +255,11 @@ export function ScheduledReportsPage({ onBack }: { onBack: () => void }) {
                   </button>
                 </div>
               </div>
+              {!!s.filters?.slackChannelId && (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <SlackScheduleSection module="scheduled_report" sourceId={s.id} canEdit={viewerRole === 'Global Admin'} />
+                </div>
+              )}
             </div>
           ))}
         </div>

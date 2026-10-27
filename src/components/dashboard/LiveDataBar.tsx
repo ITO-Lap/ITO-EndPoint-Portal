@@ -41,7 +41,7 @@ const SOURCES: SourcePill[] = [
     pillBorder: 'border-orange-200',
     pillText: 'text-orange-700',
     dotColor: 'bg-orange-500',
-    navigateTo: 'Intune Devices',
+    navigateTo: 'Managed Devices',
   },
   {
     id: 'manageEngine',
@@ -53,7 +53,7 @@ const SOURCES: SourcePill[] = [
     pillBorder: 'border-orange-200',
     pillText: 'text-orange-700',
     dotColor: 'bg-orange-500',
-    navigateTo: 'ManageEngine Devices',
+    navigateTo: 'Managed Devices',
   },
 ]
 
@@ -330,7 +330,10 @@ export function LiveDataBar({
               key={s.id}
               type="button"
               title={`${s.label}: ${count.toLocaleString()} devices — click to view`}
-              onClick={() => onNavigate?.(s.navigateTo)}
+              onClick={() => {
+                try { window.localStorage.setItem('managedDevicesView', JSON.stringify(s.id === 'intune' ? 'intune' : 'mac')) } catch { /* ignore */ }
+                onNavigate?.(s.navigateTo)
+              }}
               className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold transition ${s.pillBg} ${s.pillBorder} ${s.pillText} ${onNavigate ? 'hover:brightness-95 hover:shadow-sm cursor-pointer' : 'cursor-default'}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${count > 0 ? s.dotColor : 'bg-slate-300'}`} />
@@ -354,7 +357,7 @@ export function LiveDataBar({
             onClick={() => togglePopover('jira')}
             className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold transition ${
               activePopover === 'jira'
-                ? 'bg-orange-100 border-orange-400 text-orange-700 ring-1 ring-orange-200'
+                ? 'is-selected'
                 : 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100 hover:border-orange-300'
             }`}
             title="Jira — view open issues"

@@ -1,4 +1,4 @@
-import { Sparkles, User } from 'lucide-react'
+import { Waves, User } from 'lucide-react'
 import type { CopilotCitation } from '../../api/copilot'
 
 function formatFreshness(iso: string): string {
@@ -17,13 +17,21 @@ function formatFreshness(iso: string): string {
 }
 
 function CitationBadge({ citation }: { citation: CopilotCitation }) {
+  const content = <>{citation.source} · {citation.recordId} · {formatFreshness(citation.freshness)}</>
+  const className = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-medium text-slate-500'
+  const style = { background: 'rgba(148,163,184,0.10)', borderColor: 'rgba(148,163,184,0.25)' }
+  if (citation.url) return (
+    <a href={citation.url} target="_blank" rel="noreferrer" className={`${className} hover:text-blue-600`} style={style} title={`External source: ${citation.recordId}`}>
+      {content}
+    </a>
+  )
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-medium text-slate-500"
-      style={{ background: 'rgba(148,163,184,0.10)', borderColor: 'rgba(148,163,184,0.25)' }}
+      className={className}
+      style={style}
       title={`${citation.source} · ${citation.recordId} · fetched ${citation.freshness}`}
     >
-      {citation.source} · {citation.recordId} · {formatFreshness(citation.freshness)}
+      {content}
     </span>
   )
 }
@@ -40,9 +48,9 @@ export function CopilotMessageBubble({ role, content, citations }: Props) {
   return (
     <div className={`flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div
-        className={`grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg ${isUser ? 'bg-slate-700' : 'bg-gradient-to-br from-orange-500 to-orange-600'}`}
+        className={`grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg ${isUser ? 'bg-slate-700' : 'bg-gradient-to-br from-blue-700 via-sky-500 to-cyan-400'}`}
       >
-        {isUser ? <User className="h-3 w-3 text-white" /> : <Sparkles className="h-3 w-3 text-white" />}
+        {isUser ? <User className="h-3 w-3 text-white" /> : <Waves className="h-3 w-3 text-white" />}
       </div>
       <div className={`flex max-w-[85%] flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
         <div

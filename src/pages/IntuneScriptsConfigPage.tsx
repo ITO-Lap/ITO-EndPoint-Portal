@@ -13,6 +13,8 @@ import type {
 import type { UserToolRole } from '../types'
 import { Badge } from '../components/ui/Badge'
 import { Pagination } from '../components/ui/Pagination'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { useToast } from '../components/ui/ToastProvider'
 
 const PAGE_SIZE = 25
@@ -164,9 +166,10 @@ interface Props {
   userEmail?: string
 }
 
-// Rendered as the "Scripts & Configs" tab within IntuneDevicesPage — not a
-// standalone routed page, so there's no onBack/page-level header here; the
-// parent page already provides the "Intune Devices" title and Back button.
+// Rendered as the "Scripts & Configs" tab within IntuneDevicesPage (itself
+// nested inside ManagedDevicesPage) — not a standalone routed page, so
+// there's no onBack/page-level header here; the parent page(s) already
+// provide the title and Back button.
 export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
   useEffect(() => { setIntuneScriptsConfigActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
 
@@ -181,6 +184,8 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
   const [category, setCategory] = useState<ResourceCategory | 'all'>('all')
   const [platform, setPlatform] = useState<string | 'all'>('all')
   const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<'name' | 'category' | 'platform' | 'modified'>('name')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -197,7 +202,7 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
         search: search.trim() || undefined,
         category: category === 'all' ? undefined : category,
         platform: platform === 'all' ? undefined : platform,
-        page, pageSize: PAGE_SIZE,
+        page, pageSize: PAGE_SIZE, sortBy: sortKey, sortDirection,
       })
       setItems(res.data)
       setTotal(res.pagination.total)
@@ -208,7 +213,7 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [search, category, platform, page])
+  }, [search, category, platform, page, sortKey, sortDirection])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => { setPage(1) }, [search, category, platform])
@@ -274,6 +279,11 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const hasCategoryErrors = Object.keys(categoryErrors).length > 0
+  const handleSort = (key: typeof sortKey) => {
+    setSortDirection(direction => toggleSortDirection(sortKey, direction, key))
+    setSortKey(key)
+    setPage(1)
+  }
 
   return (
     <div className="space-y-4">
@@ -300,12 +310,12 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
           {/* Category pills */}
           <div className="flex gap-1 glass rounded-2xl p-1 flex-wrap">
             <button type="button" onClick={() => setCategory('all')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === 'all' ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === 'all' ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
               All
             </button>
             {ALL_CATEGORIES.map(c => (
               <button key={c} type="button" onClick={() => setCategory(c)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === c ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${category === c ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
                 {CATEGORY_LABELS[c]}
               </button>
             ))}
@@ -392,7 +402,11 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
                             className="h-3.5 w-3.5 rounded border-slate-300"
                           />
                         </th>
-                        {['Name', 'Category', 'Platform', 'Last Modified', 'Assigned', ''].map(h => <th key={h}>{h}</th>)}
+                        <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Category" sortKey="category" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Platform" sortKey="platform" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <SortableHeader label="Last Modified" sortKey="modified" activeSortKey={sortKey} direction={sortDirection} onSort={key => handleSort(key as typeof sortKey)} />
+                        <th>Assigned</th><th />
                       </tr>
                     </thead>
                     <tbody>

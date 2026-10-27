@@ -11,7 +11,7 @@
 
 import type { ApiDevice } from '../api'
 import type { KpiConfig, KpiId, KpiFilterOpts } from './kpiConfig'
-import { KPI_CONFIGS, fmtDaysAgo, fmtOsStatus, fmtLifecycleStatus, daysSinceCheckIn, versionsBehind } from './kpiConfig'
+import { KPI_CONFIGS, fmtDaysAgo, fmtLifecycleStatus, daysSinceCheckIn } from './kpiConfig'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,12 +46,12 @@ function getCellValue(device: ApiDevice, key: string, config: KpiConfig): string
     case 'action':           return config.getRecommendedAction(device)
     case 'daysStale':        return String(daysSinceCheckIn(device.lastCheckIn))
     case 'lifecycleStatus':  return fmtLifecycleStatus(device)
-    case 'osStatus':         return fmtOsStatus(device.osVersion)
-    case 'versionsBehind':   return String(versionsBehind(device.osVersion))
-    case 'upgradeEligible':  return versionsBehind(device.osVersion) < 0 ? 'Hardware Limit' : 'Eligible'
-    case 'latestVersion':    return '15.5'
-    case 'eolStatus':        return device.osVersion?.match(/^1[01]\./) ? '● EOL' : device.osVersion?.match(/^12\./) ? '⚠ Near EOL' : '—'
-    case 'patchStatus':      return device.complianceState === 'Compliant' && !device.primaryIssue ? 'Fully Patched' : 'Has Issues'
+    case 'osStatus':         return 'Not reported by connected API'
+    case 'versionsBehind':   return 'Not reported by connected API'
+    case 'upgradeEligible':  return 'Not reported by connected API'
+    case 'latestVersion':    return 'Not configured'
+    case 'eolStatus':        return 'Not reported by connected API'
+    case 'patchStatus':      return 'Not reported by connected API'
     default:                 return (device as unknown as Record<string, string>)[key] ?? '—'
   }
 }

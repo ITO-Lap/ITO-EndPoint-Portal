@@ -173,6 +173,8 @@ export interface ListParams {
   platform?: string
   status?: 'enabled' | 'disabled' | 'unknown'
   search?: string
+  sortBy?: 'name' | 'category' | 'platform' | 'enabled' | 'assignments' | 'modified'
+  sortDirection?: 'asc' | 'desc'
   page: number
   pageSize: number
 }

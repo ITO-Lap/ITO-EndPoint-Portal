@@ -10,7 +10,7 @@ import {
   FileSpreadsheet, FileCode2,
 } from 'lucide-react'
 import { api } from '../api'
-import type { ApiDevice, EntraGroupReportResult, EntraGroupSuggestion } from '../api'
+import type { ApiDevice, AppStatus, EntraGroupReportResult, EntraGroupSuggestion } from '../api'
 import { intelApi } from '../api/intelligence'
 import type { DeviceReportData, DeviceReportDevice } from '../api/intelligence'
 import type { UserToolRole } from '../types'
@@ -18,7 +18,10 @@ import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useToast } from '../components/ui/ToastProvider'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { IntuneScriptsConfigTab } from './IntuneScriptsConfigPage'
+import { CopyText } from '../components/ui/CopyText'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,6 +70,28 @@ function KpiCard({ label, value, sub, color, onClick, disabled }: {
 
 const PAGE_SIZE = 50
 
+interface IntuneAgentAppDevice {
+  deviceId: string
+  deviceName: string
+  user: string
+  platform: 'Windows' | 'macOS'
+  lastCheckIn: string
+  inventoryAvailable: boolean
+  zscaler: { installed: boolean; version: string | null }
+  crowdstrike: { installed: boolean; version: string | null }
+}
+
+interface IntuneAgentAppInventory {
+  totalDevices: number
+  inventoryAvailableDevices: number
+  inventoryUnavailableDevices: number
+  zscalerInstalled: number
+  crowdstrikeInstalled: number
+  devices: IntuneAgentAppDevice[]
+}
+
+type IntuneAgentFilter = 'all' | 'zscaler' | 'crowdstrike' | 'inventory-failed'
+
 function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', initialPlatform = 'all' }: {
   devices: ApiDevice[]; loading: boolean; onSelect: (d: ApiDevice) => void
   initialCompliance?: string; initialPlatform?: string
@@ -75,6 +100,8 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
   const [compliance, setCompliance] = useState(initialCompliance)
   const [platform,   setPlatform]   = useState(initialPlatform)
   const [page,       setPage]       = useState(1)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   const platformCounts = useMemo(() => ({
     all:     devices.length,
@@ -110,8 +137,26 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
     return list
   }, [devices, platform, compliance, search])
 
-  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageDevices = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const sortedDevices = sortKey ? sortRows(filtered, device => {
+    switch (sortKey) {
+      case 'device': return device.deviceName
+      case 'user': return device.user
+      case 'platform': return device.platform
+      case 'osVersion': return device.osVersion
+      case 'serial': return device.serialNumber
+      case 'encryption': return device.encryptionStatus
+      case 'compliance': return device.complianceState
+      case 'lastCheckIn': return Date.parse(device.lastCheckIn) || device.lastCheckIn
+      default: return ''
+    }
+  }, sortDirection) : filtered
+  const totalPages  = Math.max(1, Math.ceil(sortedDevices.length / PAGE_SIZE))
+  const pageDevices = sortedDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const handleSort = (key: string) => {
+    setSortDirection(direction => toggleSortDirection(sortKey, direction, key))
+    setSortKey(key)
+  }
 
   useEffect(() => { setPage(1) }, [search, compliance, platform])
 
@@ -134,7 +179,7 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
       <div className="flex gap-1 glass rounded-2xl p-1 flex-wrap">
         {platformTabs.map(pt => (
           <button key={pt.id} type="button" onClick={() => setPlatform(pt.id)}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${platform === pt.id ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${platform === pt.id ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}
             style={platform === pt.id ? { boxShadow: '0 0 0 1px rgba(14,165,233,0.2),0 4px 12px rgba(14,165,233,0.1)' } : {}}>
             {pt.icon}{pt.label}
             <span className={`rounded-full px-1.5 py-0.5 text-[0.55rem] font-black ${platform === pt.id ? 'bg-[#0078D4]/10 text-[#0078D4]' : 'bg-slate-100 text-slate-500'}`}>
@@ -178,7 +223,12 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
             <div className="overflow-x-auto">
               <table className="z-table">
                 <thead>
-                  <tr>{['Device','User','Platform','OS Version','Serial','Encryption','Compliance','Last Check-in'].map(h => <th key={h}>{h}</th>)}</tr>
+                  <tr>
+                    {[
+                      ['Device', 'device'], ['User', 'user'], ['Platform', 'platform'], ['OS Version', 'osVersion'],
+                      ['Serial', 'serial'], ['Encryption', 'encryption'], ['Compliance', 'compliance'], ['Last Check-in', 'lastCheckIn'],
+                    ].map(([label, key]) => <SortableHeader key={key} label={label} sortKey={key} activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />)}
+                  </tr>
                 </thead>
                 <tbody>
                   {pageDevices.map(d => (
@@ -318,7 +368,7 @@ function ComplianceTab({ devices }: { devices: ApiDevice[] }) {
               <div key={d.id} className="flex items-center gap-3 px-5 py-3">
                 <XCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-700 truncate">{d.deviceName}</p>
+                  <CopyText value={d.deviceName} label="Device name"><p className="text-xs font-bold text-slate-700 truncate">{d.deviceName}</p></CopyText>
                   <p className="text-[0.65rem] text-slate-400">{d.primaryIssue || 'Compliance issue detected'}</p>
                 </div>
                 <span className={`text-[0.62rem] font-bold rounded-full border px-2 py-0.5 ${
@@ -329,6 +379,189 @@ function ComplianceTab({ devices }: { devices: ApiDevice[] }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function downloadIntuneAppsCsv(filename: string, headers: string[], rows: string[][]) {
+  const csv = [headers, ...rows].map(row => row.map(value => `"${value.replace(/"/g, '""')}"`).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+  const anchor = Object.assign(document.createElement('a'), { href: url, download: filename })
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function IntuneSecurityTab({ devices, loading }: { devices: ApiDevice[]; loading: boolean }) {
+  const [inventory, setInventory] = useState<IntuneAgentAppInventory | null>(null)
+  const [inventoryLoading, setInventoryLoading] = useState(false)
+  const [inventoryError, setInventoryError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<IntuneAgentFilter>('all')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+
+  const intuneDesktopDevices = useMemo(
+    () => devices.filter(device => device.managementSource === 'Microsoft Intune' && (device.platform === 'Windows' || device.platform === 'macOS')),
+    [devices],
+  )
+
+  const loadInventory = useCallback(async () => {
+    setInventoryLoading(true)
+    setInventoryError(null)
+    try {
+      const rows: IntuneAgentAppDevice[] = []
+      const batchSize = 8
+      for (let start = 0; start < intuneDesktopDevices.length; start += batchSize) {
+        const batch = intuneDesktopDevices.slice(start, start + batchSize)
+        const results = await Promise.allSettled(batch.map(device => api.fetchDeviceApps(device.id)))
+        results.forEach((result, index) => {
+          const device = batch[index]!
+          const apps: AppStatus[] = result.status === 'fulfilled' ? result.value : []
+          const matches = (app: AppStatus, pattern: RegExp) => pattern.test(`${app.name} ${app.publisher} ${app.appType ?? ''}`)
+          const installedApp = (pattern: RegExp) => apps.find(app => app.status === 'Installed' && matches(app, pattern))
+          const inventoryAvailable = result.status === 'fulfilled'
+          const zscaler = installedApp(/zscaler/i)
+          const crowdstrike = installedApp(/crowd\s*strike|\bfalcon\b/i)
+
+          rows.push({
+            deviceId: device.id,
+            deviceName: device.deviceName,
+            user: device.user,
+            platform: device.platform as 'Windows' | 'macOS',
+            lastCheckIn: device.lastCheckIn,
+            inventoryAvailable,
+            zscaler: { installed: inventoryAvailable && !!zscaler, version: inventoryAvailable ? zscaler?.version ?? null : null },
+            crowdstrike: { installed: inventoryAvailable && !!crowdstrike, version: inventoryAvailable ? crowdstrike?.version ?? null : null },
+          })
+        })
+      }
+      const assessed = rows.filter(row => row.inventoryAvailable)
+      setInventory({
+        totalDevices: rows.length,
+        inventoryAvailableDevices: assessed.length,
+        inventoryUnavailableDevices: rows.length - assessed.length,
+        zscalerInstalled: assessed.filter(row => row.zscaler.installed).length,
+        crowdstrikeInstalled: assessed.filter(row => row.crowdstrike.installed).length,
+        devices: rows,
+      })
+    } catch (error) {
+      setInventoryError(error instanceof Error ? error.message : 'Failed to load Intune app inventory')
+    } finally {
+      setInventoryLoading(false)
+    }
+  }, [intuneDesktopDevices])
+
+  useEffect(() => {
+    if (!loading) void loadInventory()
+  }, [loading, loadInventory])
+
+  const visibleRows = useMemo(() => {
+    const query = search.toLowerCase()
+    return (inventory?.devices ?? []).filter(row => {
+      if (!row.deviceName.toLowerCase().includes(query) && !row.user.toLowerCase().includes(query)) return false
+      if (filter === 'inventory-failed') return !row.inventoryAvailable
+      if (filter === 'zscaler' || filter === 'crowdstrike') return row.inventoryAvailable
+      return true
+    })
+  }, [inventory, search, filter])
+
+  useEffect(() => { setPage(1) }, [filter, search])
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE))
+  const sortedRows = sortKey ? sortRows(visibleRows, row => {
+    switch (sortKey) {
+      case 'device': return row.deviceName
+      case 'user': return row.user
+      case 'platform': return row.platform
+      case 'zscaler': return row.zscaler.version ?? (row.zscaler.installed ? 'Installed' : 'Not installed')
+      case 'crowdstrike': return row.crowdstrike.version ?? (row.crowdstrike.installed ? 'Installed' : 'Not installed')
+      case 'inventory': return inventoryStatus(row)
+      case 'lastCheckIn': return Date.parse(row.lastCheckIn) || row.lastCheckIn
+      default: return ''
+    }
+  }, sortDirection) : visibleRows
+  const pageRows = sortedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const handleSort = (key: string) => { setSortDirection(direction => toggleSortDirection(sortKey, direction, key)); setSortKey(key) }
+  const assessed = inventory?.inventoryAvailableDevices ?? 0
+  const zscalerMissing = assessed - (inventory?.zscalerInstalled ?? 0)
+  const crowdstrikeMissing = assessed - (inventory?.crowdstrikeInstalled ?? 0)
+
+  function appStatus(row: IntuneAgentAppDevice, agent: 'zscaler' | 'crowdstrike') {
+    if (!row.inventoryAvailable) return 'Inventory unavailable'
+    const app = row[agent]
+    return app.installed ? `Installed${app.version ? ` · ${app.version}` : ''}` : 'Not installed'
+  }
+
+  function inventoryStatus(row: IntuneAgentAppDevice) {
+    if (!row.inventoryAvailable) return 'Request failed'
+    return row.zscaler.installed || row.crowdstrike.installed ? 'App found' : 'No target app found'
+  }
+
+  const showZscaler = filter !== 'crowdstrike' && filter !== 'inventory-failed'
+  const showCrowdStrike = filter !== 'zscaler' && filter !== 'inventory-failed'
+
+  function handleExport() {
+    const headers = ['Device', 'User', 'Platform', ...(showZscaler ? ['Zscaler'] : []), ...(showCrowdStrike ? ['CrowdStrike'] : []), filter === 'inventory-failed' ? 'Inventory Error' : 'Inventory Status', 'Last Check-in']
+    const rows = visibleRows.map(row => [row.deviceName, row.user, row.platform, ...(showZscaler ? [appStatus(row, 'zscaler')] : []), ...(showCrowdStrike ? [appStatus(row, 'crowdstrike')] : []), inventoryStatus(row), row.lastCheckIn])
+    downloadIntuneAppsCsv('intune-zscaler-crowdstrike-apps.csv', headers, rows)
+  }
+
+  const tileClass = 'rounded-xl border px-3 py-3 text-left transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400'
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <button type="button" aria-pressed={filter === 'zscaler'} onClick={() => setFilter('zscaler')} className={`${tileClass} ${filter === 'zscaler' ? 'border-sky-300 bg-sky-100 ring-1 ring-sky-200' : 'border-sky-100 bg-sky-50'}`}>
+          <p className="text-[0.6rem] font-black uppercase tracking-widest text-sky-700">Zscaler installed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.zscalerInstalled ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Not installed: {inventory ? zscalerMissing : '—'} · {assessed} assessed</p>
+        </button>
+        <button type="button" aria-pressed={filter === 'crowdstrike'} onClick={() => setFilter('crowdstrike')} className={`${tileClass} ${filter === 'crowdstrike' ? 'border-orange-300 bg-orange-100 ring-1 ring-orange-200' : 'border-orange-100 bg-orange-50'}`}>
+          <p className="text-[0.6rem] font-black uppercase tracking-widest text-orange-700">CrowdStrike installed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.crowdstrikeInstalled ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Not installed: {inventory ? crowdstrikeMissing : '—'} · {assessed} assessed</p>
+        </button>
+        <button type="button" aria-pressed={filter === 'inventory-failed'} onClick={() => setFilter('inventory-failed')} className={`${tileClass} ${filter === 'inventory-failed' ? 'border-amber-300 bg-amber-100 ring-1 ring-amber-200' : 'border-amber-100 bg-amber-50'}`}>
+          <p className="text-[0.6rem] font-black uppercase tracking-widest text-amber-700">Inventory request failed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.inventoryUnavailableDevices ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Could not assess these devices</p>
+        </button>
+        <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')} className={`${tileClass} ${filter === 'all' ? 'border-slate-300 bg-slate-100 ring-1 ring-slate-200' : 'border-slate-200 bg-slate-50'}`}>
+          <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-500">Total Intune Macs + Windows</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.totalDevices ?? intuneDesktopDevices.length}</p><p className="text-[0.62rem] text-slate-500">Show all assessed devices</p>
+        </button>
+      </div>
+
+      <div className="glass rounded-2xl overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100/60 p-3">
+          <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search device or user…" className="h-9 w-full rounded-xl pl-9 pr-3 text-xs water-input" /></div>
+          {filter !== 'all' && <button type="button" onClick={() => setFilter('all')} className="text-xs font-semibold text-sky-700">Clear filter</button>}
+          <button type="button" onClick={() => void loadInventory()} disabled={inventoryLoading || loading} className="flex items-center gap-1.5 rounded-lg border border-slate-200 glass px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${inventoryLoading ? 'animate-spin' : ''}`} />Refresh</button>
+          {inventory && <button type="button" onClick={handleExport} className="flex items-center gap-1.5 rounded-lg border border-slate-200 glass px-3 py-2 text-xs font-semibold text-slate-600"><Download className="h-3.5 w-3.5" />Export CSV</button>}
+          <span className="ml-auto text-[0.65rem] text-slate-400">{visibleRows.length.toLocaleString()} devices</span>
+        </div>
+        {inventoryError && <p className="px-4 py-3 text-xs text-red-600">Could not load Intune app inventory: {inventoryError}</p>}
+        {inventoryLoading && !inventory ? <div className="p-10 text-center text-sm text-slate-400">Checking installed apps on Intune Windows and macOS devices…</div> : !inventory ? <div className="p-10 text-center text-sm text-slate-400">No app inventory results.</div> : visibleRows.length === 0 ? <div className="p-10 text-center text-sm text-slate-400">No devices match this filter.</div> : (
+          <div className="overflow-x-auto">
+            <table className="z-table min-w-[760px]">
+              <thead><tr>
+                <SortableHeader label="Device" sortKey="device" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="User" sortKey="user" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Platform" sortKey="platform" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                {showZscaler && <SortableHeader label="Zscaler" sortKey="zscaler" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />}
+                {showCrowdStrike && <SortableHeader label="CrowdStrike" sortKey="crowdstrike" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />}
+                <SortableHeader label={filter === 'inventory-failed' ? 'Inventory Error' : 'Inventory Status'} sortKey="inventory" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Last Check-in" sortKey="lastCheckIn" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              </tr></thead>
+              <tbody>{pageRows.map(row => (
+                <tr key={row.deviceId}>
+                  <td className="font-semibold text-slate-700">{row.deviceName || '—'}</td><td className="text-slate-500">{row.user || '—'}</td><td>{row.platform}</td>
+                  {showZscaler && <td className={row.inventoryAvailable && row.zscaler.installed ? 'text-emerald-700' : row.inventoryAvailable ? 'text-red-600' : 'text-amber-700'}>{appStatus(row, 'zscaler')}</td>}
+                  {showCrowdStrike && <td className={row.inventoryAvailable && row.crowdstrike.installed ? 'text-emerald-700' : row.inventoryAvailable ? 'text-red-600' : 'text-amber-700'}>{appStatus(row, 'crowdstrike')}</td>}
+                  <td className={!row.inventoryAvailable ? 'font-semibold text-amber-700' : row.zscaler.installed || row.crowdstrike.installed ? 'font-semibold text-emerald-700' : 'font-semibold text-red-600'}>{inventoryStatus(row)}</td>
+                  <td className="text-slate-400">{row.lastCheckIn || '—'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={visibleRows.length} pageSize={PAGE_SIZE} itemLabel="device" />
+          </div>
+        )}
+        <div className="border-t border-slate-100/60 px-4 py-3 text-[0.65rem] text-slate-400">Application presence from Intune detected-app inventory; it does not confirm live agent health.</div>
+      </div>
     </div>
   )
 }
@@ -358,6 +591,8 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
   const [search,        setSearch]        = useState('')
   const [page,          setPage]          = useState(1)
   const [ownerFilter,   setOwnerFilter]   = useState<'all' | 'company' | 'personal'>('all')
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   useEffect(() => {
     let cancelled = false
@@ -392,8 +627,22 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
     return items
   }, [reportData, search, ownerFilter])
 
-  const totalPages = Math.ceil(filtered.length / REPORT_PAGE_SIZE)
-  const pageItems  = filtered.slice((page - 1) * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE)
+  const sortedReport = sortKey ? sortRows(filtered, device => {
+    switch (sortKey) {
+      case 'device': return device.deviceName
+      case 'owner': return device.userPrincipalName
+      case 'type': return device.ownerType
+      case 'os': return device.operatingSystem
+      case 'compliance': return device.complianceState
+      case 'encrypted': return device.isEncrypted
+      case 'enrolled': return Date.parse(device.enrolledDateTime ?? '') || device.enrolledDateTime
+      case 'lastSync': return Date.parse(device.lastSyncDateTime ?? '') || device.lastSyncDateTime
+      default: return ''
+    }
+  }, sortDirection) : filtered
+  const totalPages = Math.ceil(sortedReport.length / REPORT_PAGE_SIZE)
+  const pageItems  = sortedReport.slice((page - 1) * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE)
+  const handleReportSort = (key: string) => { setSortDirection(direction => toggleSortDirection(sortKey, direction, key)); setSortKey(key); setPage(1) }
 
   const m1 = reportData?.newDevicesByMonth[0]
   const m2 = reportData?.newDevicesByMonth[1]
@@ -600,14 +849,14 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 border-b border-white/10">
-                    <th className="px-4 py-2.5 text-left">Device Name</th>
-                    <th className="px-4 py-2.5 text-left">Owner (Email)</th>
-                    <th className="px-4 py-2.5 text-left">Type</th>
-                    <th className="px-4 py-2.5 text-left">OS</th>
-                    <th className="px-4 py-2.5 text-left">Compliance</th>
-                    <th className="px-4 py-2.5 text-left">Encrypted</th>
-                    <th className="px-4 py-2.5 text-left">Enrolled</th>
-                    <th className="px-4 py-2.5 text-left">Last Sync</th>
+                    <SortableHeader label="Device Name" sortKey="device" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="Owner (Email)" sortKey="owner" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="Type" sortKey="type" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="OS" sortKey="os" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="Compliance" sortKey="compliance" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="Encrypted" sortKey="encrypted" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="Enrolled" sortKey="enrolled" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
+                    <SortableHeader label="Last Sync" sortKey="lastSync" activeSortKey={sortKey} direction={sortDirection} onSort={handleReportSort} className="px-4 py-2.5 text-left" />
                   </tr>
                 </thead>
                 <tbody>
@@ -618,7 +867,7 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
                   ) : pageItems.map((d: DeviceReportDevice) => (
                     <tr key={d.id} className="border-b border-white/5 hover:bg-white/5 transition">
                       <td className="px-4 py-2 font-semibold text-slate-800 whitespace-nowrap">{d.deviceName || '—'}</td>
-                      <td className="px-4 py-2 text-slate-500 max-w-[180px] truncate" title={d.userPrincipalName}>{d.userPrincipalName || '—'}</td>
+                      <td className="px-4 py-2 text-slate-500 max-w-[180px] truncate" title={d.userPrincipalName}><CopyText value={d.userPrincipalName} label="User">{d.userPrincipalName || '—'}</CopyText></td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold border ${
                           d.ownerType === 'company' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'
@@ -722,6 +971,10 @@ function EntraIDTab() {
   const [uSearch,      setUSearch]      = useState('')
   const [dSearch,      setDSearch]      = useState('')
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
+  const [userSortKey, setUserSortKey] = useState<string | null>(null)
+  const [userSortDirection, setUserSortDirection] = useState<SortDirection>('asc')
+  const [deviceSortKey, setDeviceSortKey] = useState<string | null>(null)
+  const [deviceSortDirection, setDeviceSortDirection] = useState<SortDirection>('asc')
 
   function load() {
     setLoading(true)
@@ -751,8 +1004,35 @@ function EntraIDTab() {
   const filteredDevices = useMemo(() => { const q = dSearch.toLowerCase(); return q ? devices.filter(d => d.deviceName.toLowerCase().includes(q) || d.primaryUser.toLowerCase().includes(q)) : devices }, [devices, dSearch])
   const riskCounts      = useMemo(() => ({ high: users.filter(u => u.riskLevel === 'High').length, medium: users.filter(u => u.riskLevel === 'Medium').length }), [users])
 
-  const { page: usersPage,   setPage: setUsersPage,   totalPages: usersTotalPages,   paginated: paginatedUsers }   = usePagination(filteredUsers, ENTRA_PAGE_SIZE)
-  const { page: devicesPage, setPage: setDevicesPage, totalPages: devicesTotalPages, paginated: paginatedDevices } = usePagination(filteredDevices, ENTRA_PAGE_SIZE)
+  const sortedUsers = userSortKey ? sortRows(filteredUsers, user => {
+    switch (userSortKey) {
+      case 'name': return user.displayName
+      case 'upn': return user.upn
+      case 'department': return user.department
+      case 'risk': return user.riskLevel
+      case 'lastSignIn': return Date.parse(user.lastSignIn ?? '') || user.lastSignIn
+      case 'mfa': return user.mfaStatus
+      case 'status': return user.accountStatus
+      default: return ''
+    }
+  }, userSortDirection) : filteredUsers
+  const sortedDirectoryDevices = deviceSortKey ? sortRows(filteredDevices, device => {
+    switch (deviceSortKey) {
+      case 'name': return device.deviceName
+      case 'primaryUser': return device.primaryUser
+      case 'os': return `${device.os} ${device.osVersion ?? ''}`
+      case 'joinType': return device.joinType
+      case 'compliance': return device.complianceState
+      case 'encryption': return device.encryptionState
+      case 'checkin': return device.daysSinceCheckIn ?? Date.parse(device.lastCheckIn ?? '')
+      case 'issues': return device.openIssues?.length ?? 0
+      default: return ''
+    }
+  }, deviceSortDirection) : filteredDevices
+  const { page: usersPage, setPage: setUsersPage, totalPages: usersTotalPages, paginated: paginatedUsers } = usePagination(sortedUsers, ENTRA_PAGE_SIZE)
+  const { page: devicesPage, setPage: setDevicesPage, totalPages: devicesTotalPages, paginated: paginatedDevices } = usePagination(sortedDirectoryDevices, ENTRA_PAGE_SIZE)
+  const handleUserSort = (key: string) => { setUserSortDirection(direction => toggleSortDirection(userSortKey, direction, key)); setUserSortKey(key); setUsersPage(1) }
+  const handleDeviceSort = (key: string) => { setDeviceSortDirection(direction => toggleSortDirection(deviceSortKey, direction, key)); setDeviceSortKey(key); setDevicesPage(1) }
 
   return (
     <div className="flex flex-col gap-4">
@@ -810,7 +1090,7 @@ function EntraIDTab() {
           { id: 'groups'  as const, label: 'Groups',           icon: <Building2 className="h-3.5 w-3.5" /> },
         ]).map(s => (
           <button key={s.id} type="button" onClick={() => setSection(s.id)}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all ${section === s.id ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all ${section === s.id ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}
             style={section === s.id ? { boxShadow: '0 0 0 1px rgba(0,120,212,0.2),0 4px 12px rgba(0,120,212,0.1)' } : {}}>
             {s.icon}{s.label}
             {s.id === 'users' && riskCounts.high > 0 && <span className="rounded-full px-1.5 py-0.5 text-[0.5rem] font-black bg-red-100 text-red-600 border border-red-200">{riskCounts.high} risk</span>}
@@ -845,9 +1125,15 @@ function EntraIDTab() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-100/50">
-                  <tr>{['Display Name', 'UPN / Email', 'Department', 'Risk', 'Last Sign-In', 'MFA', 'Status'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">{h}</th>
-                  ))}</tr>
+                  <tr>
+                    <SortableHeader label="Display Name" sortKey="name" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="UPN / Email" sortKey="upn" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Department" sortKey="department" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Risk" sortKey="risk" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Last Sign-In" sortKey="lastSignIn" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="MFA" sortKey="mfa" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Status" sortKey="status" activeSortKey={userSortKey} direction={userSortDirection} onSort={handleUserSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                  </tr>
                 </thead>
                 <tbody>
                   {paginatedUsers.flatMap((u, i) => {
@@ -860,10 +1146,10 @@ function EntraIDTab() {
                               style={{ background: u.riskLevel === 'High' ? '#EF4444' : u.riskLevel === 'Medium' ? '#F59E0B' : '#0078D4' }}>
                               {(u.displayName || '?').charAt(0).toUpperCase()}
                             </div>
-                            <span className="font-semibold text-slate-700 truncate max-w-[140px]">{u.displayName}</span>
+                            <CopyText value={u.displayName} label="User name"><span className="font-semibold text-slate-700 truncate max-w-[140px]">{u.displayName}</span></CopyText>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-slate-500 max-w-[160px] truncate">{u.upn}</td>
+                        <td className="px-4 py-2.5 text-slate-500 max-w-[160px] truncate"><CopyText value={u.upn} label="User">{u.upn}</CopyText></td>
                         <td className="px-4 py-2.5 text-slate-500">{u.department || '—'}</td>
                         <td className="px-4 py-2.5">
                           {u.riskLevel && u.riskLevel !== 'None'
@@ -936,14 +1222,21 @@ function EntraIDTab() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-100/50">
-                  <tr>{['Device Name', 'Primary User', 'OS', 'Join Type', 'Compliance', 'Encryption', 'Last Check-in', 'Issues'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">{h}</th>
-                  ))}</tr>
+                  <tr>
+                    <SortableHeader label="Device Name" sortKey="name" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Primary User" sortKey="primaryUser" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="OS" sortKey="os" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Join Type" sortKey="joinType" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Compliance" sortKey="compliance" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Encryption" sortKey="encryption" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Last Check-in" sortKey="checkin" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                    <SortableHeader label="Issues" sortKey="issues" activeSortKey={deviceSortKey} direction={deviceSortDirection} onSort={handleDeviceSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                  </tr>
                 </thead>
                 <tbody>
                   {paginatedDevices.map((d, i) => (
                     <tr key={d.id} className={`border-b border-slate-100/50 last:border-0 transition-colors hover:bg-blue-50/40 ${i % 2 ? 'bg-slate-50/30' : ''} ${(d.openIssues?.length ?? 0) > 0 ? 'border-l-2 border-l-amber-400' : ''}`}>
-                      <td className="px-4 py-2.5"><div className="flex items-center gap-2"><Laptop2 className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" /><span className="font-semibold text-slate-700 truncate max-w-[130px]">{d.deviceName}</span></div></td>
+                      <td className="px-4 py-2.5"><div className="flex items-center gap-2"><Laptop2 className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" /><CopyText value={d.deviceName} label="Device name"><span className="font-semibold text-slate-700 truncate max-w-[130px]">{d.deviceName}</span></CopyText></div></td>
                       <td className="px-4 py-2.5 text-slate-500 max-w-[110px] truncate">{d.primaryUser || '—'}</td>
                       <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{d.os}{d.osVersion ? <span className="text-slate-400 ml-1">{d.osVersion}</span> : ''}</td>
                       <td className="px-4 py-2.5"><span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[0.6rem] font-semibold text-blue-700"><Wifi className="h-2.5 w-2.5" />{d.joinType || 'Azure AD'}</span></td>
@@ -1054,6 +1347,8 @@ function EntraGroupsReportTab() {
   const [error,     setError]     = useState<string | null>(null)
   const [exporting, setExporting] = useState<'csv' | 'excel' | null>(null)
   const [search,    setSearch]    = useState('')
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   const [suggestions,      setSuggestions]      = useState<EntraGroupSuggestion[]>([])
   const [showSuggestions,  setShowSuggestions]  = useState(false)
@@ -1123,6 +1418,17 @@ function EntraGroupsReportTab() {
     const q = search.toLowerCase()
     return data.rows.filter(r => r.displayName.toLowerCase().includes(q) || r.userPrincipalName.toLowerCase().includes(q))
   }, [data, search])
+  const sortedRows = sortKey ? sortRows(filteredRows, row => {
+    switch (sortKey) {
+      case 'type': return row.memberType
+      case 'name': return row.displayName
+      case 'upn': return row.userPrincipalName
+      case 'os': return row.operatingSystem
+      case 'status': return row.flagged ? 'Needs review' : 'OK'
+      default: return ''
+    }
+  }, sortDirection) : filteredRows
+  const handleSort = (key: string) => { setSortDirection(direction => toggleSortDirection(sortKey, direction, key)); setSortKey(key) }
 
   const showTypeColumn = (data?.memberTypes.length ?? 0) > 1
 
@@ -1242,14 +1548,15 @@ function EntraGroupsReportTab() {
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50/80 border-b border-slate-100/50">
                     <tr>
-                      {showTypeColumn && <th className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">Member Type</th>}
-                      {['Display Name', 'UPN', 'OS', 'Status'].map(h => (
-                        <th key={h} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">{h}</th>
-                      ))}
+                      {showTypeColumn && <SortableHeader label="Member Type" sortKey="type" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />}
+                      <SortableHeader label="Display Name" sortKey="name" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                      <SortableHeader label="UPN" sortKey="upn" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                      <SortableHeader label="OS" sortKey="os" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
+                      <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-2.5 text-left text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap" />
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((r, i) => (
+                    {sortedRows.map((r, i) => (
                       <tr key={`${r.memberType}-${r.displayName}-${i}`} className={`border-b border-slate-100/50 last:border-0 ${r.flagged ? 'bg-amber-50/40' : i % 2 ? 'bg-slate-50/30' : ''}`}>
                         {showTypeColumn && (
                           <td className="px-4 py-2.5">
@@ -1290,7 +1597,13 @@ function EntraGroupsReportTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-interface Props { viewerRole: UserToolRole; userEmail?: string; onBack: () => void }
+interface Props {
+  viewerRole: UserToolRole
+  userEmail?: string
+  onBack: () => void
+  /** Rendered inside ManagedDevicesPage — hides this page's own back/title header. */
+  embedded?: boolean
+}
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'devices',    label: 'Devices',    icon: <Monitor    className="h-3.5 w-3.5" /> },
@@ -1302,12 +1615,13 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'scripts_config', label: 'Scripts & Configs', icon: <FileCode2 className="h-3.5 w-3.5 text-[#0078D4]" /> },
 ]
 
-export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
+export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: Props) {
   const [tab, setTab]         = useState<Tab>('devices')
   const [devices, setDevices] = useState<ApiDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [panelDevice, setPanelDevice] = useState<ApiDevice | null>(null)
+  const isRateLimited = fetchError ? /\b429\b/.test(fetchError) : false
 
   const fetchDevices = useCallback(() => {
     setLoading(true)
@@ -1346,32 +1660,51 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
     ios:          devices.filter(d => d.platform === 'iOS').length,
   }), [devices])
 
+  const apiStatusPill = (
+    <span className={`ag-live-label ${loading ? 'ag-live-checking' : fetchError ? 'ag-live-error' : ''}`}>
+      <i />{loading ? 'Checking…' : fetchError ? 'Microsoft Intune API — Unavailable' : 'Microsoft Intune API'}
+    </span>
+  )
+
   return (
     <div className="flex flex-col gap-5 w-full page-enter">
 
       {/* Header */}
-      <div className="glass rounded-2xl overflow-hidden">
-        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg,#0078D4,#0EA5E9,#6366F1)' }} />
-        <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={onBack}
-              className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-sm font-medium text-slate-600 water-glow">
-              <ArrowLeft className="h-4 w-4" />Back
-            </button>
-            <div className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'linear-gradient(135deg,#0078D4,#0EA5E9)' }}>
-              <Server className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-black text-slate-800">Intune Devices</h1>
-              <p className="text-[0.68rem] text-slate-400">Microsoft Intune · Windows & Cross-platform MDM</p>
-            </div>
-          </div>
+      {embedded ? (
+        <div className="flex items-center justify-end gap-2">
+          {apiStatusPill}
           <button type="button" onClick={fetchDevices}
             className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />Refresh
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="glass rounded-2xl overflow-hidden">
+          <div className="h-[3px]" style={{ background: 'linear-gradient(90deg,#0078D4,#0EA5E9,#6366F1)' }} />
+          <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={onBack}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-sm font-medium text-slate-600 water-glow">
+                <ArrowLeft className="h-4 w-4" />Back
+              </button>
+              <div className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'linear-gradient(135deg,#0078D4,#0EA5E9)' }}>
+                <Server className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-black text-slate-800">Intune Devices</h1>
+                <p className="text-[0.68rem] text-slate-400">Microsoft Intune · Windows & Cross-platform MDM</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {apiStatusPill}
+              <button type="button" onClick={fetchDevices}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow">
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error banner */}
       {fetchError && !loading && (
@@ -1382,10 +1715,16 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
               <p className="text-sm font-bold text-red-700 mb-1">Intune connection failed</p>
               <p className="text-xs text-red-600 break-words font-mono">{fetchError}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="font-semibold text-red-700">Check:</span>
-                <span className="text-red-600">· INTUNE_CLIENT_ID / INTUNE_CLIENT_SECRET are correct</span>
-                <span className="text-red-600">· Azure app has <code className="bg-red-100 px-1 rounded">DeviceManagementManagedDevices.Read.All</code> (Application) permission</span>
-                <span className="text-red-600">· Admin consent has been granted in Azure portal</span>
+                {isRateLimited ? (
+                  <span className="text-red-600">Microsoft Graph is throttling requests. Wait briefly before retrying; repeated refreshes may extend the cooldown.</span>
+                ) : (
+                  <>
+                    <span className="font-semibold text-red-700">Check:</span>
+                    <span className="text-red-600">· INTUNE_CLIENT_ID / INTUNE_CLIENT_SECRET are correct</span>
+                    <span className="text-red-600">· Azure app has <code className="bg-red-100 px-1 rounded">DeviceManagementManagedDevices.Read.All</code> (Application) permission</span>
+                    <span className="text-red-600">· Admin consent has been granted in Azure portal</span>
+                  </>
+                )}
               </div>
             </div>
             <button type="button" onClick={fetchDevices}
@@ -1436,7 +1775,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
         {TABS.filter(t => canSeeTab(t.id, viewerRole)).map(t => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              tab === t.id ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              tab === t.id ? 'is-selected' : 'text-slate-500 hover:text-slate-700'
             }`}
             style={tab === t.id ? { boxShadow: '0 0 0 1px rgba(14,165,233,0.2), 0 4px 12px rgba(14,165,233,0.1)' } : {}}>
             {t.icon}{t.label}
@@ -1456,7 +1795,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
         />
       )}
       {tab === 'compliance' && <ComplianceTab devices={devices} />}
-      {tab === 'security'   && <ComplianceTab devices={devices} />}
+      {tab === 'security'   && <IntuneSecurityTab devices={devices} loading={loading} />}
       {tab === 'reports'    && <ReportsTab    devices={devices} />}
       {tab === 'entra'      && <EntraIDTab />}
       {tab === 'entra_groups' && <EntraGroupsReportTab />}
@@ -1469,7 +1808,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack }: Props) {
         <>
           <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm cursor-pointer" onClick={() => setPanelDevice(null)} />
           <div className="fixed right-0 top-0 bottom-0 z-40 w-full max-w-[600px] shadow-2xl border-l border-white/20 overflow-hidden flex flex-col">
-            <DeviceDetailPanel device={panelDevice} onBack={() => setPanelDevice(null)} backLabel="Intune Devices" />
+            <DeviceDetailPanel device={panelDevice} onBack={() => setPanelDevice(null)} backLabel={embedded ? 'Managed Devices' : 'Intune Devices'} />
           </div>
         </>
       )}

@@ -46,7 +46,9 @@ export function SourceModal({ open, onClose, source }: SourceModalProps) {
   if (!source) return null
 
   const description = SOURCE_DESCRIPTIONS[source.name] ?? source.name
-  const canSync = SYNCABLE_IDS.has(source.integrationId)
+  // Incoming webhooks only deliver outbound alerts; a Sync would be a misleading
+  // bot-token API probe and could not validate the webhook without posting a message.
+  const canSync = SYNCABLE_IDS.has(source.integrationId) && status?.connectionType !== 'incoming_webhook'
 
   const handleSyncNow = async () => {
     setSyncing(true)

@@ -1,6 +1,10 @@
 import type { Device, AppStatus } from '../types.js'
 import type { RuntimeIntuneConfig } from '../store/integrationStore.js'
 import { getIntuneConfig } from '../store/integrationStore.js'
+import type { MEAppEntry, MEAppLogEntry } from './manageEngine.js'
+import { compareVersions, pickLatestVersion } from './manageEngine.js'
+import { DeploymentIndex } from './macAppClassification.js'
+import type { RawIntuneDevice } from './staleDevices/normalize.js'
 
 interface TokenCache {
   token: string
@@ -165,13 +169,39 @@ function mapGraphDevice(d: GraphDevice): Device {
 // avoids 400 errors when optional properties aren't supported by a tenant's license tier.
 const GRAPH_SELECT = ''
 
+function retryDelayMs(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get('Retry-After')
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+    const retryAt = Date.parse(retryAfter)
+    if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now())
+  }
+  return Math.min(30_000, 1_000 * 2 ** attempt)
+}
+
+async function waitForRetry(ms: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ms))
+}
+
 // Follows @odata.nextLink to page through all managed devices
-async function graphGetAll(token: string, initialUrl: string): Promise<GraphDevice[]> {
+async function graphGetAll<T = GraphDevice>(token: string, initialUrl: string): Promise<T[]> {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-  const results: GraphDevice[] = []
+  const results: T[] = []
   let url: string | null = initialUrl
   while (url) {
-    const res = await fetch(url, { headers })
+    let res: Response | undefined
+    for (let attempt = 0; attempt <= 4; attempt++) {
+      res = await fetch(url, { headers })
+      const transient = res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504
+      if (!transient) break
+      if (attempt === 4) {
+        if (res.status !== 429) break // surface the real 5xx body below
+        throw new Error('Microsoft Graph rate-limited this request (429) after 5 attempts. Wait briefly, then retry.')
+      }
+      await waitForRetry(retryDelayMs(res, attempt))
+    }
+    if (!res) throw new Error('Microsoft Graph request failed without a response')
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       const hint =
@@ -180,7 +210,7 @@ async function graphGetAll(token: string, initialUrl: string): Promise<GraphDevi
         res.status === 400 ? ' — one or more $select fields may be unsupported by this tenant' : ''
       throw new Error(`Microsoft Graph ${res.status}${hint}: ${body.slice(0, 400)}`)
     }
-    const data = await res.json() as { value?: GraphDevice[]; '@odata.nextLink'?: string }
+    const data = await res.json() as { value?: T[]; '@odata.nextLink'?: string }
     results.push(...(data.value ?? []))
     url = data['@odata.nextLink'] ?? null
   }
@@ -197,6 +227,18 @@ export async function getIntuneDevices(cfg?: RuntimeIntuneConfig): Promise<Devic
   const raw = await graphGetAll(token, initialUrl)
   console.log(`[Intune] ✓ Fetched ${raw.length} managed device(s)`)
   return raw.map(mapGraphDevice)
+}
+
+/** Fields the Stale Devices module reads — nothing else is requested. */
+const STALE_DEVICE_SELECT = 'id,deviceName,operatingSystem,osVersion,serialNumber,userDisplayName,userPrincipalName,emailAddress,lastSyncDateTime,azureADDeviceId,managementAgent,managementState,enrolledDateTime'
+
+/** Read-only: every managed device with only the Stale Devices fields, following @odata.nextLink. The caller
+ *  drops out-of-scope platforms (no server-side filter is relied on). */
+export async function getIntuneStaleDeviceRecords(cfg?: RuntimeIntuneConfig): Promise<RawIntuneDevice[]> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const token = await getAccessToken(config)
+  return graphGetAll<RawIntuneDevice>(token, `https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$top=999&$select=${STALE_DEVICE_SELECT}`)
 }
 
 // Lightweight health-check: token + one Graph call, returns diagnostic info (never throws)
@@ -404,4 +446,163 @@ export async function getIntuneUserSummaries(cfg?: RuntimeIntuneConfig): Promise
 
     return { upn, displayName, lastSyncDateTime: latestSync.toISOString(), complianceState: overall, devices: mappedDevices }
   })
+}
+
+// ── Windows Self Service apps (Company Portal) ───────────────────────────────
+// Self Service = a Windows app with an assignment of intent `available`. Per-app install status
+// (mobileApps/{id}/deviceStatuses) is not exposed in this tenant, so installs come from Intune's discovered-apps
+// inventory (deviceManagement/detectedApps — real installed versions and device counts), matched to the Self
+// Service catalog by display name. Names that match no discovered install are omitted rather than shown with 0.
+// Windows only — Intune currently has no enrolled Macs. Built in the background because the catalog read alone
+// takes a couple of minutes.
+
+interface GraphAppAssignment { intent: string }
+interface GraphMobileApp {
+  id: string; displayName: string; displayVersion?: string; '@odata.type': string; assignments?: GraphAppAssignment[]
+  primaryBundleId?: string; bundleId?: string
+}
+interface GraphFleetDetectedApp { id: string; displayName: string; version?: string; deviceCount?: number; platform?: string }
+interface GraphDetectedAppHost { id: string; deviceName?: string; lastSyncDateTime?: string }
+
+const MAC_APP_TYPE = /^#microsoft\.graph\.macOS/i
+const WINDOWS_APP_TYPE = /^#microsoft\.graph\.(win32|windows|officeSuiteApp|microsoftStoreForBusinessApp|winGet)/i
+const SELF_SERVICE_INTENTS = new Set(['available', 'availableWithoutEnrollment'])
+const GRAPH_CONCURRENCY = 6
+const SELF_SERVICE_TTL_MS = 6 * 60 * 60 * 1000
+
+export interface IntuneSelfServiceResult {
+  windows: MEAppEntry[]
+  /** Distinct Windows app names published with an available Company Portal assignment. */
+  catalogWindowsApps: number
+  progress: { status: 'idle' | 'running'; startedAt: string | null; finishedAt: string | null; error: string | null }
+}
+
+const normalizeName = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ')
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next++; out[i] = await fn(items[i]!) }
+  }))
+  return out
+}
+
+// Managed macOS deployments seen in the Intune catalog. Filled by the Self Service build below.
+let macDeployments = new DeploymentIndex()
+
+/**
+ * Index of Intune-managed macOS app deployments for Mac classification. Starts the (background) catalog read once if it
+ * has never run, so Mac inventory picks the data up as soon as it lands; returns an empty index until then.
+ */
+export function getMacDeploymentIndex(): DeploymentIndex {
+  if (getIntuneConfig() && !selfService.progress.finishedAt && !selfServiceRunning) getIntuneSelfServiceWindowsApps()
+  return macDeployments
+}
+
+let selfService: IntuneSelfServiceResult = { windows: [], catalogWindowsApps: 0, progress: { status: 'idle', startedAt: null, finishedAt: null, error: null } }
+let selfServiceRunning = false
+
+async function buildSelfServiceApps(config: RuntimeIntuneConfig): Promise<Pick<IntuneSelfServiceResult, 'windows' | 'catalogWindowsApps'>> {
+  const token = await getAccessToken(config)
+  const graph = 'https://graph.microsoft.com/v1.0'
+
+  const catalog = await graphGetAll<GraphMobileApp>(token, `${graph}/deviceAppManagement/mobileApps?$expand=assignments&$top=50`)
+  const published = new Map<string, string>() // normalized name -> highest published version
+  const macIndex = new DeploymentIndex()
+  for (const app of catalog) {
+    // Every macOS app with an assignment is a managed deployment; used to classify Mac inventory (never hide a managed app).
+    if (MAC_APP_TYPE.test(app['@odata.type']) && app.assignments?.length) {
+      const intents = app.assignments.map(a => a.intent)
+      const kind = intents.some(i => SELF_SERVICE_INTENTS.has(i)) ? 'Company Portal (available)' : 'Required/uninstall deployment'
+      const bundleId = app.primaryBundleId || app.bundleId
+      macIndex.add({ source: 'intune', kind }, { ...(bundleId ? { bundleId } : {}), name: app.displayName })
+    }
+    if (!WINDOWS_APP_TYPE.test(app['@odata.type'])) continue
+    if (!app.assignments?.some(a => SELF_SERVICE_INTENTS.has(a.intent))) continue
+    const key = normalizeName(app.displayName)
+    const version = app.displayVersion?.trim() || ''
+    const prev = published.get(key)
+    if (prev === undefined || (version && compareVersions(version, prev) > 0)) published.set(key, version)
+  }
+
+  macDeployments = macIndex
+
+  const detected = (await graphGetAll<GraphFleetDetectedApp>(token, `${graph}/deviceManagement/detectedApps?$top=999`))
+    .filter(d => d.platform?.toLowerCase() === 'windows' && (d.deviceCount ?? 0) > 0 && published.has(normalizeName(d.displayName)))
+
+  const rowsByName = new Map<string, GraphFleetDetectedApp[]>()
+  for (const d of detected) {
+    const key = normalizeName(d.displayName)
+    rowsByName.set(key, [...(rowsByName.get(key) ?? []), d])
+  }
+
+  const entries: MEAppEntry[] = []
+  detectedRowIds.clear()
+  for (const [key, rows] of rowsByName) {
+    const installedVersions = [...new Set(rows.map(r => r.version?.trim() || 'Unknown'))]
+    const versionCounts = new Map<string, number>()
+    for (const row of rows) {
+      const version = row.version?.trim() || 'Unknown'
+      versionCounts.set(version, (versionCounts.get(version) ?? 0) + (row.deviceCount ?? 0))
+    }
+    const publishedVersion = published.get(key) ?? ''
+    const newestInstalled = pickLatestVersion(installedVersions)
+    const latestVersion = publishedVersion && compareVersions(publishedVersion, newestInstalled) > 0 ? publishedVersion : newestInstalled
+    const behind = (v: string) => v !== 'Unknown' && compareVersions(v, latestVersion) < 0
+    detectedRowIds.set(key, { latestVersion, rows: rows.map(r => ({ id: r.id, version: r.version?.trim() || 'Unknown' })) })
+    entries.push({
+      appId: key, name: rows[0]!.displayName, platform: 'Windows', installedVersions, latestVersion,
+      deviceCount: rows.reduce((n, r) => n + (r.deviceCount ?? 0), 0),
+      versionCounts: Array.from(versionCounts, ([version, deviceCount]) => ({ version, deviceCount })),
+      updateStatus: installedVersions.includes('Unknown') ? 'Unknown' : installedVersions.some(behind) ? 'Update Available' : 'Up to date',
+      logs: [], // per-device list is loaded on demand — see getIntuneSelfServiceAppDevices
+    })
+  }
+  return { windows: entries.sort((a, b) => b.deviceCount - a.deviceCount), catalogWindowsApps: published.size }
+}
+
+// Discovered-app ids behind each Self Service entry, kept so the per-device list can be fetched when a row is opened.
+const detectedRowIds = new Map<string, { latestVersion: string; rows: Array<{ id: string; version: string }> }>()
+
+export async function getIntuneSelfServiceAppDevices(appId: string, cfg?: RuntimeIntuneConfig): Promise<MEAppLogEntry[]> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const known = detectedRowIds.get(appId)
+  if (!known) return []
+  const token = await getAccessToken(config)
+  const perVersion = await mapLimit(known.rows, 2, async row => {
+    const devices = await graphGetAll<GraphDetectedAppHost>(token, `https://graph.microsoft.com/v1.0/deviceManagement/detectedApps/${row.id}/managedDevices?$top=999`)
+    return devices.map(dev => ({ version: row.version, dev }))
+  })
+  return perVersion.flat().map(({ version, dev }) => ({
+    deviceId: dev.id, deviceName: dev.deviceName ?? 'Unknown', version,
+    status: version === 'Unknown' ? 'Unknown' : compareVersions(version, known.latestVersion) < 0 ? 'Update Available' : 'Installed',
+    lastSeen: dev.lastSyncDateTime ? new Date(dev.lastSyncDateTime).toLocaleString() : 'Unknown',
+    errorDetails: null,
+  }))
+}
+
+/** Returns the latest snapshot immediately; (re)builds in the background when missing, stale, or `force` is set. */
+export function getIntuneSelfServiceWindowsApps(cfg?: RuntimeIntuneConfig, force = false): IntuneSelfServiceResult {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const { finishedAt } = selfService.progress
+  const stale = !finishedAt || Date.now() - Date.parse(finishedAt) > SELF_SERVICE_TTL_MS
+  if (!selfServiceRunning && (force || stale)) {
+    selfServiceRunning = true
+    selfService = { ...selfService, progress: { status: 'running', startedAt: new Date().toISOString(), finishedAt: selfService.progress.finishedAt, error: null } }
+    buildSelfServiceApps(config)
+      .then(({ windows, catalogWindowsApps }) => {
+        selfService = { windows, catalogWindowsApps, progress: { status: 'idle', startedAt: selfService.progress.startedAt, finishedAt: new Date().toISOString(), error: null } }
+        console.log(`[Intune] ✓ ${windows.length} of ${catalogWindowsApps} Windows Self Service app(s) have discovered installs`)
+      })
+      .catch(e => {
+        const error = e instanceof Error ? e.message.slice(0, 300) : 'Self Service app build failed'
+        console.error('[Intune] Self Service app build failed:', error)
+        selfService = { ...selfService, progress: { status: 'idle', startedAt: selfService.progress.startedAt, finishedAt: new Date().toISOString(), error } }
+      })
+      .finally(() => { selfServiceRunning = false })
+  }
+  return selfService
 }

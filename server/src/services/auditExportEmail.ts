@@ -74,7 +74,11 @@ function linkTtlMinutes(): number {
   return Number(process.env.INTUNE_AUDIT_EMAIL_LINK_TTL_MINUTES ?? 30)
 }
 
-async function graphSendMail(senderUpn: string, message: object): Promise<void> {
+/** Exported so other features (e.g. reportEmail.ts, for scheduled-report
+ *  delivery) can reuse this Graph sendMail call without re-implementing the
+ *  auth + HTTP plumbing — it only needs a sender mailbox and a Graph message
+ *  JSON object, no dependency on this file's StoredArtifact/blob machinery. */
+export async function graphSendMail(senderUpn: string, message: object): Promise<void> {
   const token = await getAuditGraphToken()
   const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderUpn)}/sendMail`, {
     method: 'POST',

@@ -248,6 +248,122 @@ export async function getEntraDevices(params?: { compliance?: string; os?: strin
   return applyFilters(mapped, params)
 }
 
+// ── Mac OS version cross-check (ManageEngine vs Intune / Entra) ───────────────
+
+export interface MacVersionCheckRow {
+  serialNumber:      string
+  deviceName:        string
+  user:              string
+  manageEngine:      string
+  intune:            string | null
+  entra:             string | null
+  status:            'match' | 'mismatch' | 'not-found'
+  newest:            'manageengine' | 'intune' | 'entra' | null
+}
+
+export interface MacVersionCheckResult {
+  configured:      boolean
+  total:           number
+  matched:         number
+  mismatched:      number
+  notFound:        number
+  intuneMacCount:  number
+  entraMacCount:   number
+  entraError:      string | null
+  rows:            MacVersionCheckRow[]
+}
+
+interface EntraDirectoryDevice { id: string; displayName: string; operatingSystem: string; operatingSystemVersion: string }
+
+function versionParts(v: string): number[] {
+  return (v.match(/\d+/g) ?? []).map(Number)
+}
+
+function compareVersionStrings(a: string, b: string): number {
+  const pa = versionParts(a), pb = versionParts(b)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
+}
+
+export async function getMacVersionCheck(
+  meMacs: Array<{ serialNumber: string; deviceName: string; user: string; osVersion: string }>,
+): Promise<MacVersionCheckResult> {
+  const empty: MacVersionCheckResult = {
+    configured: false, total: meMacs.length, matched: 0, mismatched: 0, notFound: 0,
+    intuneMacCount: 0, entraMacCount: 0, entraError: null, rows: [],
+  }
+  if (!isConfigured()) return empty
+
+  const token = await getToken()
+
+  const intuneMacs = (await gGetAll<GraphDevice>(
+    token,
+    `/deviceManagement/managedDevices?$filter=${encodeURIComponent("operatingSystem eq 'macOS'")}&$top=999`,
+  ))
+  const intuneBySerial = new Map(
+    intuneMacs.filter(d => d.serialNumber).map(d => [d.serialNumber.toUpperCase(), d.osVersion]),
+  )
+
+  // Entra directory objects carry no serial number, so they are matched on device name.
+  let entraMacs: EntraDirectoryDevice[] = []
+  let entraError: string | null = null
+  try {
+    const filter = encodeURIComponent("operatingSystem eq 'MacMDM' or operatingSystem eq 'macOS'")
+    entraMacs = await gGetAll<EntraDirectoryDevice>(
+      token,
+      `/devices?$filter=${filter}&$select=id,displayName,operatingSystem,operatingSystemVersion&$top=999`,
+    )
+  } catch (e) {
+    entraError = e instanceof Error ? e.message : 'Entra device lookup failed'
+  }
+  const entraByName = new Map<string, string>()
+  for (const d of entraMacs) {
+    const key = (d.displayName ?? '').toLowerCase()
+    const prev = entraByName.get(key)
+    if (d.operatingSystemVersion && (!prev || compareVersionStrings(d.operatingSystemVersion, prev) > 0)) {
+      entraByName.set(key, d.operatingSystemVersion)
+    }
+  }
+
+  const rows: MacVersionCheckRow[] = meMacs.map(m => {
+    const intune = intuneBySerial.get(m.serialNumber.toUpperCase()) ?? null
+    const entra  = entraByName.get(m.deviceName.toLowerCase()) ?? null
+    const others = [intune, entra].filter((v): v is string => !!v)
+    const status: MacVersionCheckRow['status'] =
+      others.length === 0 ? 'not-found'
+      : others.every(v => compareVersionStrings(v, m.osVersion) === 0) ? 'match'
+      : 'mismatch'
+    const candidates: Array<[NonNullable<MacVersionCheckRow['newest']>, string | null]> =
+      [['manageengine', m.osVersion], ['intune', intune], ['entra', entra]]
+    let newest: MacVersionCheckRow['newest'] = null
+    if (status === 'mismatch') {
+      let best = ''
+      for (const [src, v] of candidates) {
+        if (v && (best === '' || compareVersionStrings(v, best) > 0)) { best = v; newest = src }
+      }
+    }
+    return {
+      serialNumber: m.serialNumber, deviceName: m.deviceName, user: m.user,
+      manageEngine: m.osVersion, intune, entra, status, newest,
+    }
+  })
+
+  return {
+    configured: true,
+    total:      rows.length,
+    matched:    rows.filter(r => r.status === 'match').length,
+    mismatched: rows.filter(r => r.status === 'mismatch').length,
+    notFound:   rows.filter(r => r.status === 'not-found').length,
+    intuneMacCount: intuneMacs.length,
+    entraMacCount:  entraMacs.length,
+    entraError,
+    rows,
+  }
+}
+
 function applyFilters<T extends { complianceState: string; os: string }>(
   items: T[], params?: { compliance?: string; os?: string; limit?: number }
 ): T[] {

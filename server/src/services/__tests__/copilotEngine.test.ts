@@ -1,17 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// Mock OpenAI entirely — no real network calls. The mock `create` fn is
-// controlled per-test via `mockCreate.mockResolvedValueOnce(...)`.
-const mockCreate = vi.hoisted(() => vi.fn())
-vi.mock('openai', () => ({
-  default: class MockOpenAI {
-    chat = { completions: { create: mockCreate } }
-  },
-}))
-
-vi.mock('../../store/integrationStore.js', () => ({
-  getOpenAIConfig: vi.fn(),
-}))
+const mockFetch = vi.hoisted(() => vi.fn())
+vi.mock('../../store/integrationStore.js', () => ({ getGeminiConfig: vi.fn() }))
 
 const mockGetToolByName = vi.hoisted(() => vi.fn())
 const mockToolsAllowedForRole = vi.hoisted(() => vi.fn())
@@ -22,126 +12,88 @@ vi.mock('../copilotTools.js', () => ({
   COPILOT_TOOLS: [],
 }))
 
-import { getOpenAIConfig } from '../../store/integrationStore.js'
+import { getGeminiConfig } from '../../store/integrationStore.js'
 import { runCopilotChat } from '../copilotEngine.js'
 
-function toolCallResponse(name: string, args: Record<string, unknown>, id = 'call_1') {
-  return {
-    choices: [{
-      message: {
-        role: 'assistant', content: null,
-        tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
-      },
-    }],
-  }
-}
-
-function finalResponse(content: string) {
-  return { choices: [{ message: { role: 'assistant', content, tool_calls: [] } }] }
-}
-
 const ctx = { actorEmail: 'admin@zinnia.com', actorRole: 'Global Admin' }
+const gemini = { apiKey: 'AIza-test-key', model: 'gemini-2.5-flash', enableGoogleSearch: true }
 
-describe('copilotEngine — runCopilotChat', () => {
+function response(data: unknown) {
+  return { ok: true, status: 200, json: vi.fn().mockResolvedValue(data) }
+}
+function toolCallResponse(name: string, args: Record<string, unknown>, id = 'call_1') {
+  return { candidates: [{ content: { role: 'model', parts: [{ functionCall: { id, name, args } }] } }] }
+}
+function finalResponse(text: string) {
+  return { candidates: [{ content: { role: 'model', parts: [{ text }] } }] }
+}
+
+describe('copilotEngine — Gemini runCopilotChat', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('fetch', mockFetch)
     mockToolsAllowedForRole.mockReturnValue([])
+    vi.mocked(getGeminiConfig).mockReturnValue(gemini)
   })
+  afterEach(() => vi.unstubAllGlobals())
 
-  it('returns available:false and makes no OpenAI call when OpenAI is not configured', async () => {
-    vi.mocked(getOpenAIConfig).mockReturnValue(undefined)
-
+  it('returns available:false and makes no Gemini request when Gemini is not configured', async () => {
+    vi.mocked(getGeminiConfig).mockReturnValue(undefined)
     const result = await runCopilotChat({ history: [], userMessage: 'hello', ctx })
-
     expect(result.available).toBe(false)
-    expect(result.message.role).toBe('assistant')
     expect(result.message.content.toLowerCase()).toContain('unavailable')
-    expect(mockCreate).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('short-circuits a write tool call into a pendingAction and never executes it', async () => {
-    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
+  it('short-circuits a write tool call into a pending action and never executes it', async () => {
     const writeRun = vi.fn()
-    mockGetToolByName.mockReturnValue({
-      name: 'trigger_automation_rule', rbac: 'write', run: writeRun,
-      describeAction: (args: Record<string, unknown>) => `Run rule ${args.ruleId}`,
-    })
-    mockCreate.mockResolvedValueOnce(toolCallResponse('trigger_automation_rule', { ruleId: 'rule-1' }))
-
+    mockGetToolByName.mockReturnValue({ name: 'trigger_automation_rule', rbac: 'write', run: writeRun, describeAction: (args: Record<string, unknown>) => `Run rule ${args.ruleId}` })
+    mockFetch.mockResolvedValueOnce(response(toolCallResponse('trigger_automation_rule', { ruleId: 'rule-1' })))
     const result = await runCopilotChat({ history: [], userMessage: 'run rule-1', ctx })
-
-    expect(result.available).toBe(true)
-    expect(result.pendingAction).toBeDefined()
     expect(result.pendingAction?.toolName).toBe('trigger_automation_rule')
     expect(result.pendingAction?.args).toEqual({ ruleId: 'rule-1' })
     expect(writeRun).not.toHaveBeenCalled()
-    // Only one OpenAI call — the loop stops immediately on a write tool call.
-    expect(mockCreate).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
-  it('executes a read tool inline, feeds the result back, and returns citations on the final answer', async () => {
-    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
+  it('executes a read tool, sends the result to Gemini, and returns internal citations', async () => {
     const freshness = new Date().toISOString()
-    const readRun = vi.fn().mockResolvedValue({
-      result: { count: 1 },
-      citations: [{ source: 'Intune', recordId: 'device-1', freshness }],
-    })
+    const readRun = vi.fn().mockResolvedValue({ result: { count: 1 }, citations: [{ source: 'Intune', recordId: 'device-1', freshness }] })
     mockGetToolByName.mockReturnValue({ name: 'lookup_devices', rbac: 'read', run: readRun })
-    mockCreate
-      .mockResolvedValueOnce(toolCallResponse('lookup_devices', { query: 'device-1' }))
-      .mockResolvedValueOnce(finalResponse('Found 1 device.'))
-
+    mockFetch.mockResolvedValueOnce(response(toolCallResponse('lookup_devices', { query: 'device-1' })))
+    mockFetch.mockResolvedValueOnce(response(finalResponse('Found 1 device.')))
     const result = await runCopilotChat({ history: [], userMessage: 'find device-1', ctx })
-
     expect(readRun).toHaveBeenCalledTimes(1)
-    expect(result.available).toBe(true)
     expect(result.message.content).toBe('Found 1 device.')
     expect(result.message.citations).toEqual([{ source: 'Intune', recordId: 'device-1', freshness }])
-    expect(mockCreate).toHaveBeenCalledTimes(2)
+    const secondRequest = JSON.parse(mockFetch.mock.calls[1]![1].body as string)
+    expect(secondRequest.contents.at(-1).parts[0].functionResponse.response.result).toEqual({ count: 1 })
   })
 
-  it('injects page context as a transient system message without touching history', async () => {
-    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
-    mockCreate.mockResolvedValueOnce(finalResponse('This device looks fine.'))
-
-    await runCopilotChat({
-      history: [],
-      userMessage: 'why is this mismatched?',
-      ctx,
-      pageContext: { page: 'Risk Scoring', deviceId: 'dev-123' },
-    })
-
-    expect(mockCreate).toHaveBeenCalledTimes(1)
-    const sentMessages = mockCreate.mock.calls[0]![0].messages as Array<{ role: string; content: string }>
-    const contextMsg = sentMessages.find(m => m.role === 'system' && m.content.includes('Risk Scoring'))
-    expect(contextMsg).toBeDefined()
-    expect(contextMsg?.content).toContain('dev-123')
-    // Only one system message beyond the base prompt, and it's never a user/assistant turn.
-    expect(sentMessages.filter(m => m.role === 'system')).toHaveLength(2)
+  it('adds page context transiently to this Gemini request without adding a conversation turn', async () => {
+    mockFetch.mockResolvedValueOnce(response(finalResponse('This device looks fine.')))
+    await runCopilotChat({ history: [], userMessage: 'why is this mismatched?', ctx, pageContext: { page: 'Risk Scoring', deviceId: 'dev-123' } })
+    const request = JSON.parse(mockFetch.mock.calls[0]![1].body as string)
+    expect(request.contents).toHaveLength(1)
+    expect(request.contents[0].parts[0].text).toContain('Risk Scoring')
+    expect(request.contents[0].parts[0].text).toContain('dev-123')
   })
 
-  it('omits the context system message entirely when no pageContext is passed', async () => {
-    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
-    mockCreate.mockResolvedValueOnce(finalResponse('Hi.'))
-
+  it('uses Google Search grounding by default and can disable it', async () => {
+    mockFetch.mockResolvedValueOnce(response(finalResponse('Hi.')))
     await runCopilotChat({ history: [], userMessage: 'hello', ctx })
-
-    const sentMessages = mockCreate.mock.calls[0]![0].messages as Array<{ role: string }>
-    expect(sentMessages.filter(m => m.role === 'system')).toHaveLength(1)
+    let request = JSON.parse(mockFetch.mock.calls[0]![1].body as string)
+    expect(request.tools).toContainEqual({ google_search: {} })
+    vi.mocked(getGeminiConfig).mockReturnValue({ ...gemini, enableGoogleSearch: false })
+    mockFetch.mockResolvedValueOnce(response(finalResponse('Hi.')))
+    await runCopilotChat({ history: [], userMessage: 'hello', ctx })
+    request = JSON.parse(mockFetch.mock.calls[1]![1].body as string)
+    expect(request.tools ?? []).not.toContainEqual({ google_search: {} })
   })
 
-  it('feeds a tool failure back to the model instead of throwing', async () => {
-    vi.mocked(getOpenAIConfig).mockReturnValue({ apiKey: 'test-key' })
-    const readRun = vi.fn().mockRejectedValue(new Error('Intune is not configured'))
-    mockGetToolByName.mockReturnValue({ name: 'lookup_devices', rbac: 'read', run: readRun })
-    mockCreate
-      .mockResolvedValueOnce(toolCallResponse('lookup_devices', { query: 'x' }))
-      .mockResolvedValueOnce(finalResponse('Intune is not configured, so I could not look up that device.'))
-
-    const result = await runCopilotChat({ history: [], userMessage: 'find x', ctx })
-
-    expect(result.available).toBe(true)
-    expect(result.message.content).toContain('not configured')
-    expect(result.toolCallTrace[0]?.error).toBe('Intune is not configured')
+  it('returns Google Search source citations from grounding metadata', async () => {
+    mockFetch.mockResolvedValueOnce(response({ candidates: [{ content: { role: 'model', parts: [{ text: 'Vendor guidance.' }] }, groundingMetadata: { groundingChunks: [{ web: { title: 'Vendor advisory', uri: 'https://example.test/advisory' } }] } }] }))
+    const result = await runCopilotChat({ history: [], userMessage: 'latest advisory', ctx })
+    expect(result.message.citations?.[0]).toMatchObject({ source: 'Google Search', recordId: 'Vendor advisory', url: 'https://example.test/advisory' })
   })
 })

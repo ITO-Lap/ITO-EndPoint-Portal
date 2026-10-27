@@ -7,7 +7,8 @@ import {
   Key, RotateCcw, Clock, AlertCircle, Loader, Search,
 } from 'lucide-react'
 import { api } from '../../api'
-import type { ApiDevice, AppStatus } from '../../api'
+import { CopyText } from '../ui/CopyText'
+import type { ApiDevice, AppStatus, ManageEngineDeviceProfileSnapshot } from '../../api'
 
 type Tab = 'overview' | 'hardware' | 'network' | 'security' | 'apps' | 'compliance'
 
@@ -24,6 +25,7 @@ interface Props {
   device: ApiDevice
   onBack: () => void
   backLabel?: string
+  initialTab?: Tab
 }
 
 // ── Atoms ──────────────────────────────────────────────────────────────────
@@ -101,7 +103,7 @@ function Field({ label, value, mono = false }: { label: string; value?: string |
   return (
     <div className="flex flex-col gap-0.5">
       <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</p>
-      <p className={`text-sm text-slate-800 ${mono ? 'font-mono' : 'font-medium'}`}>{value}</p>
+      <CopyText value={value} label={label} className={`text-sm text-slate-800 ${mono ? 'font-mono' : 'font-medium'}`} />
     </div>
   )
 }
@@ -167,6 +169,7 @@ function OverviewTab({ d }: { d: ApiDevice }) {
         <Field label="Primary User" value={d.user} />
         <Field label="Department" value={d.department} />
         <Field label="Ownership" value={d.ownership} />
+        <Field label="MDM Enrollment" value={d.managementSource === 'ManageEngine' ? 'Enrolled (active)' : 'Managed'} />
         <Field label="Serial Number" value={d.serialNumber} mono />
         <Field label="Enrollment Type" value={d.enrollmentType} />
         <Field label="Enrollment Date" value={d.enrollmentDate} />
@@ -615,27 +618,41 @@ function parsePolicyState(policy: string): { name: string; verdict: PolicyVerdic
 
 function ComplianceTab({ d }: { d: ApiDevice }) {
   const hasIssue = d.primaryIssue && d.primaryIssue !== 'None'
-  const [fetchedPolicies, setFetchedPolicies] = useState<string[] | null>(null)
-  const [policiesLoading, setPoliciesLoading] = useState(false)
+  const [fetchedPolicies, setFetchedPolicies] = useState<{ deviceId: string; policies: string[] | null } | null>(null)
+  const [profileFetch, setProfileFetch] = useState<{ deviceId: string; snapshot: ManageEngineDeviceProfileSnapshot | null; error: boolean } | null>(null)
 
   useEffect(() => {
+    if (d.managementSource === 'ManageEngine') {
+      api.fetchManageEngineDeviceProfileResults(d.id)
+        .then(snapshot => setProfileFetch({ deviceId: d.id, snapshot, error: false }))
+        .catch(() => setProfileFetch({ deviceId: d.id, snapshot: null, error: true }))
+      return
+    }
     if (d.appliedPolicies && d.appliedPolicies.length > 0) return
-    setPoliciesLoading(true)
     api.fetchDevicePolicies(d.id)
-      .then(policies => setFetchedPolicies(policies.length > 0 ? policies : null))
-      .catch(() => setFetchedPolicies(null))
-      .finally(() => setPoliciesLoading(false))
-  }, [d.id])
+      .then(policies => setFetchedPolicies({ deviceId: d.id, policies: policies.length > 0 ? policies : null }))
+      .catch(() => setFetchedPolicies({ deviceId: d.id, policies: null }))
+  }, [d.id, d.managementSource, d.appliedPolicies])
 
-  const policies = fetchedPolicies ?? d.appliedPolicies ?? []
+  const isManageEngine = d.managementSource === 'ManageEngine'
+  const currentProfileFetch = profileFetch?.deviceId === d.id ? profileFetch : null
+  const profileSnapshot = currentProfileFetch?.snapshot ?? null
+  const currentFetchedPolicies = fetchedPolicies?.deviceId === d.id ? fetchedPolicies.policies : null
+  const policies = currentFetchedPolicies ?? d.appliedPolicies ?? []
+  const policiesLoading = isManageEngine
+    ? currentProfileFetch === null
+    : !(d.appliedPolicies && d.appliedPolicies.length > 0) && fetchedPolicies?.deviceId !== d.id
 
   return (
     <div className="space-y-3">
       <SectionCard title="Compliance Status" icon={<ShieldCheck className="h-4 w-4" />}>
         <div className="col-span-2 flex items-center gap-3 pb-1">
-          <ComplianceBadge state={d.complianceState} />
+          {isManageEngine
+            ? <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"><AlertCircle className="h-4 w-4" />Unavailable</span>
+            : <ComplianceBadge state={d.complianceState} />}
           {d.managementSource && <SourcePill src={d.managementSource} />}
         </div>
+        {isManageEngine && <p className="col-span-2 text-xs text-slate-500">Endpoint Central does not expose an overall device compliance verdict through its documented API. Profile results below are shown individually.</p>}
         {d.lastComplianceCheck && (
           <div className="flex flex-col gap-0.5">
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Last Compliance Check</p>
@@ -644,8 +661,8 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
           </div>
         )}
         <Field label="Issue Source" value={d.issueSource} />
-        {hasIssue && <Field label="Failed Policy" value={d.policyFailed} />}
-        {hasIssue && (
+        {!isManageEngine && hasIssue && <Field label="Failed Policy" value={d.policyFailed} />}
+        {!isManageEngine && hasIssue && (
           <div className="col-span-2 flex flex-col gap-0.5">
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Active Issue</p>
             <p className="text-sm text-red-700 font-medium">{d.primaryIssue}</p>
@@ -657,14 +674,33 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
         )}
       </SectionCard>
 
-      <SectionCard title="Applied Policies" icon={<Fingerprint className="h-4 w-4" />}>
+      <SectionCard title={isManageEngine ? 'ManageEngine Profile Results' : 'Applied Policies'} icon={<Fingerprint className="h-4 w-4" />}>
         <div className="col-span-2 space-y-1.5">
           {policiesLoading ? (
             <div className="flex items-center gap-2 py-4 text-slate-400">
               <RefreshCw className="h-4 w-4 animate-spin" />
               <span className="text-sm">Loading applied policies…</span>
             </div>
-          ) : policies.length === 0 ? (
+          ) : isManageEngine ? currentProfileFetch?.error && !profileSnapshot ? (
+            <p className="text-sm text-amber-700 py-2">Profile results are currently unavailable. The last known device data has not been changed.</p>
+          ) : !profileSnapshot || profileSnapshot.profiles.length === 0 ? (
+            <p className="text-sm text-slate-400 italic py-2">No profile result data was returned for this device.</p>
+          ) : <>
+            {profileSnapshot.stale && <p className="text-xs text-amber-700">Refresh failed; showing the last successful profile data from {new Date(profileSnapshot.lastSuccessfulSyncAt).toLocaleString()}.</p>}
+            {!profileSnapshot.stale && <p className="text-xs text-slate-400">Last successful profile sync: {new Date(profileSnapshot.lastSuccessfulSyncAt).toLocaleString()}</p>}
+            {profileSnapshot.profiles.map((profile, i) => (
+            <div key={profile.profileId ?? `${profile.profileName}-${i}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium text-slate-700">{profile.profileName}</span>
+                <span className="text-xs font-semibold text-slate-600">{profile.status ?? 'Status not reported'}</span>
+              </div>
+              {profile.remarks && <p className="text-xs text-slate-500">{profile.remarks}</p>}
+              {!profile.remarks && profile.localizedRemarks && <p className="text-xs text-slate-500">{profile.localizedRemarks}</p>}
+              {profile.appliedTime && <p className="text-[0.65rem] text-slate-400">Applied: {formatProfileAppliedTime(profile.appliedTime)}</p>}
+              {profile.profileId && <p className="text-[0.65rem] font-mono text-slate-400">Profile ID: {profile.profileId}</p>}
+            </div>
+            ))}
+          </> : policies.length === 0 ? (
             <p className="text-sm text-slate-400 italic py-2">No policy assignment data available for this device.</p>
           ) : policies.map((policy, i) => {
             const parsed = parsePolicyState(policy)
@@ -695,10 +731,16 @@ function ComplianceTab({ d }: { d: ApiDevice }) {
   )
 }
 
+function formatProfileAppliedTime(value: string): string {
+  const numeric = Number(value)
+  const date = new Date(Number.isFinite(numeric) ? numeric : value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
+
 // ── Main Component ────────────────────────────────────────────────────────
 
-export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices' }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices', initialTab = 'overview' }: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab)
 
   const failedApps = d.apps?.filter(a => a.status === 'Failed').length ?? 0
   const pendingApps = d.apps?.filter(a => a.status === 'Pending').length ?? 0
@@ -724,8 +766,10 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-bold text-slate-900 leading-tight">{d.deviceName}</h2>
-              <ComplianceBadge state={d.complianceState} />
+              <CopyText value={d.deviceName} label="Device name"><h2 className="text-base font-bold text-slate-900 leading-tight">{d.deviceName}</h2></CopyText>
+              {d.managementSource === 'ManageEngine'
+                ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600"><AlertCircle className="h-3.5 w-3.5" />MDM compliance unavailable</span>
+                : <ComplianceBadge state={d.complianceState} />}
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <SourcePill src={d.managementSource} />
@@ -759,7 +803,7 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
                 onClick={() => setActiveTab(tab.id)}
                 className={`relative flex-shrink-0 px-3 py-2 text-xs font-semibold border-b-2 transition focus-visible:ring-2 focus-visible:ring-orange-300 rounded-t ${
                   activeTab === tab.id
-                    ? 'border-orange-500 text-orange-600'
+                    ? 'border-sky-500 text-sky-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >

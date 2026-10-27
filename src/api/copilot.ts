@@ -1,6 +1,6 @@
 // Endpoint Operations Copilot — frontend HTTP client.
 //
-// Talks to the backend AI assistant (OpenAI tool-calling) that answers
+// Talks to the backend AI assistant (Gemini tool-calling) that answers
 // questions and, only after explicit confirmation, performs write actions
 // (Jira ticket creation, automation-rule test-trigger) against real data
 // sources. See server/src/routes/copilot.ts for the authoritative contract.
@@ -20,6 +20,7 @@ export interface CopilotCitation {
   source: string
   recordId: string
   freshness: string // ISO timestamp
+  url?: string
 }
 
 export interface CopilotMessage {

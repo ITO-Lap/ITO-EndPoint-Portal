@@ -33,14 +33,14 @@ let cache: { statuses: DeviceSecurityStatus[]; result: CoverageResult; expiresAt
 async function runScan(): Promise<{ statuses: DeviceSecurityStatus[]; result: CoverageResult }> {
   const t0 = Date.now()
   const { devices } = await fetchAllDevices()
-  const devicesWithApps: Array<{ device: Device; apps: AppStatus[] }> = []
+  const devicesWithApps: Array<{ device: Device; apps: AppStatus[]; inventoryAvailable: boolean }> = []
 
   for (let i = 0; i < devices.length; i += CONCURRENCY) {
     const batch = devices.slice(i, i + CONCURRENCY)
     const settled = await Promise.allSettled(batch.map(d => getAppsFor(d)))
     settled.forEach((s, idx) => {
       const device = batch[idx]!
-      devicesWithApps.push({ device, apps: s.status === 'fulfilled' ? s.value : [] })
+      devicesWithApps.push({ device, apps: s.status === 'fulfilled' ? s.value : [], inventoryAvailable: s.status === 'fulfilled' })
       if (s.status === 'rejected') console.error(`[securityInventory] apps fetch failed for ${device.id}:`, s.reason)
     })
   }
@@ -57,8 +57,41 @@ async function runScan(): Promise<{ statuses: DeviceSecurityStatus[]; result: Co
   return { statuses, result }
 }
 
-async function getCached() {
+// Exported so other features (e.g. operationalQueue.ts, for the Dashboard's
+// Operational Queue widget) can reuse this same cached fleet scan instead of
+// re-scanning the whole fleet a second time.
+export async function getCached() {
   return cache && Date.now() < cache.expiresAt ? cache : await runScan()
+}
+
+/** Synchronous, zero-network peek at the cache — returns it only if already
+ *  warm and fresh, otherwise null. Never triggers a scan. For passive
+ *  callers (e.g. a Dashboard widget that reloads on every page view) that
+ *  must not themselves kick off a full per-device app-inventory fleet scan
+ *  (minutes-long on a large real tenant) — they show "no data yet" until
+ *  this page (or another /coverage caller) has warmed the cache. */
+export function getCachedIfFresh() {
+  return cache && Date.now() < cache.expiresAt ? cache : null
+}
+
+// Background warm-up: re-runs the scan shortly before the cache would
+// otherwise expire, so the Dashboard's Operational Queue and the Security
+// Posture page always see a warm cache instead of whichever visitor happens
+// to arrive first paying for a multi-minute cold scan. Started once at
+// server startup (see index.ts); errors are logged, never thrown, so one
+// failed scan doesn't kill the interval.
+const WARMUP_INTERVAL_MS = CACHE_TTL_MS - 30_000
+let warmupTimer: NodeJS.Timeout | null = null
+
+export function startSecurityInventoryWarmup(): void {
+  if (warmupTimer) return
+  const tick = () => { runScan().catch(e => console.error('[securityInventory] Background warm-up scan failed:', e instanceof Error ? e.message : e)) }
+  tick()
+  warmupTimer = setInterval(tick, WARMUP_INTERVAL_MS)
+}
+
+export function stopSecurityInventoryWarmup(): void {
+  if (warmupTimer) { clearInterval(warmupTimer); warmupTimer = null }
 }
 
 // GET /api/security-inventory/coverage — physical Windows/macOS Falcon +

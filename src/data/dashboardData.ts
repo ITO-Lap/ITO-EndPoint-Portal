@@ -5,16 +5,17 @@ import {
   Settings,
   Shield,
   ShieldCheck,
-  Users,
   Hash,
+  MessageSquare,
   Zap,
   Monitor,
   GitBranch,
   Layers,
-  Brain,
+  MonitorOff,
   FileText,
-  ClipboardList,
+  CalendarClock,
   Activity,
+  Wrench,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -29,53 +30,50 @@ import type {
 
 export const navItems: NavItem[] = [
   // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-  { id: 'dashboard',            title: 'Dashboard',           icon: Home,          group: 'Overview',               active: true },
+  { id: 'dashboard',            title: 'Dashboard',           icon: Home,          group: 'Overview',     active: true },
 
-  // ── ENDPOINT MANAGEMENT ───────────────────────────────────────────────────────
-  { id: 'mac_devices',          title: 'Mac Devices',             icon: Monitor,       group: 'Endpoint Management' },
-  { id: 'intune_devices',       title: 'Intune Devices',          icon: Server,        group: 'Endpoint Management' },
-  { id: 'manageengine_apps',    title: 'ManageEngine App Inventory', icon: Layers,     group: 'Endpoint Management' },
+  // ── DEVICES ───────────────────────────────────────────────────────────────────
+  { id: 'managed_devices',      title: 'Managed Devices',     icon: Monitor,       group: 'Devices' },
+  { id: 'stale_devices',        title: 'Stale Devices',       icon: MonitorOff,    group: 'Devices' },
 
-  // ── SECURITY & COMPLIANCE ─────────────────────────────────────────────────────
-  { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security & Compliance' },
-  { id: 'role_activity_audit',  title: 'Role Activity Audit', icon: ShieldCheck,   group: 'Security & Compliance' },
-  { id: 'security_policies',    title: 'Security Policies',   icon: ShieldCheck,   group: 'Security & Compliance' },
+  // ── APPLICATIONS ──────────────────────────────────────────────────────────────
+  { id: 'manageengine_apps',    title: 'ManageEngine App Inventory', icon: Layers, group: 'Applications' },
+  { id: 'app_guardian',         title: 'App Guardian',        icon: ShieldCheck,   group: 'Applications', badge: 'Mac' },
 
-  // ── USERS & IDENTITY ──────────────────────────────────────────────────────────
-  { id: 'users',                title: 'Users',               icon: Users,         group: 'Users & Identity' },
+  // ── PATCHES ───────────────────────────────────────────────────────────────────
+  { id: 'patch_operations',     title: 'Patch Operations',    icon: Wrench,        group: 'Patches', badge: 'New' },
 
-  // ── AUTOMATION ────────────────────────────────────────────────────────────────
-  { id: 'automation',           title: 'Automation',          icon: Zap,           group: 'Automation' },
+  // ── SECURITY ──────────────────────────────────────────────────────────────────
+  { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security' },
+  { id: 'role_activity_audit',  title: 'Role Activity Audit', icon: ShieldCheck,   group: 'Security' },
+  { id: 'policy_conflicts',     title: 'Policy Conflicts',    icon: GitBranch,     group: 'Security' },
+  { id: 'risk_scoring',         title: 'Risk Scoring',        icon: Activity,      group: 'Security' },
 
-  // ── ANALYTICS & REPORTS ───────────────────────────────────────────────────────
-  { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Analytics & Reports' },
+  // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
+  { id: 'automation',           title: 'Automation',          icon: Zap,           group: 'Automations' },
 
-  // ── INTELLIGENCE PLATFORM ─────────────────────────────────────────────────────
-  { id: 'intelligence_dashboard', title: 'Intelligence Hub',        icon: Brain,          group: 'Intelligence Platform' },
-  { id: 'compliance_intel',       title: 'Compliance Intelligence', icon: ShieldCheck,    group: 'Intelligence Platform' },
-  { id: 'policy_conflicts',       title: 'Policy Conflicts',        icon: GitBranch,      group: 'Intelligence Platform' },
-  { id: 'risk_scoring',           title: 'Risk Scoring',            icon: Activity,       group: 'Intelligence Platform' },
-  { id: 'report_builder',         title: 'Report Builder',          icon: FileText,       group: 'Intelligence Platform' },
-  { id: 'audit_log',              title: 'Audit Log',               icon: ClipboardList,  group: 'Intelligence Platform' },
+  // ── REPORTS ───────────────────────────────────────────────────────────────────
+  { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Reports' },
+  { id: 'scheduled_reports',    title: 'Scheduled Reports',   icon: CalendarClock, group: 'Reports' },
 
-  // ── PLATFORM ──────────────────────────────────────────────────────────────────
-  { id: 'settings',             title: 'Settings',            icon: Settings,      group: 'Platform' },
+  // ── SETTINGS ──────────────────────────────────────────────────────────────────
+  { id: 'settings',             title: 'Settings',            icon: Settings,      group: 'Settings' },
 ]
 
 // ── Group order — controls render sequence in sidebar ─────────────────────────
 export const NAV_GROUP_ORDER = [
   'Overview',
-  'Endpoint Management',
-  'Security & Compliance',
-  'Users & Identity',
-  'Automation',
-  'Analytics & Reports',
-  'Intelligence Platform',
-  'Platform',
+  'Devices',
+  'Applications',
+  'Patches',
+  'Security',
+  'Automations',
+  'Reports',
+  'Settings',
 ] as const
 
-// ── Automation group gets a distinct accent treatment ─────────────────────────
-export const AUTOMATION_GROUP = 'Automation'
+// ── Automations group gets a distinct accent treatment ─────────────────────────
+export const AUTOMATION_GROUP = 'Automations'
 
 // ── Connected integration sources ─────────────────────────────────────────────
 
@@ -83,6 +81,7 @@ export const connectedSources: ConnectedSource[] = [
   { name: 'Microsoft Intune',   label: 'Intune',       status: 'Connected', icon: Server,      integrationId: 'intune'       },
   { name: 'Microsoft Entra ID', label: 'Entra ID',     status: 'Connected', icon: ShieldCheck, integrationId: 'entra'        },
   { name: 'Manage Engine',      label: 'ManageEngine', status: 'Connected', icon: Settings,    integrationId: 'manageengine' },
+  { name: 'Slack',              label: 'Slack alerts', status: 'Connected', icon: MessageSquare, integrationId: 'slack'        },
   { name: 'Jira',               label: 'Jira',         status: 'Connected', icon: Hash,        integrationId: 'jira'         },
 ]
 

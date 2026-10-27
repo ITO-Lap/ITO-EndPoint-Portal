@@ -154,6 +154,19 @@ async function handleSlackNotify(
   const text = `:zap: *Automation Alert — ${rule.name}*\n${deviceLine}\n_Rule category: ${rule.category}_`
 
   try {
+    if (cfg.webhookUrl) {
+      const res = await fetch(cfg.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, unfurl_links: false }),
+      })
+      if (!res.ok) throw new Error(`incoming webhook returned HTTP ${res.status}`)
+      return {
+        type: action.type, label: action.label, status: 'success',
+        result: 'Slack message sent through the incoming webhook',
+      }
+    }
+    if (!cfg.botToken) throw new Error('no Slack webhook or Bot OAuth token is configured')
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.botToken}`, 'Content-Type': 'application/json' },

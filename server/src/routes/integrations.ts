@@ -6,6 +6,7 @@ import {
   setIntuneConfig,
   setManageEngineConfig,
   setOpenAIConfig,
+  setGeminiConfig,
   setEntraConfig,
   setSlackConfig,
   getFetchResult,
@@ -14,10 +15,12 @@ import {
   getIntuneConfig,
   getManageEngineConfig,
   getOpenAIConfig,
+  getGeminiConfig,
   getSlackConfig,
 } from '../store/integrationStore.js'
-import { getIntuneDevices, diagnoseIntune } from '../services/intune.js'
-import { getManageEngineDevices, getManageEngineAppInventory } from '../services/manageEngine.js'
+import { getIntuneDevices, diagnoseIntune, getIntuneSelfServiceWindowsApps, getIntuneSelfServiceAppDevices } from '../services/intune.js'
+import { getManageEngineDevices } from '../services/manageEngine.js'
+import { getEndpointCentralAppInventory } from '../services/endpointCentralSoftware.js'
 import { getEntraData, invalidateEntraTokenCache } from '../services/entra.js'
 import { testSlackConnection } from '../services/slack.js'
 
@@ -43,14 +46,20 @@ const credentialSchemas: Record<string, z.ZodObject<any>> = {
     clientSecret: z.string().min(1, 'clientSecret required'),
   }),
   slack: z.object({
-    botToken:      z.string().min(1, 'botToken required'),
+    botToken:      z.string().optional(),
+    webhookUrl:     z.string().url().optional(),
     signingSecret: z.string().optional(),
     workspaceId:   z.string().optional(),
-  }),
+  }).refine(value => !!value.botToken || !!value.webhookUrl, 'botToken or webhookUrl required'),
   openai: z.object({
     apiKey: z.string().min(1, 'apiKey required').startsWith('sk-', 'apiKey must start with sk-'),
     orgId:  z.string().optional(),
     model:  z.string().optional(),
+  }),
+  gemini: z.object({
+    apiKey: z.string().min(1, 'apiKey required').startsWith('AIza', 'apiKey must start with AIza'),
+    model: z.string().optional(),
+    enableGoogleSearch: z.preprocess(value => value === 'true' ? true : value === 'false' ? false : value, z.boolean().optional()),
   }),
 }
 
@@ -100,7 +109,8 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
       break
     case 'slack':
       setSlackConfig({
-        botToken:      f['botToken']      as string,
+        ...(f['botToken']      ? { botToken: f['botToken'] as string } : {}),
+        ...(f['webhookUrl']    ? { webhookUrl: f['webhookUrl'] as string } : {}),
         ...(f['signingSecret'] ? { signingSecret: f['signingSecret'] as string } : {}),
         ...(f['workspaceId']   ? { workspaceId:   f['workspaceId']   as string } : {}),
       })
@@ -110,6 +120,13 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
         apiKey: f['apiKey'] as string,
         ...(f['orgId'] ? { orgId: f['orgId'] as string } : {}),
         ...(f['model'] ? { model: f['model'] as string } : {}),
+      })
+      break
+    case 'gemini':
+      setGeminiConfig({
+        apiKey: f['apiKey'] as string,
+        ...(f['model'] ? { model: f['model'] as string } : {}),
+        ...(typeof f['enableGoogleSearch'] === 'boolean' ? { enableGoogleSearch: f['enableGoogleSearch'] as boolean } : {}),
       })
       break
   }
@@ -125,15 +142,27 @@ router.get('/intune/debug', asyncHandler(async (_req, res) => {
 
 // GET /api/integrations/manageengine/apps — fleet-wide installed-app inventory,
 // separated into Windows/macOS buckets by device platform
-router.get('/manageengine/apps', asyncHandler(async (_req, res) => {
-  const apps = await getManageEngineAppInventory()
+router.get('/manageengine/apps', asyncHandler(async (req, res) => {
+  const apps = getEndpointCentralAppInventory(req.query.refresh === '1', req.query.includeSystem === '1')
   res.json({ success: true, data: apps })
+}))
+
+// GET /api/integrations/intune/self-service-apps/devices?appId= — devices holding one Self Service app (loaded on demand)
+router.get('/intune/self-service-apps/devices', asyncHandler(async (req, res) => {
+  const appId = typeof req.query.appId === 'string' ? req.query.appId : ''
+  res.json({ success: true, data: await getIntuneSelfServiceAppDevices(appId) })
+}))
+
+// GET /api/integrations/intune/self-service-apps — Windows apps assigned as `available` (Company Portal)
+router.get('/intune/self-service-apps', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: getIntuneSelfServiceWindowsApps(undefined, req.query.refresh === '1') })
 }))
 
 // GET /api/integrations/status — per-integration health snapshot
 router.get('/status', asyncHandler(async (_req, res) => {
   const mdmSources = ['intune', 'manageengine'] as const
   const entraResult = getFetchResult('entra')
+  const slackConfig = getSlackConfig()
   const data = [
     ...mdmSources.map(src => {
       const result = getFetchResult(src)
@@ -167,6 +196,7 @@ router.get('/status', asyncHandler(async (_req, res) => {
       latencyMs:   getFetchResult('slack')?.latencyMs ?? null,
       error:       getFetchResult('slack')?.error ?? null,
       healthy:     isConfigured('slack') ? (getFetchResult('slack')?.error === null ? true : null) : null,
+      connectionType: slackConfig?.webhookUrl ? 'incoming_webhook' : slackConfig?.botToken ? 'bot_api' : null,
     },
     {
       id: 'openai',
@@ -178,6 +208,17 @@ router.get('/status', asyncHandler(async (_req, res) => {
       latencyMs:   null,
       error:       null,
       healthy:     isConfigured('openai') ? true : null,
+    },
+    {
+      id: 'gemini',
+      name: 'Google Gemini',
+      configured: isConfigured('gemini'),
+      model: getGeminiConfig()?.model ?? 'gemini-2.5-flash',
+      deviceCount: null,
+      lastSyncAt: null,
+      latencyMs: null,
+      error: null,
+      healthy: isConfigured('gemini') ? true : null,
     },
   ]
 
@@ -226,6 +267,18 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
         const openai = new OpenAI({ apiKey: cfg.apiKey, ...(cfg.orgId ? { organization: cfg.orgId } : {}) })
         const models = await openai.models.list()
         deviceCount = models.data.length
+        break
+      }
+      case 'gemini': {
+        const cfg = getGeminiConfig()
+        if (!cfg?.apiKey) throw new Error('Google Gemini is not configured — push credentials first')
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || 'gemini-2.5-flash')}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.apiKey },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with OK.' }] }], generationConfig: { maxOutputTokens: 8 } }),
+        })
+        if (!response.ok) throw new Error(`Gemini connection failed: ${await response.text()}`)
+        deviceCount = 1
         break
       }
       default:

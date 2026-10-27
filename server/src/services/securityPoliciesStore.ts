@@ -321,6 +321,8 @@ export interface ListFilters {
   platform?: string | undefined
   status?: 'enabled' | 'disabled' | 'unknown' | undefined
   search?: string | undefined
+  sortBy?: 'name' | 'category' | 'platform' | 'enabled' | 'assignments' | 'modified' | undefined
+  sortDirection?: 'asc' | 'desc' | undefined
   page: number
   pageSize: number
 }
@@ -360,8 +362,17 @@ export async function listPolicies(filters: ListFilters): Promise<PolicyListResu
 
   const offset = (filters.page - 1) * filters.pageSize
   params.push(filters.pageSize, offset)
+  const sortExpression = {
+    name: 'name',
+    category: 'category',
+    platform: 'platform',
+    enabled: 'is_enabled',
+    assignments: 'jsonb_array_length(assignments)',
+    modified: 'modified_at_source',
+  }[filters.sortBy ?? 'name']
+  const sortDirection = filters.sortDirection === 'desc' ? 'DESC' : 'ASC'
   const res = await query<SnapshotRow>(
-    `SELECT * FROM security_policy_snapshots WHERE ${where} ORDER BY name ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    `SELECT * FROM security_policy_snapshots WHERE ${where} ORDER BY ${sortExpression} ${sortDirection} NULLS LAST, name ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   )
 

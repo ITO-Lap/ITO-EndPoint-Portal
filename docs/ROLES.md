@@ -143,6 +143,8 @@ A tightly scoped read-only role for front-line support agents who need to look u
 | Assign / change roles | ✅ | ❌ | ❌ |
 | Edit own profile | ✅ | ✅ | ✅ |
 
+> **Notification settings (org)** includes editing the day/time schedule of automatic Slack notifications (Scheduled Reports → Slack Notification Schedule). Only Global Admin can edit; IT Admin and Helpdesk see the schedule read-only. See `server/src/routes/notificationSchedules.ts`.
+
 ---
 
 ## Onboarding Checklist

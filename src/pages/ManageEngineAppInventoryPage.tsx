@@ -2,13 +2,16 @@ import { Fragment, useState, useEffect, useMemo } from 'react'
 import {
   Settings, RefreshCw,
   Search, X, ArrowLeft,
-  ChevronDown, ChevronUp, AlertCircle, Layers, Apple, MonitorSmartphone,
+  ChevronDown, AlertCircle, Layers, Apple, MonitorSmartphone,
   ChevronRight, FileText,
 } from 'lucide-react'
 import { api } from '../api'
-import type { ApiDevice, ManageEngineAppEntry } from '../api'
+import { AppIntelligencePage } from './AppIntelligencePage'
+import type { ManageEngineAppEntry, ManageEngineAppLogEntry, MacAppClassification } from '../api'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 
 const PAGE_SIZE = 50
 
@@ -23,21 +26,32 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
   )
 }
 
-type AppSortKey = 'name' | 'deviceCount' | 'latestVersion' | 'updateStatus'
-type AppPlatformTab = 'Windows' | 'macOS'
+const CLASSIFICATION_META: Record<MacAppClassification, { label: string; style: string }> = {
+  system_preinstalled:      { label: 'Apple system',   style: 'bg-slate-50 text-slate-500 border-slate-200' },
+  managed_self_service:     { label: 'Managed / Self Service', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  manual_or_user_installed: { label: 'Manual / user',  style: 'bg-blue-50 text-blue-700 border-blue-200' },
+  unknown_review_required:  { label: 'Review',         style: 'bg-amber-50 text-amber-700 border-amber-200' },
+}
 
-function SortHeader({ label, sortKeyName, activeKey, dir, onToggle }: {
-  label: string; sortKeyName: AppSortKey; activeKey: AppSortKey; dir: 'asc' | 'desc'; onToggle: (key: AppSortKey) => void
-}) {
+const SOURCE_FILTERS = [
+  ['all', 'All sources'], ['intune', 'Intune'], ['endpoint_central', 'Endpoint Central'],
+  ['self_service', 'Self Service'], ['manual', 'Manual'], ['unknown', 'Unknown'],
+] as const
+type SourceFilter = typeof SOURCE_FILTERS[number][0]
+
+function ClassificationBadge({ entry }: { entry: ManageEngineAppEntry }) {
+  if (!entry.classification) return null
+  const meta = CLASSIFICATION_META[entry.classification]
   return (
-    <th>
-      <button type="button" onClick={() => onToggle(sortKeyName)} className="inline-flex items-center gap-1 font-inherit">
-        {label}
-        {activeKey === sortKeyName && (dir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-      </button>
-    </th>
+    <span title={`${entry.classificationReason ?? ''}${entry.confidence ? ` (confidence: ${entry.confidence})` : ''}`}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[0.62rem] font-bold ${meta.style}`}>
+      {meta.label}
+    </span>
   )
 }
+
+type AppSortKey = 'name' | 'installedVersion' | 'deviceCount' | 'latestVersion' | 'updateStatus'
+type AppPlatformTab = 'Windows' | 'macOS'
 
 function UpdateStatusBadge({ status }: { status: ManageEngineAppEntry['updateStatus'] }) {
   const styles: Record<ManageEngineAppEntry['updateStatus'], string> = {
@@ -45,19 +59,43 @@ function UpdateStatusBadge({ status }: { status: ManageEngineAppEntry['updateSta
     'Update Available': 'bg-amber-50 text-amber-700 border-amber-200',
     'Unknown':          'bg-slate-50 text-slate-500 border-slate-200',
   }
-  return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.62rem] font-bold ${styles[status]}`}>{status}</span>
+  // Compared only against the newest version seen in this fleet, never a vendor release — so don't say "up to date".
+  const labels: Record<ManageEngineAppEntry['updateStatus'], string> = {
+    'Up to date': 'Fleet-aligned', 'Update Available': 'Version drift', 'Unknown': 'Unknown',
+  }
+  return (
+    <span title="Compared with the newest version installed in this fleet, not the vendor's latest release. See Verified updates."
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[0.62rem] font-bold ${styles[status]}`}>{labels[status]}</span>
+  )
 }
 
 // Groups an app's per-device log entries by installed version — powers the
 // "Multiple Versions" expandable breakdown (real counts, derived from the
 // same log records shown in the log viewer, not a separate fabricated stat).
 function versionBreakdown(entry: ManageEngineAppEntry): { version: string; count: number }[] {
+  // Intune's detailed device records are fetched only when View Logs is opened.
+  // Use its aggregate counts here so expanding Multiple Versions never produces
+  // an empty panel before those records have been requested.
+  if (entry.versionCounts?.length) return entry.versionCounts.map(({ version, deviceCount }) => ({ version, count: deviceCount }))
   const counts = new Map<string, number>()
   for (const log of entry.logs) counts.set(log.version, (counts.get(log.version) ?? 0) + 1)
   return Array.from(counts.entries()).map(([version, count]) => ({ version, count }))
 }
 
 function AppLogsPanel({ entry, onClose }: { entry: ManageEngineAppEntry; onClose: () => void }) {
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const logs = sortKey ? sortRows(entry.logs, log => {
+    switch (sortKey) {
+      case 'device': return log.deviceName
+      case 'version': return log.version
+      case 'status': return log.status
+      case 'lastSeen': return Date.parse(log.lastSeen) || log.lastSeen
+      case 'error': return log.errorDetails
+      default: return ''
+    }
+  }, sortDirection) : entry.logs
+  const handleSort = (key: string) => { setSortDirection(direction => toggleSortDirection(sortKey, direction, key)); setSortKey(key) }
   return (
     <>
       <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm cursor-pointer" onClick={onClose} />
@@ -80,9 +118,15 @@ function AppLogsPanel({ entry, onClose }: { entry: ManageEngineAppEntry; onClose
             </div>
           ) : (
             <table className="z-table">
-              <thead><tr>{['Device', 'Version', 'Status', 'Last Seen', 'Error Details'].map(h => <th key={h}>{h}</th>)}</tr></thead>
+              <thead><tr>
+                <SortableHeader label="Device" sortKey="device" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Version" sortKey="version" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Last Seen" sortKey="lastSeen" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Error Details" sortKey="error" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              </tr></thead>
               <tbody>
-                {entry.logs.map(log => (
+                {logs.map(log => (
                   <tr key={log.deviceId}>
                     <td className="font-semibold text-slate-700">{log.deviceName || '—'}</td>
                     <td className="font-mono text-[0.7rem] text-slate-500">{log.version}</td>
@@ -100,20 +144,45 @@ function AppLogsPanel({ entry, onClose }: { entry: ManageEngineAppEntry; onClose
   )
 }
 
-function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngineAppEntry[]; platformLoading: boolean }) {
+interface MacControls { hiddenSystemApps: number; showSystem: boolean; onToggleSystem: (v: boolean) => void }
+
+function AppsPlatformTable({ entries, platformLoading, loadLogs, macControls }: {
+  entries: ManageEngineAppEntry[]; platformLoading: boolean
+  loadLogs?: (entry: ManageEngineAppEntry) => Promise<ManageEngineAppLogEntry[]>
+  /** Present only on the macOS tab, where entries carry a classification. */
+  macControls?: MacControls
+}) {
+  const [classFilter, setClassFilter]   = useState<'all' | MacAppClassification>('all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const classifiable = !!macControls
   const [search, setSearch]     = useState('')
   const [sortKey, setSortKey]   = useState<AppSortKey>('deviceCount')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [logEntry, setLogEntry] = useState<ManageEngineAppEntry | null>(null)
+  const [logsLoadingId, setLogsLoadingId] = useState<string | null>(null)
+  const [logsError, setLogsError] = useState<string | null>(null)
 
-  const toggleSort = (key: AppSortKey) => {
+  // Intune keeps the per-device list server-side until a row is opened.
+  const openLogs = async (entry: ManageEngineAppEntry) => {
+    if (!loadLogs) { setLogEntry(entry); return }
+    setLogsLoadingId(entry.appId)
+    setLogsError(null)
+    try { setLogEntry({ ...entry, logs: await loadLogs(entry) }) }
+    catch (e) { setLogsError(e instanceof Error ? e.message : 'Could not load devices for this application') }
+    finally { setLogsLoadingId(null) }
+  }
+
+  const toggleSort = (next: string) => {
+    const key = next as AppSortKey
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('asc') }
   }
 
   const filteredSorted = useMemo(() => {
     let result = entries
+    if (classFilter !== 'all') result = result.filter(a => a.classification === classFilter)
+    if (sourceFilter !== 'all') result = result.filter(a => a.installSource === sourceFilter || a.reportedBy?.includes(sourceFilter))
     if (search) {
       const q = search.toLowerCase()
       result = result.filter(a => a.name.toLowerCase().includes(q))
@@ -122,13 +191,14 @@ function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngine
     return [...result].sort((a, b) => {
       switch (sortKey) {
         case 'name':           return a.name.localeCompare(b.name) * dir
+        case 'installedVersion': return (a.installedVersions[0] ?? '').localeCompare(b.installedVersions[0] ?? '', undefined, { numeric: true }) * dir
         case 'deviceCount':     return (a.deviceCount - b.deviceCount) * dir
         case 'latestVersion':   return a.latestVersion.localeCompare(b.latestVersion) * dir
         case 'updateStatus':    return a.updateStatus.localeCompare(b.updateStatus) * dir
         default:                return 0
       }
     })
-  }, [entries, search, sortKey, sortDir])
+  }, [entries, search, sortKey, sortDir, classFilter, sourceFilter])
 
   const { page, setPage, totalPages, paginated } = usePagination(filteredSorted, PAGE_SIZE)
 
@@ -147,6 +217,31 @@ function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngine
         {search && <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2"><X className="h-3.5 w-3.5 text-slate-400" /></button>}
       </div>
 
+      {macControls && (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex items-center gap-2 font-semibold text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={macControls.showSystem} onChange={e => macControls.onToggleSystem(e.target.checked)} className="h-3.5 w-3.5 accent-[#F46C00]" />
+            Show Apple system apps
+          </label>
+          <select value={classFilter} onChange={e => setClassFilter(e.target.value as 'all' | MacAppClassification)}
+            className="h-8 rounded-xl px-2 text-xs water-input" aria-label="Filter by classification">
+            <option value="all">All classifications</option>
+            {(Object.keys(CLASSIFICATION_META) as MacAppClassification[])
+              .filter(c => macControls.showSystem || c !== 'system_preinstalled')
+              .map(c => <option key={c} value={c}>{CLASSIFICATION_META[c].label}</option>)}
+          </select>
+          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as SourceFilter)}
+            className="h-8 rounded-xl px-2 text-xs water-input" aria-label="Filter by source">
+            {SOURCE_FILTERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          {!macControls.showSystem && macControls.hiddenSystemApps > 0 && (
+            <span className="text-slate-400">{macControls.hiddenSystemApps.toLocaleString()} Apple system apps hidden</span>
+          )}
+        </div>
+      )}
+
+      {logsError && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700">{logsError}</div>}
+
       <div className="glass rounded-2xl overflow-hidden">
         <div className="h-[2px]" style={{ background: 'linear-gradient(90deg,#FF6B35,#F46C00,#FFB800)' }} />
         {filteredSorted.length === 0 ? (
@@ -159,11 +254,12 @@ function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngine
             <table className="z-table">
               <thead>
                 <tr>
-                  <SortHeader label="Application" sortKeyName="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
-                  <th>Installed Version</th>
-                  <SortHeader label="Devices" sortKeyName="deviceCount" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
-                  <SortHeader label="Latest Version" sortKeyName="latestVersion" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
-                  <SortHeader label="Update Status" sortKeyName="updateStatus" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
+                  <SortableHeader label="Application" sortKey="name" activeSortKey={sortKey} direction={sortDir} onSort={toggleSort} />
+                  {classifiable && <th>Classification</th>}
+                  <SortableHeader label="Installed Version" sortKey="installedVersion" activeSortKey={sortKey} direction={sortDir} onSort={toggleSort} />
+                  <SortableHeader label="Devices" sortKey="deviceCount" activeSortKey={sortKey} direction={sortDir} onSort={toggleSort} />
+                  <SortableHeader label="Newest Installed" sortKey="latestVersion" activeSortKey={sortKey} direction={sortDir} onSort={toggleSort} />
+                  <SortableHeader label="Fleet Status" sortKey="updateStatus" activeSortKey={sortKey} direction={sortDir} onSort={toggleSort} />
                   <th>Action</th>
                 </tr>
               </thead>
@@ -174,6 +270,7 @@ function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngine
                     <Fragment key={entry.appId}>
                       <tr>
                         <td className="font-semibold text-slate-700">{entry.name}</td>
+                        {classifiable && <td><ClassificationBadge entry={entry} /></td>}
                         <td className="font-mono text-[0.7rem] text-slate-500">
                           {multi ? (
                             <button
@@ -192,16 +289,16 @@ function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngine
                         <td>
                           <button
                             type="button"
-                            onClick={() => setLogEntry(entry)}
+                            onClick={() => void openLogs(entry)}
                             className="inline-flex items-center gap-1 rounded-full border border-slate-200 glass px-2.5 py-1 text-[0.62rem] font-semibold text-slate-500 water-glow-sm"
                           >
-                            <FileText className="h-3 w-3" />View Logs
+                            <FileText className="h-3 w-3" />{logsLoadingId === entry.appId ? 'Loading…' : 'View Logs'}
                           </button>
                         </td>
                       </tr>
                       {expandedId === entry.appId && (
                         <tr>
-                          <td colSpan={6} className="bg-slate-50/60 !py-3">
+                          <td colSpan={classifiable ? 7 : 6} className="bg-slate-50/60 !py-3">
                             <div className="space-y-1 pl-2">
                               {versionBreakdown(entry).map(v => (
                                 <div key={v.version} className="flex items-center justify-between gap-2 text-xs max-w-sm">
@@ -229,38 +326,58 @@ function AppsPlatformTable({ entries, platformLoading }: { entries: ManageEngine
   )
 }
 
-interface Props { onBack: () => void }
+interface Props { onBack: () => void; viewerRole?: string; userEmail?: string }
 
-// ManageEngine App Inventory — real cross-device installed-application
-// aggregation (deviceCount/version breakdown/update status) via
-// getManageEngineAppInventory(). The plain device-listing, fabricated
-// "Patch Status" percentages, and fake "Automation" rule toggles that used
-// to live alongside this in ManageEngineDevicesPage.tsx were removed —
-// they duplicated the ManageEngine console or had zero real backing.
-export function ManageEngineAppInventoryPage({ onBack }: Props) {
-  const [devices, setDevices] = useState<ApiDevice[]>([])
-  const [data, setData]       = useState<{ windows: ManageEngineAppEntry[]; macos: ManageEngineAppEntry[] } | null>(null)
+type AppSource = 'endpoint-central' | 'intune' | 'verified'
+type EcData = Awaited<ReturnType<typeof api.fetchManageEngineAppsInventory>>
+
+// App inventory by source. Endpoint Central: full agent scan minus OS/updates/bundled components, so what
+// remains is manual or Self Service installs (the API has no install-source field to split those two).
+// Intune: Windows apps assigned as "available" (Company Portal Self Service) with per-device install state.
+export function ManageEngineAppInventoryPage({ onBack, viewerRole, userEmail }: Props) {
+  const [source, setSource]   = useState<AppSource>('endpoint-central')
+  const [ec, setEc]           = useState<EcData | null>(null)
+  const [intune, setIntune]   = useState<Awaited<ReturnType<typeof api.fetchIntuneSelfServiceApps>> | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(false)
+  const [error, setError]     = useState<string | null>(null)
   const [platformTab, setPlatformTab] = useState<AppPlatformTab>('Windows')
+  // Default view hides only Apple apps confidently identified as pre-installed macOS; the toggle is for troubleshooting.
+  const [showSystem, setShowSystem] = useState(false)
 
-  const load = () => {
+  const load = (refresh = false) => {
+    if (source === 'verified') return // the Verified updates view loads and syncs itself
     setLoading(true)
-    setError(false)
-    Promise.all([
-      api.fetchAllDevicesRaw({ source: 'manageengine', limit: 500 }).then(r => r.devices).catch(() => []),
-      api.fetchManageEngineAppsInventory(),
-    ])
-      .then(([devs, apps]) => { setDevices(devs); setData(apps) })
-      .catch(() => setError(true))
+    setError(null)
+    const request = source === 'endpoint-central'
+      ? api.fetchManageEngineAppsInventory(refresh, showSystem).then(setEc)
+      : api.fetchIntuneSelfServiceApps(refresh).then(setIntune)
+    request
+      .catch(e => setError(e instanceof Error ? e.message : 'Request failed'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [source, showSystem])
+  const isVerified = source === 'verified'
 
-  const windows = data?.windows ?? []
-  const macos   = data?.macos ?? []
-  const active  = platformTab === 'Windows' ? windows : macos
+  // The Endpoint Central scan runs server-side for a while; keep polling until it reports idle.
+  const ecScanning     = source === 'endpoint-central' && ec?.progress.status === 'running'
+  const intuneBuilding = source === 'intune' && intune?.progress.status === 'running'
+  const scanning = ecScanning || intuneBuilding
+  useEffect(() => {
+    if (!scanning) return
+    const id = window.setInterval(() => {
+      if (ecScanning) api.fetchManageEngineAppsInventory(false, showSystem).then(setEc).catch(() => {})
+      else api.fetchIntuneSelfServiceApps().then(setIntune).catch(() => {})
+    }, 20_000)
+    return () => window.clearInterval(id)
+  }, [ecScanning, intuneBuilding, showSystem])
+
+  const isEc    = source === 'endpoint-central'
+  const windows = isEc ? ec?.windows ?? [] : intune?.windows ?? []
+  const macos   = isEc ? ec?.macos ?? [] : []
+  const tab: AppPlatformTab = isEc ? platformTab : 'Windows'
+  const active  = tab === 'Windows' ? windows : macos
+  const cov     = ec?.coverage
 
   return (
     <div className="flex flex-col gap-5 w-full page-enter">
@@ -278,44 +395,84 @@ export function ManageEngineAppInventoryPage({ onBack }: Props) {
             </div>
             <div>
               <h1 className="text-lg font-black text-slate-800">ManageEngine App Inventory</h1>
-              <p className="text-[0.68rem] text-slate-400">Cross-device installed-application aggregation, by platform</p>
+              <p className="text-[0.68rem] text-slate-400">Installed applications by source and platform, plus verified vendor versions and packaging status</p>
             </div>
           </div>
-          <button type="button" onClick={load}
-            className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />Refresh
-          </button>
+          {!isVerified && (
+            <button type="button" onClick={() => load(true)}
+              className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />Refresh
+            </button>
+          )}
         </div>
       </div>
+
+      <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
+        {([['endpoint-central', 'Endpoint Central'], ['intune', 'Intune Self Service'], ['verified', 'Verified updates']] as const).map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setSource(id)}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${source === id ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {isVerified ? <AppIntelligencePage embedded viewerRole={viewerRole} userEmail={userEmail} /> : <>
+      <p className="text-[0.7rem] text-slate-500">
+        {isEc
+          ? 'Endpoint Central agent inventory for client devices only (Windows servers are excluded), with OS components and updates removed. On macOS, only Apple apps that shipped with the OS are hidden by default (toggle to show them); everything else is labelled Managed / Manual / Review. Endpoint Central does not record how an app was installed, so apps without a known managed deployment are labelled Manual. Only devices running the Endpoint Central agent are covered.'
+          : 'Windows apps published to Company Portal (assignment intent “available”). The catalog total includes every published app; the table shows the subset with a discovered installation and counts its installed devices. Source: Microsoft Graph.'}
+      </p>
+
+      {ecScanning && ec && (
+        <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs text-orange-800">
+          Scanning Endpoint Central client systems (Macs first): {ec.progress.scanned.toLocaleString()} of {ec.progress.total.toLocaleString()}.
+          Endpoint Central limits API calls, so a full scan takes a while; the numbers below are partial and update automatically.
+        </div>
+      )}
+      {intuneBuilding && (
+        <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs text-orange-800">
+          Reading the Company Portal app catalog and discovered installs from Intune. This takes a few minutes; the list updates automatically.
+        </div>
+      )}
+      {source === 'intune' && intune?.progress.error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700">Intune read failed: {intune.progress.error}</div>
+      )}
 
       {error ? (
         <div className="glass rounded-2xl p-10 text-center">
           <AlertCircle className="mx-auto h-8 w-8 text-slate-300 mb-3" />
           <p className="text-sm text-slate-500 font-semibold mb-1">Could not load application inventory</p>
-          <p className="text-xs text-slate-400">Check the ManageEngine connection in Settings → Integrations.</p>
+          <p className="text-xs text-slate-400">{error}</p>
         </div>
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatCard label="Windows Apps" value={loading ? '—' : windows.length} color="#0078D4" />
-            <StatCard label="macOS Apps"   value={loading ? '—' : macos.length}   color="#10B981" />
-            <StatCard label="Devices Scanned" value={devices.length} color="#F46C00" sub="ManageEngine" />
+            <StatCard label={isEc ? 'Windows Apps' : 'Company Portal Catalog'} value={loading ? '—' : (isEc ? windows.length : (intune?.catalogWindowsApps ?? 0))} color="#0078D4"
+              sub={isEc ? undefined : `${windows.length.toLocaleString()} with discovered installs`} />
+            {isEc && <StatCard label="macOS Apps" value={loading ? '—' : macos.length} color="#10B981" />}
+            {isEc && <StatCard label="Devices Scanned" value={loading || !cov ? '—' : cov.withInventory} color="#F46C00"
+              sub={cov ? `Mac ${cov.macos.scanned}/${cov.macos.devices} · Windows clients ${cov.windows.scanned}/${cov.windows.devices}${cov.failed ? ` · ${cov.failed} failed` : ''}` : undefined} />}
           </div>
 
-          <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
-            {(['Windows', 'macOS'] as const).map(p => (
-              <button key={p} type="button" onClick={() => setPlatformTab(p)}
-                className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${platformTab === p ? 'glass-strong text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                style={platformTab === p ? { boxShadow: '0 0 0 1px rgba(255,107,53,0.2), 0 4px 12px rgba(255,107,53,0.1)' } : {}}>
-                {p === 'Windows' ? <MonitorSmartphone className="h-3.5 w-3.5" /> : <Apple className="h-3.5 w-3.5" />}
-                {p} Apps
-              </button>
-            ))}
-          </div>
+          {isEc && (
+            <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
+              {(['Windows', 'macOS'] as const).map(p => (
+                <button key={p} type="button" onClick={() => setPlatformTab(p)}
+                  className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${platformTab === p ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}
+                  style={platformTab === p ? { boxShadow: '0 0 0 1px rgba(255,107,53,0.2), 0 4px 12px rgba(255,107,53,0.1)' } : {}}>
+                  {p === 'Windows' ? <MonitorSmartphone className="h-3.5 w-3.5" /> : <Apple className="h-3.5 w-3.5" />}
+                  {p} Apps
+                </button>
+              ))}
+            </div>
+          )}
 
-          <AppsPlatformTable entries={active} platformLoading={loading} />
+          <AppsPlatformTable key={`${source}-${tab}`} entries={active} platformLoading={loading}
+            loadLogs={isEc ? undefined : entry => api.fetchIntuneSelfServiceAppDevices(entry.appId)}
+            macControls={isEc && tab === 'macOS' ? { hiddenSystemApps: ec?.hiddenSystemApps ?? 0, showSystem, onToggleSystem: setShowSystem } : undefined} />
         </div>
       )}
+      </>}
     </div>
   )
 }

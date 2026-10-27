@@ -15,22 +15,34 @@ import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
 import authRouter from './routes/auth.js'
 import intelligenceRouter from './routes/intelligence.js'
-import auditLogRouter from './routes/auditLog.js'
 import scheduledReportsRouter from './routes/scheduledReports.js'
-import securityInventoryRouter from './routes/securityInventory.js'
+import securityInventoryRouter, { startSecurityInventoryWarmup, stopSecurityInventoryWarmup } from './routes/securityInventory.js'
 import roleActivityRouter from './routes/roleActivity.js'
 import intuneScriptsConfigRouter from './routes/intuneScriptsConfig.js'
-import securityPoliciesRouter from './routes/securityPolicies.js'
 import copilotRouter from './routes/copilot.js'
+import patchRouter from './routes/patch.js'
+import endpointCentralRouter from './routes/endpointCentral.js'
+import securityPostureRouter from './routes/securityPosture.js'
+import appIntelRouter from './routes/appIntel.js'
+import { createStaleDevicesRouter } from './routes/staleDevices.js'
+import notificationSchedulesRouter from './routes/notificationSchedules.js'
+import dashboardRouter from './routes/dashboard.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
+import { startScheduledReportRunner, stopScheduledReportRunner, runScheduledReportNow } from './services/scheduledReportRunner.js'
+import { startAutomationScheduler, stopAutomationScheduler } from './services/automationScheduler.js'
+import { startVerifiedAppReleaseMonitor, stopVerifiedAppReleaseMonitor } from './services/appIntel/releaseMonitor.js'
+import { startNotificationScheduler, stopNotificationScheduler, registerNotificationHandler } from './services/notificationScheduler.js'
 import { isConfigured } from './store/integrationStore.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-dotenv.config()
+// Always load the server's environment file. `npm start` runs from the
+// repository root, while `npm --prefix server run dev` runs from /server;
+// relying on dotenv's current-working-directory default made production miss
+// server/.env and report every live connector as unconfigured.
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 const app = express()
 const port = process.env.PORT ?? 4000
@@ -81,13 +93,18 @@ app.use('/api/auth',              authRouter)
 
 // ── Intelligence Platform ──────────────────────────────────────────────────────
 app.use('/api/intelligence',       apiLimiter, intelligenceRouter)
-app.use('/api/audit',              apiLimiter, auditLogRouter)
 app.use('/api/scheduled-reports',  apiLimiter, scheduledReportsRouter)
 app.use('/api/security-inventory', apiLimiter, securityInventoryRouter)
 app.use('/api/role-activity',      apiLimiter, roleActivityRouter)
 app.use('/api/intune-scripts-config', apiLimiter, intuneScriptsConfigRouter)
-app.use('/api/security-policies',  apiLimiter, securityPoliciesRouter)
 app.use('/api/copilot',            apiLimiter, copilotRouter)
+app.use('/api/patch',              apiLimiter, patchRouter)
+app.use('/api/endpoint-central',   apiLimiter, endpointCentralRouter)
+app.use('/api/security-posture',   apiLimiter, securityPostureRouter)
+app.use('/api/app-intel',          apiLimiter, appIntelRouter)
+app.use('/api/stale-devices',      apiLimiter, createStaleDevicesRouter())
+app.use('/api/notification-schedules', apiLimiter, notificationSchedulesRouter)
+app.use('/api/dashboard',              apiLimiter, dashboardRouter)
 
 // ── Serve the built frontend (single-process deployment) ───────────────────────
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,
@@ -113,8 +130,22 @@ const server = app.listen(port, () => {
   console.log(`  Jira:         ${process.env.JIRA_BASE_URL ? '✓ configured' : '— not configured'}`)
   console.log(`  Confluence:   ${process.env.CONFLUENCE_BASE_URL ?? process.env.JIRA_BASE_URL ? '✓ configured' : '— not configured'}`)
 
+  registerNotificationHandler('scheduled_report', async (sourceId) => {
+    try {
+      await runScheduledReportNow(sourceId)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
   startSlackHealthMonitor()
+  startScheduledReportRunner()
+  startAutomationScheduler()
+  startVerifiedAppReleaseMonitor()
+  startNotificationScheduler()
+  startSecurityInventoryWarmup()
 })
 
-process.on('SIGTERM', () => { stopSlackHealthMonitor(); server.close() })
-process.on('SIGINT',  () => { stopSlackHealthMonitor(); server.close() })
+process.on('SIGTERM', () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); server.close() })
+process.on('SIGINT',  () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); server.close() })

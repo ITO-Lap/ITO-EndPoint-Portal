@@ -4,14 +4,14 @@ import {
   CheckCircle2, XCircle, MinusCircle, ChevronRight, BookOpen,
   HelpCircle, AlertTriangle, Lock, Globe, LifeBuoy, FileText,
   Terminal, BarChart2, Wrench, Play, Bell, MessageSquare, Ticket,
-  Clock, Package, Activity,
+  Clock, Package, Activity, Waves,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DocSection =
   | 'overview' | 'quickstart' | 'onboarding'
-  | 'dashboard' | 'identity' | 'automation' | 'reports' | 'security'
+  | 'dashboard' | 'automation' | 'reports' | 'security'
   | 'configuration' | 'roles'
   | 'troubleshooting' | 'faq'
 
@@ -31,7 +31,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'User Guide',
     items: [
       { key: 'dashboard',   label: 'Dashboard & Devices',       icon: Laptop2     },
-      { key: 'identity',    label: 'Users & Identity',          icon: Users       },
       { key: 'automation',  label: 'Automation Rules',          icon: Activity    },
       { key: 'reports',     label: 'Reports & Analytics',       icon: BarChart2   },
       { key: 'security',    label: 'Security Posture',          icon: ShieldCheck },
@@ -97,7 +96,7 @@ function OverviewSection() {
   const features = [
     { icon: Laptop2,    label: 'Device Management',    desc: 'Search and inspect managed endpoints across all connected MDM sources.' },
     { icon: ShieldCheck,label: 'Compliance Monitoring', desc: 'Real-time compliance status, policy failure details, and trend visualisation.' },
-    { icon: BookOpen,   label: 'Endpoint Operations Copilot', desc: 'AI chat assistant that answers questions and performs confirmed write actions (Jira tickets, automation test-runs) over live app data.' },
+    { icon: Waves,      label: 'Ocean', desc: 'AI endpoint operations assistant that answers questions and performs confirmed write actions (Jira tickets, automation test-runs) over live app data.' },
     { icon: Globe,      label: 'Integrations',          desc: 'Unified view across Microsoft Intune, Microsoft Entra ID, and ManageEngine (Windows, macOS, Linux).' },
     { icon: Settings,   label: 'Settings',              desc: 'Organisation-wide configuration for compliance, automation, and security.' },
   ]
@@ -107,7 +106,7 @@ function OverviewSection() {
       <DocCard>
         <div className="px-5 py-5 space-y-4">
           <p className="text-sm text-slate-700 leading-relaxed">
-            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune, Microsoft Entra ID, and ManageEngine, surfaces compliance and identity risk in real time, and includes an AI Operations Copilot that can act on that data directly.
+            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune, Microsoft Entra ID, and ManageEngine, surfaces compliance and identity risk in real time, and includes Ocean, an AI operations assistant that can act on that data directly.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {features.map(f => (
@@ -195,7 +194,7 @@ const PERMISSION_GROUPS = [
       { label: 'View automation rules',          global: 'allow', admin: 'allow', helpdesk: 'allow' },
       { label: 'Trigger a Test Run',             global: 'allow', admin: 'allow', helpdesk: 'deny'  },
       { label: 'Create / edit / delete rules',   global: 'allow', admin: 'deny',  helpdesk: 'deny'  },
-      { label: 'Confirm a Copilot write action',  global: 'allow', admin: 'allow', helpdesk: 'deny'  },
+      { label: 'Confirm an Ocean write action',   global: 'allow', admin: 'allow', helpdesk: 'deny'  },
     ],
   },
   {
@@ -394,7 +393,7 @@ function OnboardingSection() {
         items: [
           'Check the Non-Compliant stat card each morning for new issues',
           'Use Risk Scoring to see which devices/users need the most urgent attention',
-          'Ask the Endpoint Operations Copilot for a summary of overnight compliance changes',
+          'Ask Ocean for a summary of overnight compliance changes',
           'Escalate a device to Jira or link a Confluence article directly from its Risk Scoring row',
         ],
       },
@@ -445,7 +444,7 @@ function OnboardingSection() {
             onClick={() => setActiveRole(r)}
             className={`rounded-lg border px-3.5 py-2 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
               activeRole === r
-                ? 'border-orange-300 bg-orange-50 text-orange-700'
+                ? 'is-selected'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
@@ -1072,9 +1071,9 @@ function QuickStartSection() {
       tips: ['Jira and Confluence escalation are gated on those integrations actually being configured.'],
     },
     {
-      n: '4', title: 'Try the Endpoint Operations Copilot', color: 'bg-orange-500',
-      desc: 'Open the Copilot panel from the header on any page. Ask it a question (e.g. "which devices are non-compliant and offline?") or ask it to create a Jira ticket or test-run an automation rule — write actions require your explicit confirmation.',
-      tips: ['The Copilot only reads and acts on modules already live in this app — it does not fabricate data.'],
+      n: '4', title: 'Try Ocean', color: 'bg-sky-500',
+      desc: 'Open the Ocean panel from the header on any page. Ask it a question (e.g. "which devices are non-compliant and offline?") or ask it to create a Jira ticket or test-run an automation rule — write actions require your explicit confirmation.',
+      tips: ['Ocean only reads and acts on modules already live in this app — it does not fabricate data.'],
     },
     {
       n: '5', title: 'Check automation rules', color: 'bg-orange-500',
@@ -1090,7 +1089,7 @@ function QuickStartSection() {
 
   const nextByRole = [
     { role: 'Global Admin', badge: 'bg-orange-100 text-orange-700', next: ['Connect integrations in Settings → Integrations', 'Review and enable automation rules', 'Configure Slack, Teams, and Jira for alert routing'] },
-    { role: 'IT Admin',     badge: 'bg-lime-100 text-lime-700',     next: ['Search for devices with active issues', 'Use Risk Scoring to prioritise remediation', 'Ask the Copilot to trigger an automation Test Run', 'Check Reports & Analytics for fleet trends'] },
+    { role: 'IT Admin',     badge: 'bg-lime-100 text-lime-700',     next: ['Search for devices with active issues', 'Use Risk Scoring to prioritise remediation', 'Ask Ocean to trigger an automation Test Run', 'Check Reports & Analytics for fleet trends'] },
     { role: 'Helpdesk',     badge: 'bg-slate-100 text-slate-700',   next: ['Use the search bar to find a device by user email', 'Read the Compliance Details to understand the issue', 'Escalate to an IT Admin if remediation is needed'] },
   ]
 
@@ -1267,86 +1266,7 @@ function DashboardSection() {
               </div>
             ))}
           </div>
-          <p className="mt-1">For a filterable full-fleet view, open <strong>Intune Devices</strong> or <strong>Mac Devices</strong> in the sidebar — each has its own Devices tab with column filtering and sorting.</p>
-        </div>
-      </DocCard>
-    </SectionWrap>
-  )
-}
-
-// ─── Section: Users & Identity ────────────────────────────────────────────────
-
-function IdentitySection() {
-  const signInFields = [
-    { label: 'Date & Time',       desc: 'When the sign-in occurred.' },
-    { label: 'Application',       desc: 'Which app or service the user signed into.' },
-    { label: 'IP Address',        desc: 'Source IP of the sign-in attempt.' },
-    { label: 'Location',          desc: 'City and country derived from the IP.' },
-    { label: 'MFA Method',        desc: 'Which MFA method was used (Authenticator App, SMS, FIDO2, etc.).' },
-    { label: 'Risk Level',        desc: 'Entra ID\'s real-time risk score for this sign-in event.' },
-    { label: 'Conditional Access',desc: 'Whether Conditional Access policies passed, failed, or were not applied.' },
-  ]
-
-  return (
-    <SectionWrap title="Users & Identity" description="Find a user, then open their cross-system risk view combining Entra sign-in risk with MDM device compliance">
-
-      <DocCard>
-        <CardHeader title="Find a User" description="Users in the sidebar — deliberately a minimal lookup, not a full directory dashboard" />
-        <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-          <p>Search by name, email, or department. There's no sort/filter grid or Invite/Edit actions here on purpose — this page exists only to hand off into <strong>User Intelligence</strong>, the real cross-system correlation view. Selecting a result opens that user's User Intelligence page.</p>
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="User Intelligence — Tabs" description="Click any user to open this view" />
-        <div className="divide-y divide-slate-100">
-          {[
-            { tab: 'Overview',      desc: 'Combined health score correlating Entra sign-in/MFA risk with Intune/ManageEngine device compliance.', live: true },
-            { tab: 'Devices',       desc: 'All managed devices assigned to this user: platform, compliance state, encryption status, and last check-in.', live: true },
-            { tab: 'Sign-in Analytics', desc: 'Recent sign-in events from Entra with risk level and result.', live: true },
-            { tab: 'Groups & Roles', desc: 'Security/M365 groups and directory role assignments.', live: false },
-            { tab: 'Security',      desc: 'Auth method breakdown, password age, Identity Protection alerts, Conditional Access diagnostics.', live: false },
-            { tab: 'Intune',        desc: 'Compliance policies, configuration profiles, update rings, Autopilot enrollment detail.', live: false },
-            { tab: 'AI Insights',   desc: 'GPT-generated root-cause analysis and remediation recommendations for this user.', live: false },
-            { tab: 'Report Center', desc: 'Export a summary/device/compliance/sign-in report.', live: false },
-          ].map(t => (
-            <div key={t.tab} className="flex items-start gap-3 px-5 py-3">
-              <span className="inline-flex rounded-lg bg-orange-100 px-2 py-1 text-[0.62rem] font-bold text-orange-700 w-28 flex-shrink-0 mt-0.5 text-center justify-center">{t.tab}</span>
-              <div className="flex-1">
-                <p className="text-[0.72rem] text-slate-600 leading-snug">{t.desc}</p>
-                {!t.live && <span className="inline-flex mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[0.58rem] font-semibold text-slate-500">Coming Soon — shown as a placeholder in-app, not faked data</span>}
-              </div>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Sign-in Event Fields" description="What each column in the sign-ins tab means" />
-        <div className="divide-y divide-slate-100">
-          {signInFields.map(f => (
-            <div key={f.label} className="grid grid-cols-[110px_1fr] gap-3 px-5 py-2.5">
-              <span className="text-[0.68rem] font-semibold text-slate-800 self-center">{f.label}</span>
-              <p className="text-[0.68rem] text-slate-500">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="User Risk Levels" description="How ITO Endpoint calculates and displays risk" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 py-4">
-          {[
-            { level: 'Low',      color: 'bg-emerald-100 text-emerald-800', desc: 'No risky sign-ins. All devices compliant.' },
-            { level: 'Medium',   color: 'bg-amber-100 text-amber-800',    desc: 'Minor sign-in risk or one warning device.' },
-            { level: 'High',     color: 'bg-orange-100 text-orange-800',  desc: 'Risky sign-in detected or non-compliant device.' },
-            { level: 'Critical', color: 'bg-red-100 text-red-800',        desc: 'High-risk sign-in AND non-compliant device.' },
-          ].map(r => (
-            <div key={r.level} className={`rounded-xl px-3.5 py-3 ${r.color}`}>
-              <p className="text-xs font-bold">{r.level}</p>
-              <p className="text-[0.62rem] mt-1 opacity-80 leading-snug">{r.desc}</p>
-            </div>
-          ))}
+          <p className="mt-1">For a filterable full-fleet view, open <strong>Managed Devices</strong> in the sidebar and toggle between Mac and Intune — each has its own Devices tab with column filtering and sorting.</p>
         </div>
       </DocCard>
     </SectionWrap>
@@ -1431,7 +1351,6 @@ const SECTION_MAP: Record<DocSection, React.ReactNode> = {
   quickstart:      <QuickStartSection />,
   onboarding:      <OnboardingSection />,
   dashboard:       <DashboardSection />,
-  identity:        <IdentitySection />,
   automation:      <AutomationSection />,
   reports:         <ReportsSection />,
   security:        <SecuritySection />,

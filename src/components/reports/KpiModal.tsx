@@ -21,9 +21,11 @@ import {
   FileText, AlertCircle, CheckCircle2, Loader2,
 } from 'lucide-react'
 import type { ApiDevice } from '../../api'
+import { MissingPatchDrawer } from './MissingPatchDrawer'
 import type { KpiId, KpiFilterOpts } from '../../lib/kpiConfig'
-import { KPI_CONFIGS } from '../../lib/kpiConfig'
+import { KPI_CONFIGS, isPatchFilterKpi, initialPatchView } from '../../lib/kpiConfig'
 import { generateKpiExcel } from '../../lib/kpiExport'
+import { CopyText } from '../ui/CopyText'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,7 +55,11 @@ function SortIcon({ col, sortKey, sortDir }: { col: string; sortKey: string; sor
 
 // ── Cell value renderer ───────────────────────────────────────────────────────
 
-function CellValue({ colKey, value }: { colKey: string; value: string }) {
+function CellValue({ colKey, value, deviceName, onPatchClick }: { colKey: string; value: string; deviceName?: string; onPatchClick?: () => void }) {
+  // Identity columns get a hover copy button
+  const copyLabels: Record<string, string> = { deviceName: 'Device name', serialNumber: 'Serial number', user: 'User', primaryUser: 'User', upn: 'User email', userEmail: 'User email' }
+  if (copyLabels[colKey]) return <CopyText value={value} label={copyLabels[colKey]!} />
+
   // Risk Level chip
   if (colKey === 'riskLevel' || colKey === 'severity') {
     const colors: Record<string, string> = {
@@ -111,13 +117,21 @@ function CellValue({ colKey, value }: { colKey: string; value: string }) {
     return <span className="text-emerald-600 font-mono text-xs">{value}</span>
   }
 
-  // Patch status
+  // Patch status — a button when the row can open the missing-patch drawer
   if (colKey === 'patchStatus') {
-    if (value === 'Fully Patched')
-      return <span className="inline-flex rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 px-2 py-0.5 text-[0.62rem] font-bold">{value}</span>
-    if (value === 'Missing Critical')
-      return <span className="inline-flex rounded-full border bg-red-50 text-red-700 border-red-200 px-2 py-0.5 text-[0.62rem] font-bold">{value}</span>
-    return <span className="inline-flex rounded-full border bg-amber-50 text-amber-700 border-amber-200 px-2 py-0.5 text-[0.62rem] font-bold">{value}</span>
+    const tone =
+      value === 'Fully Patched' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : value === 'Missing Critical' ? 'bg-red-50 text-red-700 border-red-200'
+      : value.startsWith('Not reported') ? 'bg-slate-50 text-slate-500 border-slate-200'
+      : 'bg-amber-50 text-amber-700 border-amber-200'
+    const pill = `inline-flex rounded-full border px-2 py-0.5 text-[0.62rem] font-bold ${tone}`
+    if (!onPatchClick) return <span className={pill}>{value}</span>
+    return (
+      <button type="button" onClick={onPatchClick} aria-label={`View missing patches for ${deviceName ?? 'device'}`}
+        className={`${pill} cursor-pointer transition hover:shadow-sm hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400`}>
+        {value}
+      </button>
+    )
   }
 
   return <span className="text-slate-700 text-xs">{value || '—'}</span>
@@ -138,6 +152,8 @@ export function KpiModal({
   const [page,        setPage]        = useState(1)
   const [exportState, setExportState] = useState<ExportState>('idle')
   const [showCols,    setShowCols]    = useState(false)
+  const [patchDevice, setPatchDevice] = useState<ApiDevice | null>(null)
+  const [filterCleared, setFilterCleared] = useState(false)
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     new Set(config.columns.filter(c => c.visible).map(c => c.key))
   )
@@ -156,14 +172,15 @@ export function KpiModal({
 
   // ── Filtered device list for this KPI ─────────────────────────────────────
   const kpiDevices = useMemo(
-    () => config.filterFn(allDevices, opts),
-    [config, allDevices, opts]
+    () => (filterCleared ? allDevices : config.filterFn(allDevices, opts)),
+    [config, allDevices, opts, filterCleared]
   )
 
   const kpiValue = useMemo(
     () => config.getValue(allDevices, opts),
     [config, allDevices, opts]
   )
+  const unavailableReason = config.getUnavailableReason?.(allDevices) ?? config.unavailableReason
 
   // ── Search + sort ──────────────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
@@ -291,6 +308,15 @@ export function KpiModal({
           <span><strong className="text-slate-500">Filters:</strong> {appliedFilters || 'All Devices'}</span>
           <span><strong className="text-slate-500">Generated:</strong> {generatedAt}</span>
           <span><strong className="text-slate-500">Records:</strong> {kpiDevices.length.toLocaleString()} devices</span>
+          {isPatchFilterKpi(kpiId) && !filterCleared && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-orange-700">
+              <strong>Active filter:</strong> {config.title}
+              <button type="button" onClick={() => { setFilterCleared(true); setPage(1) }}
+                className="font-bold underline hover:text-orange-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
+                Clear filter
+              </button>
+            </span>
+          )}
         </div>
 
         {/* ── Controls bar ── */}
@@ -373,6 +399,14 @@ export function KpiModal({
               <Loader2 className="h-8 w-8 animate-spin mb-3" style={{ color: config.accentColor }} />
               <p className="text-sm text-slate-500">Loading device data…</p>
             </div>
+          ) : unavailableReason ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl mb-4 bg-amber-50 border border-amber-200">
+                <AlertCircle className="h-7 w-7 text-amber-600" />
+              </div>
+              <p className="text-sm font-bold text-slate-700 mb-1">Data not available</p>
+              <p className="text-xs text-slate-500 max-w-lg leading-relaxed">{unavailableReason}</p>
+            </div>
           ) : kpiDevices.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="grid h-14 w-14 place-items-center rounded-2xl mb-4"
@@ -422,7 +456,9 @@ export function KpiModal({
                     {displayCols.map(col => (
                       <td key={col.key} className="px-3 py-2.5 max-w-[200px] truncate"
                         style={{ borderBottom: '1px solid rgba(148,163,184,0.10)' }}>
-                        <CellValue colKey={col.key} value={getCellDisplay(device, col.key)} />
+                        <CellValue colKey={col.key} value={getCellDisplay(device, col.key)}
+                          deviceName={device.deviceName}
+                          onPatchClick={col.key === 'patchStatus' ? () => setPatchDevice(device) : undefined} />
                       </td>
                     ))}
                   </tr>
@@ -462,5 +498,12 @@ export function KpiModal({
     </div>
   )
 
-  return createPortal(modal, document.body)
+  return (
+    <>
+      {createPortal(modal, document.body)}
+      {patchDevice && (
+        <MissingPatchDrawer device={patchDevice} initialView={initialPatchView(kpiId)} onClose={() => setPatchDevice(null)} />
+      )}
+    </>
+  )
 }

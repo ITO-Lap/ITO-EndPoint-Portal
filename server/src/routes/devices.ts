@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies } from '../services/intune.js'
-import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies } from '../services/manageEngine.js'
+import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies, getManageEngineDeviceProfileResults, getManageEngineDeviceProfileResultsForDevices } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
 import type { Device, DashboardStats } from '../types.js'
 
@@ -38,43 +38,69 @@ function categorizeIssue(primaryIssue: string): string | null {
 // (apps/policies/detail) re-fetches the entire fleet (5000+ Intune devices)
 // from Graph just to find one record, which took ~100s in practice.
 const CACHE_TTL_MS = 5 * 60 * 1000
+const SOURCE_FETCH_TIMEOUT_MS = 30_000
 let devicesCache: { devices: Device[]; mock: boolean; expiresAt: number } | null = null
+let devicesFetchInFlight: Promise<{ devices: Device[]; mock: boolean }> | null = null
+
+async function fetchWithDeadline<T>(source: string, fetcher: () => Promise<T>): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      fetcher(),
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${source} device request timed out after ${SOURCE_FETCH_TIMEOUT_MS / 1000}s`)), SOURCE_FETCH_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
 
 export async function fetchAllDevices(): Promise<{ devices: Device[]; mock: boolean }> {
   if (devicesCache && Date.now() < devicesCache.expiresAt) {
     return { devices: devicesCache.devices, mock: devicesCache.mock }
   }
+  if (devicesFetchInFlight) return devicesFetchInFlight
 
   const anyConfigured = isIntuneConfigured() || isManageEngineConfigured()
   if (!anyConfigured) return { devices: [], mock: false }
 
-  const [intuneResult, meResult] = await Promise.allSettled([
-    isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await getIntuneDevices();       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
-    isManageEngineConfigured() ? (async () => { const t0 = Date.now(); const d = await getManageEngineDevices(); recordFetchResult('manageengine', { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })() : Promise.resolve([]),
-  ])
+  const fetchPromise = (async () => {
+    const [intuneResult, meResult] = await Promise.allSettled([
+      isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await fetchWithDeadline('Intune', getIntuneDevices);       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
+      isManageEngineConfigured() ? (async () => { const t0 = Date.now(); const d = await fetchWithDeadline('ManageEngine', getManageEngineDevices); recordFetchResult('manageengine', { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })() : Promise.resolve([]),
+    ])
 
-  const devices: Device[] = []
-  const sources = [
-    { result: intuneResult,  key: 'intune'        },
-    { result: meResult,      key: 'manageengine'  },
-  ] as const
+    const devices: Device[] = []
+    const sources = [
+      { result: intuneResult,  key: 'intune'        },
+      { result: meResult,      key: 'manageengine'  },
+    ] as const
 
-  for (const { result, key } of sources) {
-    if (result.status === 'fulfilled') {
-      devices.push(...result.value)
-    } else {
-      console.error(`[fetchAllDevices] ${key} error:`, result.reason)
-      recordFetchResult(key, {
-        deviceCount: 0,
-        lastFetchAt: Date.now(),
-        latencyMs:   0,
-        error:       result.reason instanceof Error ? result.reason.message : 'Unknown error',
-      })
+    for (const { result, key } of sources) {
+      if (result.status === 'fulfilled') {
+        devices.push(...result.value)
+      } else {
+        console.error(`[fetchAllDevices] ${key} error:`, result.reason)
+        recordFetchResult(key, {
+          deviceCount: 0,
+          lastFetchAt: Date.now(),
+          latencyMs:   0,
+          error:       result.reason instanceof Error ? result.reason.message : 'Unknown error',
+        })
+      }
     }
-  }
 
-  devicesCache = { devices, mock: false, expiresAt: Date.now() + CACHE_TTL_MS }
-  return { devices, mock: false }
+    devicesCache = { devices, mock: false, expiresAt: Date.now() + CACHE_TTL_MS }
+    return { devices, mock: false }
+  })()
+
+  devicesFetchInFlight = fetchPromise
+  try {
+    return await fetchPromise
+  } finally {
+    if (devicesFetchInFlight === fetchPromise) devicesFetchInFlight = null
+  }
 }
 
 // GET /api/devices
@@ -195,6 +221,45 @@ router.get('/:id/policies', asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data: [] })
+}))
+
+// GET /api/devices/manageengine/profile-results — bounded fleet profile-status fetch.
+router.get('/manageengine/profile-results', asyncHandler(async (_req, res) => {
+  if (!isManageEngineConfigured()) {
+    res.json({ success: true, data: { results: [], deviceCount: 0, unavailableCount: 0 } })
+    return
+  }
+
+  const { devices } = await fetchAllDevices()
+  const macDeviceIds = devices
+    .filter(device => device.managementSource === 'ManageEngine' && device.platform === 'macOS')
+    .map(device => device.id)
+  const results = await getManageEngineDeviceProfileResultsForDevices(macDeviceIds)
+
+  res.json({
+    success: true,
+    data: {
+      results,
+      deviceCount: results.length,
+      unavailableCount: results.filter(result => result.unavailable).length,
+    },
+  })
+}))
+
+// GET /api/devices/:id/profile-results — raw ManageEngine profile association results.
+router.get('/:id/profile-results', asyncHandler(async (req, res) => {
+  const deviceId = Array.isArray(req.params['id']) ? req.params['id'][0] : req.params['id']
+  if (!deviceId) { res.json({ success: true, data: [] }); return }
+
+  const { devices } = await fetchAllDevices()
+  const device = devices.find(d => d.id === deviceId)
+  if (!device || device.managementSource !== 'ManageEngine' || !isManageEngineConfigured()) {
+    res.json({ success: true, data: [] })
+    return
+  }
+
+  const profiles = await getManageEngineDeviceProfileResults(deviceId)
+  res.json({ success: true, data: profiles })
 }))
 
 // GET /api/devices/:id

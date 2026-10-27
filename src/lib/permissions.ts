@@ -6,20 +6,17 @@ const PAGE_ROLES: Record<string, UserToolRole[]> = {
   'Dashboard':           ['Global Admin', 'IT Admin', 'Helpdesk'],
 
   // Endpoint Management
-  'Mac Devices':             ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Intune Devices':          ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'Managed Devices':         ['Global Admin', 'IT Admin', 'Helpdesk'],
   'ManageEngine App Inventory': ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'Stale Devices':          ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'App Guardian':           ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Mac Fleet Reports':       ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Entra Intelligence':      ['Global Admin', 'IT Admin', 'Helpdesk'],
 
   // Security & Compliance
   'Security Posture':    ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Role Activity Audit': ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'Security Policies':   ['Global Admin', 'IT Admin', 'Helpdesk'],
-
-  // Users & Identity
-  'Users':               ['Global Admin', 'IT Admin', 'Helpdesk'],
-  'User Intelligence':   ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'Patch Operations':   ['Global Admin', 'IT Admin', 'Helpdesk'],
 
   // Automation — IT Admin+ only
   'Automation':          ['Global Admin', 'IT Admin'],

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../api'
+import { SortableHeader } from '../ui/SortableHeader'
 import type { ReportMeta, ReportResult, ReportColumn, ReportSummaryCard, IntegrationStatusItem } from '../../api'
 
 // ── Source tab config ──────────────────────────────────────────────────────────
@@ -260,7 +261,7 @@ function SourceTabs({
         return (
           <button key={tab.key} onClick={() => onChange(tab.key)}
             className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all flex-shrink-0 ${
-              isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              isActive ? 'is-selected' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
             <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -269,7 +270,7 @@ function SourceTabs({
             <span>{tab.label}</span>
             {tab.badge && (
               <span className={`rounded px-1 py-px text-[10px] font-bold tracking-wide ${
-                isActive ? 'bg-orange-400/30 text-orange-100' : 'bg-orange-100 text-orange-600'
+                isActive ? 'bg-sky-200/60 text-sky-800' : 'bg-orange-100 text-orange-600'
               }`}>{tab.badge}</span>
             )}
             {status && (
@@ -313,16 +314,8 @@ function ResultTable({ result, onSort, sortBy, sortDir }: {
         <thead className="bg-slate-50">
           <tr>
             {result.columns.map(col => (
-              <th key={col.key} onClick={() => onSort(col.key)}
-                className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer select-none hover:text-slate-800 transition-colors ${col.align === 'right' ? 'text-right' : 'text-left'} ${col.width ? widthClass[col.width] : ''}`}
-              >
-                <span className="inline-flex items-center gap-1">
-                  {col.label}
-                  {sortBy === col.key
-                    ? <span className="text-slate-800">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    : <span className="opacity-20">↕</span>}
-                </span>
-              </th>
+              <SortableHeader key={col.key} label={col.label} sortKey={col.key} activeSortKey={sortBy ?? null} direction={sortDir} onSort={onSort}
+                className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500 ${col.align === 'right' ? 'text-right' : 'text-left'} ${col.width ? widthClass[col.width] : ''}`} />
             ))}
           </tr>
         </thead>

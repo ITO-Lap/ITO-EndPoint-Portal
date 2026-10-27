@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MonitorSmartphone } from 'lucide-react'
 import { api } from '../../api'
 import { StatCard } from './StatCard'
@@ -15,6 +15,13 @@ import { useDashboardState } from '../../hooks/useDashboardState'
 import { getComplianceRowsForDevice } from '../../data/dashboardData'
 import type { StatCardData, RunbookData, ComplianceSegment, IssueCategory, DeviceData, ComplianceDetailRow } from '../../types'
 import { RunbookModal } from '../runbooks/RunbookModal'
+import { ActionCenter } from './ActionCenter'
+import { QuickSlackSchedules } from './QuickSlackSchedules'
+import { PatchPriorityPanel } from './PatchPriorityPanel'
+import { ApplicationUpdatesPanel } from './ApplicationUpdatesPanel'
+import { SecurityWatchRow } from './SecurityWatchRow'
+import { OperationalQueueTable } from './OperationalQueueTable'
+import { setNotificationScheduleActor } from '../../api/notificationSchedule'
 
 function NoDeviceCard() {
   return (
@@ -40,6 +47,8 @@ interface DashboardContentProps {
   lastUpdated?:         Date | null
   onRefresh?:           () => void
   onNavigate?:          (page: string) => void
+  viewerRole?:          string
+  userEmail?:           string
 }
 
 export function DashboardContent({
@@ -56,8 +65,12 @@ export function DashboardContent({
   lastUpdated = null,
   onRefresh,
   onNavigate,
+  viewerRole = 'Global Admin',
+  userEmail,
 }: DashboardContentProps) {
   const { notify } = useToast()
+
+  useEffect(() => { setNotificationScheduleActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
   const [syncLoading, setSyncLoading] = useState(false)
   const [selectedDonutLabel, setSelectedDonutLabel] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -107,10 +120,13 @@ export function DashboardContent({
       return
     }
     const pageMap: Record<string, string> = {
-      'Mac Devices':        'Mac Devices',
+      'Mac Devices':        'Managed Devices',
     }
     const page = pageMap[cardTitle]
     if (page && onStatCardNavigate) {
+      if (cardTitle === 'Mac Devices') {
+        try { window.localStorage.setItem('managedDevicesView', JSON.stringify('mac')) } catch { /* ignore */ }
+      }
       onStatCardNavigate(page)
     }
   }
@@ -139,6 +155,19 @@ export function DashboardContent({
           onRefresh={onRefresh ?? (() => {})}
           onNavigate={onNavigate}
         />
+
+        {/* Endpoint Command Center — Action Center, quick widgets, security watch, operational queue */}
+        <ActionCenter onNavigate={onNavigate} />
+
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-3 w-full">
+          <QuickSlackSchedules canEdit={viewerRole === 'Global Admin'} onViewAll={() => onNavigate?.('Scheduled Reports')} />
+          <PatchPriorityPanel onViewAll={() => onNavigate?.('Patch Operations')} />
+          <ApplicationUpdatesPanel onViewAll={() => onNavigate?.('App Guardian')} />
+        </div>
+
+        <SecurityWatchRow onNavigate={onNavigate} />
+
+        <OperationalQueueTable onViewDevice={onDeviceChange} />
 
         <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 xl:grid-cols-7 w-full">
           {statCards.map((card) => (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Sparkles, X, Send, Loader2, AlertTriangle, WifiOff, RefreshCw, Minus, History, GripVertical,
+  Waves, X, Send, Loader2, AlertTriangle, WifiOff, RefreshCw, Minus, History, GripVertical,
 } from 'lucide-react'
 import {
   sendCopilotMessage, confirmCopilotAction, rejectCopilotAction,
@@ -310,18 +310,19 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
       <button
         type="button"
         onClick={() => setPanelOpen((p: boolean) => !p)}
-        aria-label={panelOpen ? 'Close Copilot panel' : 'Open Endpoint Operations Copilot'}
+        aria-label={panelOpen ? 'Close Ocean panel' : 'Open Ocean assistant'}
         aria-pressed={panelOpen}
-        className="fixed bottom-5 right-5 z-50 grid h-[3.25rem] w-[3.25rem] place-items-center rounded-full bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-900/20 transition hover:scale-105 hover:shadow-xl active:scale-95"
+        data-selected-skip
+        className="fixed bottom-5 right-5 z-50 grid h-[3.25rem] w-[3.25rem] place-items-center rounded-full bg-gradient-to-br from-blue-600 via-sky-500 to-cyan-400 text-white shadow-lg shadow-blue-900/25 transition hover:scale-105 hover:shadow-xl active:scale-95"
       >
-        {panelOpen ? <X className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
+        {panelOpen ? <X className="h-5 w-5" /> : <Waves className="h-5 w-5" />}
       </button>
 
       {/* Compact floating panel — anchored above the button, never a full-height edge drawer, no backdrop */}
       {panelOpen && (
         <div
           role="dialog"
-          aria-label="Endpoint Operations Copilot"
+          aria-label="Ocean assistant"
           className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl transition-[height,width] duration-150"
           style={{
             right: BUTTON_MARGIN,
@@ -335,7 +336,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
             <div
               onPointerDown={handleResizeStart}
               role="separator"
-              aria-label="Resize Copilot panel"
+              aria-label="Resize Ocean panel"
               className="absolute left-0 top-0 z-10 flex h-4 w-4 cursor-nwse-resize items-center justify-center text-slate-300 hover:text-slate-400"
             >
               <GripVertical className="h-3 w-3 rotate-45" />
@@ -346,20 +347,20 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
           <div className="relative flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
             <div
               className="absolute top-0 left-0 right-0 h-[2px]"
-              style={{ background: 'linear-gradient(90deg, transparent, #F46C00 20%, #0EA5E9 80%, transparent)' }}
+              style={{ background: 'linear-gradient(90deg, transparent, #1D4ED8 20%, #22D3EE 80%, transparent)' }}
             />
             <button
               type="button"
               onClick={() => setMinimized((m: boolean) => !m)}
-              aria-label={minimized ? 'Expand Copilot panel' : 'Minimize Copilot panel'}
+              aria-label={minimized ? 'Expand Ocean panel' : 'Minimize Ocean panel'}
               className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
             >
-              <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-sm">
-                <Sparkles className="h-4 w-4 text-white" />
+              <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-700 via-sky-500 to-cyan-400 shadow-sm shadow-blue-900/20">
+                <Waves className="h-4 w-4 text-white" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-slate-800">Endpoint Operations Copilot</p>
-                <p className="truncate text-[0.68rem] text-slate-400">AI assistant · {viewerRole}</p>
+                <p className="truncate text-sm font-bold text-slate-800">Ocean</p>
+                <p className="truncate text-[0.68rem] text-sky-600">Endpoint operations assistant · {viewerRole}</p>
               </div>
             </button>
             <div className="flex flex-shrink-0 items-center gap-1">
@@ -368,14 +369,14 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
                 onClick={() => setShowHistory(h => !h)}
                 aria-label="Toggle conversation history"
                 aria-pressed={showHistory}
-                className={`grid h-7 w-7 place-items-center rounded-lg transition ${showHistory ? 'bg-orange-100 text-orange-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+                className={`grid h-7 w-7 place-items-center rounded-lg transition ${showHistory ? 'is-selected' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
               >
                 <History className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => setMinimized((m: boolean) => !m)}
-                aria-label={minimized ? 'Expand Copilot panel' : 'Minimize Copilot panel'}
+                aria-label={minimized ? 'Expand Ocean panel' : 'Minimize Ocean panel'}
                 className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
               >
                 <Minus className="h-3.5 w-3.5" />
@@ -383,7 +384,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
               <button
                 type="button"
                 onClick={() => setPanelOpen(false)}
-                aria-label="Close Copilot"
+                aria-label="Close Ocean"
                 className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
               >
                 <X className="h-3.5 w-3.5" />
@@ -408,10 +409,10 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
               <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                 {messages.length === 0 && !unavailable && !sendError && (
                   <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                    <Sparkles className="h-7 w-7 text-orange-300" />
+                    <Waves className="h-7 w-7 text-sky-400" />
                     <p className="text-sm font-semibold text-slate-500">Ask about device compliance, users, or policies</p>
                     <p className="max-w-[15rem] text-xs text-slate-400">
-                      The Copilot can look up real Intune, Entra, and ManageEngine data, and — with your confirmation — create Jira tickets, trigger automation tests, or send a Teams alert.
+                      Ocean can look up real Intune, Entra, and ManageEngine data, and — with your confirmation — create Jira tickets, trigger automation tests, or send a Teams alert.
                     </p>
                   </div>
                 )}
@@ -434,7 +435,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
                 {sending && (
                   <div className="flex items-center gap-2 px-1 text-xs text-slate-400">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Copilot is thinking…
+                    Ocean is thinking…
                   </div>
                 )}
 
@@ -442,7 +443,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
                   <div className="rounded-xl border border-slate-300 bg-slate-100 px-3.5 py-3">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                       <WifiOff className="h-3.5 w-3.5 flex-shrink-0" />
-                      Copilot unavailable
+                      Ocean unavailable
                     </div>
                     <p className="mt-1.5 text-xs text-slate-500">
                       {unavailableMessage ?? 'The AI assistant is not configured on the server. Contact your Global Admin.'}
@@ -478,7 +479,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
                       type="button"
                       onClick={() => handleQuickAction(qa)}
                       disabled={sending}
-                      className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[0.68rem] font-medium text-orange-700 transition hover:bg-orange-100 disabled:opacity-50"
+                      className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[0.68rem] font-medium text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
                     >
                       {qa.label}
                     </button>
@@ -495,16 +496,16 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
                     onKeyDown={handleKeyDown}
                     disabled={sending}
                     rows={1}
-                    placeholder="Ask the Copilot…"
-                    aria-label="Message the Endpoint Operations Copilot"
-                    className="max-h-24 min-h-[2.25rem] flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 disabled:opacity-60"
+                    placeholder="Ask Ocean…"
+                    aria-label="Message Ocean"
+                    className="max-h-24 min-h-[2.25rem] flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300 disabled:opacity-60"
                   />
                   <button
                     type="button"
                     onClick={handleSend}
                     disabled={sending || !input.trim()}
                     aria-label="Send message"
-                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-orange-600 text-white transition hover:bg-orange-700 disabled:opacity-50"
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700 disabled:opacity-50"
                   >
                     {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </button>

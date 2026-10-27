@@ -45,7 +45,7 @@ export function CopilotConversationList({ conversations, activeId, loading, erro
               type="button"
               onClick={() => onSelect(c.id)}
               className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
-                c.id === activeId ? 'bg-orange-100 text-orange-800 font-semibold' : 'text-slate-600 hover:bg-slate-100'
+                c.id === activeId ? 'is-selected font-semibold' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <MessageSquare className="h-3.5 w-3.5 flex-shrink-0" />

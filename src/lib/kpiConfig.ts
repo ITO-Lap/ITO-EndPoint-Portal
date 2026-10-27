@@ -9,7 +9,8 @@
  *   - getRecommendedAction / getRiskLevel: used in the Recommendations sheet
  */
 
-import type { ApiDevice } from '../api'
+import type { ApiDevice, PatchSystemStatus } from '../api'
+import { POSTURE_LABEL, POSTURE_TITLE, fleetPostureAverage, postureBreakdownText } from './macPostureScore'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ export type KpiId =
   | 'requiring-action'
   | 'compliance-score'
   | 'fleet-risk-score'
+  | 'device-security-posture'
   // Patch Health (4)
   | 'fully-patched'
   | 'missing-critical-patches'
@@ -57,7 +59,13 @@ export interface KpiConfig {
   title: string
   description: string
   accentColor: string   // CSS color string
-  isInfoCard?: boolean  // no drill-down (e.g. "Latest macOS Version")
+  isInfoCard?: boolean
+  /** Short qualifier shown under the card value (e.g. to mark a project-calculated metric). */
+  caption?: string
+  unavailableReason?: string
+  getUnavailableReason?: (devices: ApiDevice[]) => string | undefined
+  getCountSize?: (devices: ApiDevice[]) => number
+  getPopulationSize?: (devices: ApiDevice[]) => number
   filterFn: (devices: ApiDevice[], opts?: KpiFilterOpts) => ApiDevice[]
   getValue: (devices: ApiDevice[], opts?: KpiFilterOpts) => string | number
   columns: KpiColumn[]
@@ -71,39 +79,6 @@ export interface KpiFilterOpts {
 }
 
 // ── macOS Version Helpers ─────────────────────────────────────────────────────
-
-export const CURRENT_MACOS = { major: 15, version: '15.5', name: 'Tahoe' }
-
-// Major versions that are fully EOL (Apple ended security updates)
-const EOL_MAJOR_VERSIONS = new Set([10, 11])
-
-// Major versions EOL within 90 days (near EOL) — update quarterly
-const NEAR_EOL_MAJOR_VERSIONS = new Set([12]) // Monterey
-
-function parseMajorVersion(osVersion: string): number {
-  const m = (osVersion ?? '').match(/^(\d+)/)
-  return m ? parseInt(m[1]) : 0
-}
-
-function parseOsVersion(osVersion: string): number[] {
-  return (osVersion ?? '').split('.').map(Number)
-}
-
-function compareVersions(a: string, b: string): number {
-  const pa = parseOsVersion(a)
-  const pb = parseOsVersion(b)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
-    if (diff !== 0) return diff
-  }
-  return 0
-}
-
-function versionsBehind(osVersion: string): number {
-  const major = parseMajorVersion(osVersion)
-  if (major === 0) return 99
-  return Math.max(0, CURRENT_MACOS.major - major)
-}
 
 // ── Last Check-In Helpers ─────────────────────────────────────────────────────
 
@@ -131,69 +106,33 @@ function daysSinceCheckIn(lastCheckIn: string): number {
   return Math.floor((Date.now() - d.getTime()) / 86_400_000)
 }
 
-function isStale(device: ApiDevice, thresholdDays = 30): boolean {
-  const days = daysSinceCheckIn(device.lastCheckIn)
-  return days > 7 && days <= thresholdDays
-}
-
-function isInactive(device: ApiDevice): boolean {
-  return daysSinceCheckIn(device.lastCheckIn) > 30 && daysSinceCheckIn(device.lastCheckIn) <= 90
-}
-
 function isActive(device: ApiDevice): boolean {
-  return daysSinceCheckIn(device.lastCheckIn) <= 7
+  const days = daysSinceCheckIn(device.lastCheckIn)
+  return days !== 999 && days <= 7
 }
 
-// ── Patch Helpers (derived from available fields) ────────────────────────────
-
-function hasMissingCriticalPatch(device: ApiDevice): boolean {
-  return device.severity === 'Critical' ||
-    device.complianceState === 'Non-Compliant' &&
-    (device.primaryIssue?.toLowerCase().includes('patch') ||
-     device.primaryIssue?.toLowerCase().includes('update') ||
-     device.primaryIssue?.toLowerCase().includes('cve') ||
-     device.policyFailed?.toLowerCase().includes('patch') ||
-     device.policyFailed?.toLowerCase().includes('update'))
+function hasReportedOsVersion(device: ApiDevice): boolean {
+  return /^\d+(?:\.\d+)+$/.test(device.osVersion ?? '')
 }
 
-function hasMissingSecurityUpdate(device: ApiDevice): boolean {
-  return (device.severity === 'High' || device.severity === 'Critical') &&
-    device.complianceState !== 'Compliant'
+function hasNativeCompliance(device: ApiDevice): boolean {
+  return device.managementSource === 'Microsoft Intune'
 }
 
-function hasMissingAppUpdate(device: ApiDevice): boolean {
-  return device.severity === 'Medium' && device.complianceState !== 'Compliant'
-}
-
-function isFullyPatched(device: ApiDevice): boolean {
-  return device.complianceState === 'Compliant' &&
-    device.severity === 'Low' &&
-    !device.primaryIssue
-}
-
-// ── EOL Helpers ───────────────────────────────────────────────────────────────
-
-function isEol(device: ApiDevice): boolean {
-  const major = parseMajorVersion(device.osVersion)
-  return EOL_MAJOR_VERSIONS.has(major)
-}
-
-function isNearEol(device: ApiDevice): boolean {
-  const major = parseMajorVersion(device.osVersion)
-  return NEAR_EOL_MAJOR_VERSIONS.has(major) && !EOL_MAJOR_VERSIONS.has(major)
+function complianceUnavailableReason(devices: ApiDevice[]): string | undefined {
+  return devices.some(hasNativeCompliance)
+    ? undefined
+    : 'No devices with native compliance data are in this fleet. ManageEngine Endpoint Central does not expose an overall device-compliance verdict through the documented API.'
 }
 
 // ── Compliance / Health Helpers ───────────────────────────────────────────────
 
 function isHealthy(device: ApiDevice): boolean {
-  return device.complianceState === 'Compliant' &&
-    !isEol(device) &&
-    !isInactive(device) &&
-    versionsBehind(device.osVersion) <= 1
+  return hasNativeCompliance(device) && device.complianceState === 'Compliant' && isActive(device)
 }
 
 function requiresAction(device: ApiDevice): boolean {
-  return !isHealthy(device)
+  return hasNativeCompliance(device) && device.complianceState !== 'Compliant'
 }
 
 // ── Display Helpers ───────────────────────────────────────────────────────────
@@ -206,20 +145,11 @@ function fmtDaysAgo(lastCheckIn: string): string {
   return `${days} days ago`
 }
 
-function fmtOsStatus(osVersion: string): string {
-  const behind = versionsBehind(osVersion)
-  if (behind === 0) return '✓ Current'
-  if (behind === 1) return '↓ 1 version behind'
-  if (behind === 2) return '↓↓ 2 versions behind'
-  return `↓↓↓ ${behind} versions behind`
-}
-
 function fmtLifecycleStatus(device: ApiDevice): string {
-  if (isEol(device))      return 'EOL'
-  if (isNearEol(device))  return 'Near EOL'
   const days = daysSinceCheckIn(device.lastCheckIn)
-  if (days > 90)  return 'Inactive'
-  if (days > 30)  return 'Stale'
+  if (days === 999) return 'Unknown'
+  if (days > 30) return 'Inactive'
+  if (days > 7) return 'Stale'
   return 'Active'
 }
 
@@ -233,16 +163,62 @@ const BASE_COLS: KpiColumn[] = [
   { key: 'managementSource',label: 'MDM Source',      visible: false, sortable: true },
 ]
 
+// ── Patch Manager helpers ─────────────────────────────────────────────────────
+// Patch data comes from Endpoint Central Patch Manager, which only knows devices
+// that run its agent. Devices without a match are "not reported", never "patched".
+
+/** Attach Patch Manager rows to MDM devices by serial number (found in the patch system's names). */
+export function attachPatchStatus(devices: ApiDevice[], systems: PatchSystemStatus[]): ApiDevice[] {
+  const haystacks = systems.map(sys => ({ sys, text: sys.names.join(' ').toUpperCase() }))
+  return devices.map(d => {
+    const serial = d.serialNumber?.trim().toUpperCase()
+    if (!serial || serial.length < 6) return d
+    const hit = haystacks.find(h => h.text.includes(serial))
+    return hit ? { ...d, patchStatus: hit.sys } : d
+  })
+}
+
+/** Patch Health cards that filter the device table and open per-device patch details. */
+export const PATCH_FILTER_KPIS: readonly KpiId[] = ['missing-critical-patches', 'missing-security-updates', 'missing-app-updates']
+export const isPatchFilterKpi = (id: KpiId): boolean => PATCH_FILTER_KPIS.includes(id)
+/** Drawer opens on Critical only when the admin came from the Missing Critical card. */
+export const initialPatchView = (id: KpiId): 'critical' | 'all' => (id === 'missing-critical-patches' ? 'critical' : 'all')
+
+const hasPatchData = (d: ApiDevice): boolean => !!d.patchStatus?.scanSucceeded
+const missingCritical = (d: ApiDevice): boolean => hasPatchData(d) && d.patchStatus!.criticalPatchCount > 0
+const missingOsUpdates = (d: ApiDevice): boolean => hasPatchData(d) && d.patchStatus!.missingOsPatches > 0
+const missingAppUpdates = (d: ApiDevice): boolean => hasPatchData(d) && d.patchStatus!.missingThirdPartyPatches > 0
+const fullyPatched = (d: ApiDevice): boolean => {
+  if (!hasPatchData(d)) return false
+  const p = d.patchStatus!
+  return p.missingOsPatches + p.missingThirdPartyPatches + p.missingDriverPatches + p.missingBiosPatches === 0
+}
+
+const PATCH_UNAVAILABLE =
+  'No device in this fleet reports Patch Manager data. Patch status comes from Endpoint Central Patch Manager and only covers devices running its agent; the Patch API client also needs the DesktopCentralCloud.PatchMgmt.READ scope.'
+const patchUnavailableReason = (devices: ApiDevice[]): string | undefined =>
+  devices.some(hasPatchData) ? undefined : PATCH_UNAVAILABLE
+
+export function patchStatusLabel(d: ApiDevice): string {
+  const p = d.patchStatus
+  if (!p?.scanSucceeded) return 'Not reported (no Patch Manager agent)'
+  const parts = [
+    p.missingOsPatches && `${p.missingOsPatches} OS`,
+    p.missingThirdPartyPatches && `${p.missingThirdPartyPatches} app`,
+    p.missingDriverPatches && `${p.missingDriverPatches} driver`,
+    p.missingBiosPatches && `${p.missingBiosPatches} BIOS`,
+  ].filter(Boolean)
+  return parts.length ? `Missing ${parts.join(', ')}` : 'Fully Patched'
+}
+
 const PATCH_COLS: KpiColumn[] = [
   ...BASE_COLS,
   { key: 'osVersion',       label: 'macOS Version',   visible: true,  sortable: true },
-  { key: 'complianceState', label: 'Compliance',      visible: true,  sortable: true },
-  { key: 'severity',        label: 'Severity',        visible: true,  sortable: true },
-  { key: 'primaryIssue',    label: 'Primary Issue',   visible: true,  sortable: true },
+  { key: 'encryptionStatus',label: 'Encryption Status',visible: true,  sortable: true },
   { key: 'lastCheckIn',     label: 'Last Check-In',   visible: true,  sortable: true,
     render: d => fmtDaysAgo(d.lastCheckIn) },
   { key: 'patchStatus',     label: 'Patch Status',    visible: true,  sortable: true,
-    render: d => isFullyPatched(d) ? 'Fully Patched' : hasMissingCriticalPatch(d) ? 'Missing Critical' : 'Missing Updates' },
+    render: patchStatusLabel },
   { key: 'riskLevel',       label: 'Risk Level',      visible: true,  sortable: true,
     render: d => d.severity },
   { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
@@ -257,7 +233,7 @@ const LIFECYCLE_COLS: KpiColumn[] = [
     render: d => { const n = daysSinceCheckIn(d.lastCheckIn); return n === 999 ? 'Unknown' : String(n) } },
   { key: 'lifecycleStatus', label: 'Lifecycle Status', visible: true, sortable: true,
     render: d => fmtLifecycleStatus(d) },
-  { key: 'complianceState', label: 'Compliance',       visible: true, sortable: true },
+  { key: 'encryptionStatus',label: 'Encryption Status', visible: true, sortable: true },
   { key: 'riskLevel',       label: 'Risk Level',       visible: true, sortable: true,
     render: d => d.severity },
   { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
@@ -265,33 +241,37 @@ const LIFECYCLE_COLS: KpiColumn[] = [
 
 const OS_COLS: KpiColumn[] = [
   ...BASE_COLS,
-  { key: 'osVersion',       label: 'Current macOS',     visible: true,  sortable: true },
-  { key: 'latestVersion',   label: 'Latest Available',  visible: true,  sortable: false,
-    render: () => CURRENT_MACOS.version },
-  { key: 'versionsBehind',  label: 'Versions Behind',   visible: true,  sortable: true,
-    render: d => String(versionsBehind(d.osVersion)) },
-  { key: 'osStatus',        label: 'OS Status',         visible: true,  sortable: true,
-    render: d => fmtOsStatus(d.osVersion) },
-  { key: 'upgradeEligible', label: 'Upgrade Eligible',  visible: true,  sortable: false,
-    render: d => isEol(d) ? 'Hardware Limit' : 'Eligible' },
-  { key: 'complianceState', label: 'Compliance',        visible: true,  sortable: true },
+  { key: 'osVersion',       label: 'Reported macOS Version', visible: true, sortable: true },
   { key: 'lastCheckIn',     label: 'Last Check-In',     visible: true,  sortable: true,
     render: d => fmtDaysAgo(d.lastCheckIn) },
   { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
 ]
 
+const POSTURE_COLS: KpiColumn[] = [
+  ...BASE_COLS,
+  { key: 'postureScore',    label: 'Posture Score (project-calculated)', visible: true, sortable: true,
+    render: d => (d.posture?.score ?? 'N/A').toString() },
+  { key: 'postureBand',     label: 'Posture Band',    visible: true,  sortable: true,
+    render: d => d.posture?.band ?? 'Not calculated' },
+  { key: 'postureCoverage', label: 'Signals Assessed', visible: true, sortable: true,
+    render: d => (d.posture ? `${Math.round(d.posture.coverage * 100)}%` : 'N/A') },
+  { key: 'postureBreakdown',label: 'Score Breakdown', visible: true,  sortable: false,
+    render: d => postureBreakdownText(d.posture) },
+  { key: 'osVersion',       label: 'macOS Version',   visible: false, sortable: true },
+  { key: 'encryptionStatus',label: 'FileVault',       visible: false, sortable: true },
+]
+
 const FLEET_COLS: KpiColumn[] = [
   ...BASE_COLS,
   { key: 'osVersion',       label: 'macOS Version',   visible: true,  sortable: true },
-  { key: 'complianceState', label: 'Compliance',      visible: true,  sortable: true },
+  { key: 'encryptionStatus',label: 'Encryption Status',visible: true,  sortable: true },
   { key: 'severity',        label: 'Severity',        visible: true,  sortable: true },
   { key: 'primaryIssue',    label: 'Primary Issue',   visible: true,  sortable: true },
   { key: 'lastCheckIn',     label: 'Last Check-In',   visible: true,  sortable: true,
     render: d => fmtDaysAgo(d.lastCheckIn) },
   { key: 'lifecycleStatus', label: 'Lifecycle Status', visible: true, sortable: true,
     render: d => fmtLifecycleStatus(d) },
-  { key: 'eolStatus',       label: 'EOL Status',      visible: true,  sortable: true,
-    render: d => isEol(d) ? 'EOL' : isNearEol(d) ? 'Near EOL' : '—' },
+  { key: 'osVersion',       label: 'Reported macOS Version', visible: true, sortable: true },
   { key: 'riskLevel',       label: 'Risk Level',      visible: true,  sortable: true,
     render: d => d.severity },
   { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
@@ -311,22 +291,20 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     filterFn: devices => devices,
     getValue: devices => devices.length,
     columns: FLEET_COLS,
-    getRecommendedAction: d => {
-      if (hasMissingCriticalPatch(d)) return 'Apply critical patches immediately'
-      if (isEol(d)) return 'Schedule device replacement'
-      if (!isActive(d)) return 'Investigate check-in failure'
-      return 'No action required'
-    },
+    getRecommendedAction: d => isActive(d) ? 'No action required' : 'Review last check-in and contact the assigned user',
     getRiskLevel: d => d.severity,
   },
 
   'healthy-devices': {
     id: 'healthy-devices', group: 'Fleet Overview',
     title: 'Healthy Devices',
-    description: 'Devices that are compliant, on a supported macOS version, active, and not EOL.',
+    description: 'Intune-managed devices with native Compliant status and a check-in within the last 7 days.',
     accentColor: '#10B981',
+    getUnavailableReason: complianceUnavailableReason,
     filterFn: devices => devices.filter(d => isHealthy(d)),
-    getValue: devices => devices.filter(d => isHealthy(d)).length,
+    getValue: devices => devices.some(hasNativeCompliance) ? devices.filter(d => isHealthy(d)).length : 'N/A',
+    getCountSize: devices => devices.filter(d => isHealthy(d)).length,
+    getPopulationSize: devices => devices.filter(hasNativeCompliance).length,
     columns: FLEET_COLS,
     getRecommendedAction: () => 'Maintain current patch schedule',
     getRiskLevel: () => 'Low',
@@ -335,31 +313,32 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'requiring-action': {
     id: 'requiring-action', group: 'Fleet Overview',
     title: 'Requiring Action',
-    description: 'Devices with compliance failures, missing patches, outdated OS, or lifecycle issues.',
+    description: 'Intune-managed devices with a native compliance status other than Compliant.',
     accentColor: '#EF4444',
+    getUnavailableReason: complianceUnavailableReason,
     filterFn: devices => devices.filter(d => requiresAction(d)),
-    getValue: devices => devices.filter(d => requiresAction(d)).length,
+    getValue: devices => devices.some(hasNativeCompliance) ? devices.filter(d => requiresAction(d)).length : 'N/A',
+    getCountSize: devices => devices.filter(d => requiresAction(d)).length,
+    getPopulationSize: devices => devices.filter(hasNativeCompliance).length,
     columns: FLEET_COLS,
-    getRecommendedAction: d => {
-      if (hasMissingCriticalPatch(d)) return 'Apply critical patches immediately'
-      if (isEol(d)) return 'Replace device — no security updates available'
-      if (isInactive(d)) return 'Recover device or initiate retirement'
-      if (versionsBehind(d.osVersion) >= 2) return 'Upgrade macOS to latest version'
-      return 'Review compliance policy failures'
-    },
+    getRecommendedAction: () => 'Review the device compliance details in its management source',
     getRiskLevel: d => d.severity,
   },
 
   'compliance-score': {
     id: 'compliance-score', group: 'Fleet Overview',
     title: 'Compliance Score',
-    description: 'Weighted compliance score across patch status, OS currency, device lifecycle, and security controls.',
+    description: 'Native compliance rate from Intune-managed devices only. ManageEngine overall compliance is not available through its documented API.',
     accentColor: '#7C5CFC',
-    filterFn: devices => devices,
+    filterFn: devices => devices.filter(hasNativeCompliance),
+    getCountSize: devices => devices.filter(d => hasNativeCompliance(d) && d.complianceState === 'Compliant').length,
+    getPopulationSize: devices => devices.filter(hasNativeCompliance).length,
+    getUnavailableReason: complianceUnavailableReason,
     getValue: devices => {
-      if (!devices.length) return '—'
-      const compliant = devices.filter(d => d.complianceState === 'Compliant').length
-      return `${((compliant / devices.length) * 100).toFixed(1)}%`
+      const native = devices.filter(hasNativeCompliance)
+      if (!native.length) return 'N/A'
+      const compliant = native.filter(d => d.complianceState === 'Compliant').length
+      return `${((compliant / native.length) * 100).toFixed(1)}%`
     },
     columns: FLEET_COLS,
     getRecommendedAction: d => {
@@ -372,26 +351,41 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
   'fleet-risk-score': {
     id: 'fleet-risk-score', group: 'Fleet Overview',
-    title: 'Fleet Risk Score',
-    description: 'Composite risk metric. Higher score = higher risk. Calculated from EOL devices, missing patches, stale check-ins, and outdated OS.',
+    title: 'Inventory Data Gaps',
+    description: 'Devices with a missing or unknown last check-in or macOS version in the current MDM inventory.',
     accentColor: '#F59E0B',
-    filterFn: devices => devices.filter(d => d.severity === 'Critical' || d.severity === 'High' || isEol(d)),
-    getValue: devices => {
-      if (!devices.length) return 0
-      const eolWeight     = devices.filter(d => isEol(d)).length * 3
-      const critPatch     = devices.filter(d => hasMissingCriticalPatch(d)).length * 2.5
-      const staleDevices  = devices.filter(d => !isActive(d)).length * 1.5
-      const outdatedOs    = devices.filter(d => versionsBehind(d.osVersion) >= 2).length
-      const raw = (eolWeight + critPatch + staleDevices + outdatedOs) / devices.length * 10
-      return Math.min(100, Math.round(raw))
-    },
+    filterFn: devices => devices.filter(d => daysSinceCheckIn(d.lastCheckIn) === 999 || !hasReportedOsVersion(d)),
+    getValue: devices => devices.filter(d => daysSinceCheckIn(d.lastCheckIn) === 999 || !hasReportedOsVersion(d)).length,
     columns: FLEET_COLS,
     getRecommendedAction: d => {
-      if (isEol(d)) return 'Immediate replacement required — no security updates'
-      if (hasMissingCriticalPatch(d)) return 'Apply critical patches within 24h'
-      return 'Review and address compliance issues'
+      if (daysSinceCheckIn(d.lastCheckIn) === 999) return 'Refresh device inventory to obtain the last check-in'
+      return 'Refresh device inventory to obtain the macOS version'
     },
     getRiskLevel: d => d.severity,
+  },
+
+  'device-security-posture': {
+    id: 'device-security-posture', group: 'Fleet Overview',
+    title: POSTURE_TITLE,
+    description: `${POSTURE_LABEL}. Weighted from FileVault (30), passcode (20), macOS version relative to the newest in this fleet (20), recent MDM check-in (15) and assigned profiles applied (15). Signals a source does not report are excluded, not counted as failures.`,
+    caption: 'Project-calculated · not ManageEngine compliance',
+    accentColor: '#0EA5E9',
+    getUnavailableReason: devices => fleetPostureAverage(devices).scored
+      ? undefined
+      : 'Too few posture signals (FileVault, passcode, OS version, MDM check-in, profiles) were reported to calculate a score.',
+    filterFn: devices => devices.filter(d => typeof d.posture?.score === 'number'),
+    getCountSize: devices => devices.filter(d => d.posture?.band === 'Strong').length,
+    getPopulationSize: devices => devices.filter(d => typeof d.posture?.score === 'number').length,
+    getValue: devices => {
+      const { average } = fleetPostureAverage(devices)
+      return average === null ? 'N/A' : `${average} / 100`
+    },
+    columns: POSTURE_COLS,
+    getRecommendedAction: d => {
+      const weakest = d.posture?.signals.filter(s => s.earned !== null && s.earned < 1).sort((a, b) => (a.earned as number) * a.weight - (b.earned as number) * b.weight)[0]
+      return weakest ? `Improve: ${weakest.label} — ${weakest.detail}` : 'No action — all assessed signals are healthy'
+    },
+    getRiskLevel: d => (d.posture?.band === 'At risk' ? 'High' : d.posture?.band === 'Fair' ? 'Medium' : 'Low'),
   },
 
   // ── Patch Health ─────────────────────────────────────────────────────────────
@@ -399,10 +393,12 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'fully-patched': {
     id: 'fully-patched', group: 'Patch Health',
     title: 'Fully Patched Devices',
-    description: 'Devices with no missing patches — compliant with all security, OS, and application update policies.',
+    description: 'Devices whose latest Patch Manager scan shows no missing OS, third-party, driver or BIOS patches. Only devices running the Patch Manager agent are assessed.',
     accentColor: '#10B981',
-    filterFn: devices => devices.filter(d => isFullyPatched(d)),
-    getValue: devices => devices.filter(d => isFullyPatched(d)).length,
+    getUnavailableReason: patchUnavailableReason,
+    filterFn: devices => devices.filter(fullyPatched),
+    getValue: devices => devices.some(hasPatchData) ? devices.filter(fullyPatched).length : 'N/A',
+    getPopulationSize: devices => devices.filter(hasPatchData).length,
     columns: PATCH_COLS,
     getRecommendedAction: () => 'Maintain patch schedule — no action required',
     getRiskLevel: () => 'Low',
@@ -411,10 +407,12 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'missing-critical-patches': {
     id: 'missing-critical-patches', group: 'Patch Health',
     title: 'Missing Critical Patches',
-    description: 'Devices missing one or more critical security patches (CVSS ≥ 9.0 or Apple-rated Critical). These represent active exploit risk.',
+    description: 'Devices with at least one missing patch rated Critical by Patch Manager. Only devices running the Patch Manager agent are assessed.',
     accentColor: '#EF4444',
-    filterFn: devices => devices.filter(d => hasMissingCriticalPatch(d)),
-    getValue: devices => devices.filter(d => hasMissingCriticalPatch(d)).length,
+    getUnavailableReason: patchUnavailableReason,
+    filterFn: devices => devices.filter(missingCritical),
+    getValue: devices => devices.some(hasPatchData) ? devices.filter(missingCritical).length : 'N/A',
+    getPopulationSize: devices => devices.filter(hasPatchData).length,
     columns: PATCH_COLS,
     getRecommendedAction: () => 'Apply critical patches within 24 hours',
     getRiskLevel: () => 'Critical',
@@ -423,10 +421,12 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'missing-security-updates': {
     id: 'missing-security-updates', group: 'Patch Health',
     title: 'Missing Security Updates',
-    description: 'Devices missing security updates (non-critical but important). Should be resolved within 7 days.',
+    description: 'Devices with missing OS patches per Patch Manager. Only devices running the Patch Manager agent are assessed.',
     accentColor: '#F59E0B',
-    filterFn: devices => devices.filter(d => hasMissingSecurityUpdate(d) && !hasMissingCriticalPatch(d)),
-    getValue: devices => devices.filter(d => hasMissingSecurityUpdate(d) && !hasMissingCriticalPatch(d)).length,
+    getUnavailableReason: patchUnavailableReason,
+    filterFn: devices => devices.filter(missingOsUpdates),
+    getValue: devices => devices.some(hasPatchData) ? devices.filter(missingOsUpdates).length : 'N/A',
+    getPopulationSize: devices => devices.filter(hasPatchData).length,
     columns: PATCH_COLS,
     getRecommendedAction: () => 'Schedule security update deployment within 7 days',
     getRiskLevel: () => 'High',
@@ -435,10 +435,12 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'missing-app-updates': {
     id: 'missing-app-updates', group: 'Patch Health',
     title: 'Missing App Updates',
-    description: 'Devices with available application updates. Lower risk but contributes to compliance score.',
+    description: 'Devices with missing third-party application patches per Patch Manager. Only devices running the Patch Manager agent are assessed.',
     accentColor: '#D97706',
-    filterFn: devices => devices.filter(d => hasMissingAppUpdate(d) && !hasMissingSecurityUpdate(d)),
-    getValue: devices => devices.filter(d => hasMissingAppUpdate(d) && !hasMissingSecurityUpdate(d)).length,
+    getUnavailableReason: patchUnavailableReason,
+    filterFn: devices => devices.filter(missingAppUpdates),
+    getValue: devices => devices.some(hasPatchData) ? devices.filter(missingAppUpdates).length : 'N/A',
+    getPopulationSize: devices => devices.filter(hasPatchData).length,
     columns: PATCH_COLS,
     getRecommendedAction: () => 'Schedule application updates in next maintenance window',
     getRiskLevel: () => 'Medium',
@@ -454,11 +456,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     filterFn: devices => devices.filter(d => isActive(d)),
     getValue: devices => devices.filter(d => isActive(d)).length,
     columns: LIFECYCLE_COLS,
-    getRecommendedAction: d => {
-      if (hasMissingCriticalPatch(d)) return 'Apply critical patches'
-      if (versionsBehind(d.osVersion) >= 2) return 'Schedule macOS upgrade'
-      return 'No action required'
-    },
+    getRecommendedAction: () => 'No action required',
     getRiskLevel: d => d.severity,
   },
 
@@ -496,15 +494,15 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'inactive-devices': {
     id: 'inactive-devices', group: 'Device Lifecycle',
     title: 'Inactive Devices',
-    description: 'Devices with no check-in for 31–90 days. High probability of being lost, forgotten, or off-network.',
+    description: 'Devices with no check-in for more than 30 days.',
     accentColor: '#EF4444',
     filterFn: devices => devices.filter(d => {
       const days = daysSinceCheckIn(d.lastCheckIn)
-      return days > 30 && days <= 90
+      return days > 30 && days !== 999
     }),
     getValue: devices => devices.filter(d => {
       const days = daysSinceCheckIn(d.lastCheckIn)
-      return days > 30 && days <= 90
+      return days > 30 && days !== 999
     }).length,
     columns: LIFECYCLE_COLS,
     getRecommendedAction: () => 'Escalate to manager — investigate device location, initiate retirement if unrecovered',
@@ -514,40 +512,38 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
   'eol-devices': {
     id: 'eol-devices', group: 'Device Lifecycle',
     title: 'EOL Devices',
-    description: 'Devices running a macOS version Apple no longer supports with security updates. Critical security risk — replacement required.',
+    description: 'Not available: Endpoint Central device inventory does not state Apple support or hardware upgrade eligibility.',
     accentColor: '#DC2626',
-    filterFn: devices => devices.filter(d => isEol(d)),
-    getValue: devices => devices.filter(d => isEol(d)).length,
+    unavailableReason: 'The connected API returns the installed macOS version, but not Apple lifecycle support or the hardware model compatibility decision needed to classify a device as EOL.',
+    filterFn: () => [],
+    getValue: () => 'N/A',
     columns: [
       ...BASE_COLS,
       { key: 'osVersion',      label: 'macOS Version',   visible: true, sortable: true },
-      { key: 'eolStatus',      label: 'EOL Status',      visible: true, sortable: false, render: () => '● EOL' },
       { key: 'lastCheckIn',    label: 'Last Check-In',   visible: true, sortable: true, render: d => fmtDaysAgo(d.lastCheckIn) },
-      { key: 'complianceState',label: 'Compliance',      visible: true, sortable: true },
-      { key: 'riskLevel',      label: 'Risk Level',      visible: true, sortable: true, render: () => 'Critical' },
+      { key: 'encryptionStatus',label: 'Encryption Status',visible: true, sortable: true },
       { key: 'action',         label: 'Recommended Action', visible: true, sortable: false },
     ],
-    getRecommendedAction: () => 'Immediate replacement required — device receives no security updates',
+    getRecommendedAction: () => 'Not available from connected API',
     getRiskLevel: () => 'Critical',
   },
 
   'near-eol-devices': {
     id: 'near-eol-devices', group: 'Device Lifecycle',
     title: 'Near EOL Devices',
-    description: 'Devices approaching End-of-Life within 90 days. Plan replacement now to avoid security gaps.',
+    description: 'Not available: Endpoint Central does not return Apple lifecycle or replacement dates.',
     accentColor: '#F97316',
-    filterFn: devices => devices.filter(d => isNearEol(d)),
-    getValue: devices => devices.filter(d => isNearEol(d)).length,
+    unavailableReason: 'The API does not expose device-specific Apple end-of-support dates, so no devices can be safely classified as near EOL.',
+    filterFn: () => [],
+    getValue: () => 'N/A',
     columns: [
       ...BASE_COLS,
       { key: 'osVersion',      label: 'macOS Version',   visible: true, sortable: true },
-      { key: 'eolStatus',      label: 'EOL Status',      visible: true, sortable: false, render: () => '⚠ Near EOL' },
       { key: 'lastCheckIn',    label: 'Last Check-In',   visible: true, sortable: true, render: d => fmtDaysAgo(d.lastCheckIn) },
-      { key: 'complianceState',label: 'Compliance',      visible: true, sortable: true },
-      { key: 'riskLevel',      label: 'Risk Level',      visible: true, sortable: false, render: () => 'High' },
+      { key: 'encryptionStatus',label: 'Encryption Status',visible: true, sortable: true },
       { key: 'action',         label: 'Recommended Action', visible: true, sortable: false },
     ],
-    getRecommendedAction: () => 'Schedule replacement within 60 days — submit procurement request',
+    getRecommendedAction: () => 'Not available from connected API',
     getRiskLevel: () => 'High',
   },
 
@@ -555,11 +551,11 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
   'on-current-version': {
     id: 'on-current-version', group: 'OS Health',
-    title: `On ${CURRENT_MACOS.name} (Current)`,
-    description: `Devices running macOS ${CURRENT_MACOS.version} — the latest available version.`,
+    title: 'Devices with OS Version',
+    description: 'Devices reporting a numeric macOS version in the connected MDM inventory.',
     accentColor: '#10B981',
-    filterFn: devices => devices.filter(d => versionsBehind(d.osVersion) === 0),
-    getValue: devices => devices.filter(d => versionsBehind(d.osVersion) === 0).length,
+    filterFn: devices => devices.filter(hasReportedOsVersion),
+    getValue: devices => devices.filter(hasReportedOsVersion).length,
     columns: OS_COLS,
     getRecommendedAction: () => 'Maintain current OS — no upgrade needed',
     getRiskLevel: d => d.severity,
@@ -567,41 +563,47 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
   'one-version-behind': {
     id: 'one-version-behind', group: 'OS Health',
-    title: '1 Version Behind',
-    description: 'Devices running macOS one major version behind the latest. Should be upgraded in next maintenance window.',
+    title: 'OS Version Not Reported',
+    description: 'Devices whose MDM inventory has no valid numeric macOS version.',
     accentColor: '#F59E0B',
-    filterFn: devices => devices.filter(d => versionsBehind(d.osVersion) === 1),
-    getValue: devices => devices.filter(d => versionsBehind(d.osVersion) === 1).length,
+    filterFn: devices => devices.filter(d => !hasReportedOsVersion(d)),
+    getValue: devices => devices.filter(d => !hasReportedOsVersion(d)).length,
     columns: OS_COLS,
-    getRecommendedAction: () => 'Schedule macOS upgrade in next maintenance window',
+    getRecommendedAction: () => 'Refresh device inventory or check the device MDM connection',
     getRiskLevel: () => 'Medium',
   },
 
   'two-plus-versions-behind': {
     id: 'two-plus-versions-behind', group: 'OS Health',
-    title: '2+ Versions Behind',
-    description: 'Devices running macOS two or more major versions behind. These devices are missing significant security improvements and should be upgraded urgently.',
+    title: 'Distinct OS Versions',
+    description: 'Number of different macOS version strings reported in the current device inventory.',
     accentColor: '#EF4444',
-    filterFn: devices => devices.filter(d => versionsBehind(d.osVersion) >= 2),
-    getValue: devices => devices.filter(d => versionsBehind(d.osVersion) >= 2).length,
+    isInfoCard: true,
+    filterFn: devices => devices.filter(hasReportedOsVersion),
+    getValue: devices => new Set(devices.filter(hasReportedOsVersion).map(d => d.osVersion)).size,
     columns: OS_COLS,
-    getRecommendedAction: d => {
-      if (isEol(d)) return 'Hardware cannot support latest macOS — replace device'
-      return 'Upgrade macOS urgently — 2+ versions behind current'
-    },
+    getRecommendedAction: () => 'Compare the reported versions against your approved OS baseline',
     getRiskLevel: () => 'High',
   },
 
   'latest-macos-version': {
     id: 'latest-macos-version', group: 'OS Health',
-    title: 'Latest macOS Version',
-    description: `Current latest macOS release: ${CURRENT_MACOS.version} (${CURRENT_MACOS.name}). Informational card — click to see all devices on this version.`,
+    title: 'Most Common OS Version',
+    description: 'Most frequently reported numeric macOS version in the current inventory. This is not an assertion that the version is latest.',
     accentColor: '#6366F1',
-    isInfoCard: true,
-    filterFn: devices => devices.filter(d => compareVersions(d.osVersion, CURRENT_MACOS.version) >= 0),
-    getValue: () => `${CURRENT_MACOS.version} (${CURRENT_MACOS.name})`,
+    filterFn: devices => {
+      const counts = new Map<string, number>()
+      devices.filter(hasReportedOsVersion).forEach(d => counts.set(d.osVersion, (counts.get(d.osVersion) ?? 0) + 1))
+      const topVersion = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+      return topVersion ? devices.filter(d => d.osVersion === topVersion) : []
+    },
+    getValue: devices => {
+      const counts = new Map<string, number>()
+      devices.filter(hasReportedOsVersion).forEach(d => counts.set(d.osVersion, (counts.get(d.osVersion) ?? 0) + 1))
+      return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'N/A'
+    },
     columns: OS_COLS,
-    getRecommendedAction: () => 'No action — device is on latest macOS',
+    getRecommendedAction: () => 'Compare this reported version with your approved OS baseline',
     getRiskLevel: () => 'Low',
   },
 }
@@ -618,7 +620,7 @@ export const KPI_GROUPS: KpiGroup[] = [
 export const KPI_IDS_BY_GROUP: Record<KpiGroup, KpiId[]> = {
   'Fleet Overview': [
     'total-devices', 'healthy-devices', 'requiring-action',
-    'compliance-score', 'fleet-risk-score',
+    'compliance-score', 'fleet-risk-score', 'device-security-posture',
   ],
   'Patch Health': [
     'fully-patched', 'missing-critical-patches',
@@ -634,4 +636,4 @@ export const KPI_IDS_BY_GROUP: Record<KpiGroup, KpiId[]> = {
   ],
 }
 
-export { daysSinceCheckIn, versionsBehind, fmtDaysAgo, fmtOsStatus, fmtLifecycleStatus, isHealthy, isEol, isNearEol, isActive }
+export { daysSinceCheckIn, fmtDaysAgo, fmtLifecycleStatus, isHealthy, isActive }

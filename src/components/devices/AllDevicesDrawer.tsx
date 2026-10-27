@@ -2,9 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useColumnResize } from '../../hooks/useColumnResize'
 import { usePagination } from '../../hooks/usePagination'
 import { Pagination } from '../ui/Pagination'
+import { SortableHeader } from '../ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../../lib/tableSorting'
 import { X, Monitor, Laptop, Globe, Search, RefreshCw, Lock, LockOpen, ChevronRight } from 'lucide-react'
 import { api, type ApiDevice } from '../../api'
 import { DeviceDetailPanel } from './DeviceDetailPanel'
+import { CopyText } from '../ui/CopyText'
 
 const PAGE_SIZE = 50
 
@@ -151,6 +154,8 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
   const [compliance, setCompliance] = useState<ComplianceOpt>('')
   const [platform,   setPlatform]   = useState<PlatformOpt>('')
   const [searchRaw,  setSearchRaw]  = useState('')
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   // Reset on open
   useEffect(() => {
@@ -186,7 +191,25 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
   const devices = searchRaw ? allDevices.filter(d => matchesSearch(d, searchRaw)) : allDevices
   const total   = searchRaw ? devices.length : serverTotal
 
-  const { page, setPage, totalPages, paginated } = usePagination(devices, PAGE_SIZE)
+  const sortedDevices = sortKey ? sortRows(devices, device => {
+    switch (sortKey) {
+      case 'device': return device.deviceName
+      case 'user': return device.user
+      case 'source': return device.managementSource
+      case 'os': return device.osVersion
+      case 'compliance': return device.complianceState
+      case 'checkin': return Date.parse(device.lastCheckIn) || device.lastCheckIn
+      case 'encryption': return device.encryptionStatus
+      case 'issue': return device.primaryIssue
+      default: return ''
+    }
+  }, sortDirection) : devices
+  const { page, setPage, totalPages, paginated } = usePagination(sortedDevices, PAGE_SIZE)
+
+  const handleSort = (key: string) => {
+    setSortDirection(direction => toggleSortDirection(sortKey, direction, key))
+    setSortKey(key)
+  }
 
   const totalAll = (sourceCounts?.intune ?? 0) + (sourceCounts?.manageEngine ?? 0)
   const getTabCount = (id: SourceId) => {
@@ -297,7 +320,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                         ? opt === 'Compliant'     ? 'bg-emerald-500 text-white border-emerald-500'
                         : opt === 'Warning'       ? 'bg-amber-500   text-white border-amber-500'
                         : opt === 'Non-Compliant' ? 'bg-red-500     text-white border-red-500'
-                                                  : 'bg-slate-900 text-white border-slate-900'
+                                                  : 'is-selected'
                         : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
@@ -313,7 +336,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     type="button"
                     onClick={() => setPlatform(opt)}
                     className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
-                      platform === opt ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      platform === opt ? 'is-selected' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     {opt || 'All'}
@@ -369,7 +392,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                         type="button"
                         onClick={() => setSelected(device)}
                         className={`w-full flex items-center gap-3 px-4 py-3 text-left transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
-                          isActive ? 'bg-orange-50 border-l-2 border-orange-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
+                          isActive ? 'is-selected border-l-2' : 'hover:bg-slate-50 border-l-2 border-transparent'
                         }`}
                       >
                         <PlatformIcon p={device.platform} />
@@ -391,21 +414,22 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                   </colgroup>
                   <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
                     <tr>
-                      {COLS.map(c => (
-                        <th
+                      {COLS.map(c => c.key === 'actions' ? <th key={c.key} style={{ width: widths[c.key] }} /> : (
+                        <SortableHeader
                           key={c.key}
+                          label={c.label}
+                          sortKey={c.key}
+                          activeSortKey={sortKey}
+                          direction={sortDirection}
+                          onSort={handleSort}
                           className="relative px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap select-none overflow-hidden"
-                          style={{ width: widths[c.key] }}
                         >
-                          {c.label}
                           {/* Drag handle — visible on hover */}
-                          {c.key !== 'actions' && (
-                            <span
-                              className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/60 active:bg-orange-500 transition-colors"
-                              onMouseDown={e => startResize(c.key, e)}
-                            />
-                          )}
-                        </th>
+                          <span
+                            className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/60 active:bg-orange-500 transition-colors"
+                            onMouseDown={e => startResize(c.key, e)}
+                          />
+                        </SortableHeader>
                       ))}
                     </tr>
                   </thead>
@@ -420,13 +444,13 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                           <div className="flex items-center gap-2 min-w-0">
                             <PlatformIcon p={device.platform} />
                             <div className="min-w-0">
-                              <p className="font-semibold text-slate-900 text-sm leading-tight truncate" title={device.deviceName}>{device.deviceName}</p>
-                              <p className="text-xs text-slate-400 font-mono leading-tight truncate">{device.serialNumber}</p>
+                              <CopyText value={device.deviceName} label="Device name"><p className="font-semibold text-slate-900 text-sm leading-tight truncate" title={device.deviceName}>{device.deviceName}</p></CopyText>
+                              <CopyText value={device.serialNumber} label="Serial number"><p className="text-xs text-slate-400 font-mono leading-tight truncate">{device.serialNumber}</p></CopyText>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-slate-600 text-sm overflow-hidden">
-                          <span className="block truncate" title={device.user}>{device.user}</span>
+                          <CopyText value={device.user} label="User"><span className="block truncate" title={device.user}>{device.user}</span></CopyText>
                         </td>
                         <td className="px-4 py-3 overflow-hidden"><SourcePill src={device.managementSource} /></td>
                         <td className="px-4 py-3 text-slate-500 text-xs overflow-hidden">

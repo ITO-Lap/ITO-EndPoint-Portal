@@ -63,12 +63,17 @@ CREATE INDEX IF NOT EXISTS idx_risk_tenant     ON device_risk_scores(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_risk_level      ON device_risk_scores(risk_level);
 CREATE INDEX IF NOT EXISTS idx_risk_score_desc ON device_risk_scores(risk_score DESC);
 
--- ─── Scheduled Reports ────────────────────────────────────────────────────────
+-- ─── Scheduled Reports ──────────────────────────────────────────────────────
+-- Used by server/src/store/scheduledReportsStore.ts whenever DATABASE_URL is
+-- configured (durable, multi-instance-safe storage + historical querying).
+-- Without DATABASE_URL, the same module falls back to a JSON file
+-- (server/.scheduled-reports.json) so this feature still works with zero
+-- database dependency — see that file for the dual-backend logic.
 CREATE TABLE IF NOT EXISTS scheduled_reports (
   id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   tenant_id      UUID REFERENCES tenants(id) ON DELETE CASCADE,
   name           TEXT NOT NULL,
-  report_type    TEXT NOT NULL,          -- compliance | inventory | app-deployment | risk | executive
+  report_type    TEXT NOT NULL,          -- critical-patching | stale-devices | compliance | inventory | app-updates | fleet-digest
   schedule_cron  TEXT NOT NULL,          -- standard 5-field cron expression
   format         TEXT NOT NULL DEFAULT 'pdf',  -- pdf | excel | csv | pptx
   recipients     JSONB NOT NULL DEFAULT '[]',  -- ["user@org.com", …]
@@ -102,6 +107,50 @@ CREATE TABLE IF NOT EXISTS report_runs (
 CREATE INDEX IF NOT EXISTS idx_runs_schedule ON report_runs(scheduled_report_id);
 CREATE INDEX IF NOT EXISTS idx_runs_tenant   ON report_runs(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status   ON report_runs(status, started_at DESC);
+
+-- ─── Slack Notification Schedules ──────────────────────────────────────────────
+-- One row per (module, source_id) — e.g. module='scheduled_report' for the
+-- Scheduled Reports Slack-delivery day/time editor. `claimDueNotificationSchedules`
+-- in scheduledReportsStore.ts does its check-and-set as a single atomic UPDATE
+-- here, so this table (unlike the JSON-file fallback) is safe across multiple
+-- app instances polling concurrently.
+CREATE TABLE IF NOT EXISTS notification_schedules (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  module          TEXT NOT NULL,
+  source_id       TEXT NOT NULL,
+  is_enabled      BOOLEAN NOT NULL DEFAULT true,
+  frequency       TEXT NOT NULL,           -- daily | weekly
+  weekdays        JSONB NOT NULL DEFAULT '[]',  -- [0-6], Sunday = 0
+  execution_time  TEXT NOT NULL,           -- "HH:mm", local to `timezone`
+  timezone        TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+  next_run_at     TIMESTAMPTZ,
+  is_running      BOOLEAN NOT NULL DEFAULT false,
+  last_run_at     TIMESTAMPTZ,
+  last_run_status TEXT,                   -- completed | failed
+  last_run_error  TEXT,
+  created_by      TEXT NOT NULL,
+  updated_by      TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (module, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_sched_due ON notification_schedules(is_enabled, next_run_at);
+
+-- ─── Schedule Change Audit Log ──────────────────────────────────────────────────
+-- Who changed which Slack notification schedule, and what changed — surfaced
+-- in the Scheduled Reports UI's audit trail.
+CREATE TABLE IF NOT EXISTS schedule_audit_log (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_email  TEXT NOT NULL,
+  action      TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  old_value   JSONB,
+  new_value   JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sched_audit_created ON schedule_audit_log(created_at DESC);
 
 -- ─── Intune Audit Log Export Module ────────────────────────────────────────────
 -- Durable, resumable exports of Microsoft Graph /deviceManagement/auditEvents.

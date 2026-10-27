@@ -7,7 +7,8 @@ import { credentialsFromEnv, getManagedDevices, getCompliancePolicies, getConfig
 import type { GraphMobileApp } from '../services/graphApi.js'
 import { batchComputeRiskScores } from '../services/riskScoring.js'
 import { detectConflicts, conflictSummary } from '../services/policyConflict.js'
-import { exportToCSV, exportToExcel, exportToPDF, exportToPPTX } from '../services/reportExporter.js'
+import { createComplianceReport, createInventoryReport } from '../services/complianceInventoryReport.js'
+import type { ExportFormat } from '../services/reportExporter.js'
 
 const router = Router()
 
@@ -207,6 +208,13 @@ Format:
 })
 
 // ─── POST /api/intelligence/export ───────────────────────────────────────────
+const EXPORT_CONTENT_TYPES: Record<string, string> = {
+  csv:   'text/csv',
+  excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pdf:   'application/pdf',
+  pptx:  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+}
+
 router.post('/export', async (req, res, next) => {
   try {
     const { format = 'csv', reportType = 'compliance' } = req.body as {
@@ -219,73 +227,13 @@ router.post('/export', async (req, res, next) => {
       return res.status(400).json({ success: false, error: `Invalid format. Use: ${validFormats.join(', ')}` })
     }
 
-    const creds   = credentialsFromEnv()
-    const devices = await getManagedDevices(creds)
+    const report = reportType === 'compliance'
+      ? await createComplianceReport(format as ExportFormat)
+      : await createInventoryReport(format as ExportFormat)
 
-    const columns = [
-      { key: 'deviceName',         label: 'Device Name',    width: 25 },
-      { key: 'userPrincipalName',  label: 'User',           width: 30 },
-      { key: 'operatingSystem',    label: 'OS',             width: 12 },
-      { key: 'osVersion',          label: 'OS Version',     width: 15 },
-      { key: 'complianceState',    label: 'Compliance',     width: 15 },
-      { key: 'isEncrypted',        label: 'Encrypted',      width: 10 },
-      { key: 'lastSyncDateTime',   label: 'Last Sync',      width: 22 },
-      { key: 'manufacturer',       label: 'Manufacturer',   width: 18 },
-      { key: 'model',              label: 'Model',          width: 20 },
-      { key: 'managementAgent',    label: 'Mgmt Agent',     width: 18 },
-      { key: 'enrolledDateTime',   label: 'Enrolled',       width: 22 },
-    ]
-
-    const data = devices.map(d => ({
-      ...d,
-      isEncrypted: d.isEncrypted ? 'Yes' : 'No',
-    })) as Record<string, unknown>[]
-
-    const meta = {
-      title:       reportType === 'compliance' ? 'Compliance Report' : 'Device Inventory Report',
-      subtitle:    `Microsoft Intune · ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}`,
-      generatedAt: new Date().toISOString(),
-      generatedBy: 'Endpoint Intelligence Platform',
-      recordCount: devices.length,
-    }
-
-    const summary = [
-      { label: 'Total Devices',  value: String(devices.length) },
-      { label: 'Compliant',      value: String(devices.filter(d => d.complianceState === 'compliant').length),    color: '22C55E' },
-      { label: 'Non-Compliant',  value: String(devices.filter(d => d.complianceState === 'noncompliant').length), color: 'EF4444' },
-      { label: 'Encrypted',      value: String(devices.filter(d => d.isEncrypted).length),                        color: '3B82F6' },
-      { label: 'Not Encrypted',  value: String(devices.filter(d => !d.isEncrypted).length),                       color: 'F97316' },
-    ]
-
-    const filename = `${reportType}-report-${Date.now()}`
-
-    if (format === 'csv') {
-      const csv = exportToCSV(data, columns)
-      res.setHeader('Content-Type', 'text/csv')
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`)
-      return res.send(csv)
-    }
-
-    if (format === 'excel') {
-      const buf = await exportToExcel(data, columns, meta)
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
-      return res.send(buf)
-    }
-
-    if (format === 'pdf') {
-      const buf = await exportToPDF(data, columns, meta)
-      res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`)
-      return res.send(buf)
-    }
-
-    if (format === 'pptx') {
-      const buf = await exportToPPTX(data, meta, summary)
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}.pptx"`)
-      return res.send(buf)
-    }
+    res.setHeader('Content-Type', EXPORT_CONTENT_TYPES[format]!)
+    res.setHeader('Content-Disposition', `attachment; filename="${report.filename}"`)
+    res.send(report.content)
   } catch (err) {
     next(err)
   }

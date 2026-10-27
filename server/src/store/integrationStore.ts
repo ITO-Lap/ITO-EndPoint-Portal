@@ -22,6 +22,15 @@ export interface RuntimeOpenAIConfig {
   model?: string
 }
 
+/** Gemini is deliberately separate from OpenAI: only the Endpoint Operations
+ * Copilot uses it, so existing OpenAI-powered workflows remain unaffected. */
+export interface RuntimeGeminiConfig {
+  apiKey: string
+  model?: string
+  /** Enables Gemini's managed Google Search grounding for public-web facts. */
+  enableGoogleSearch?: boolean
+}
+
 export interface RuntimeEntraConfig {
   tenantId:     string
   clientId:     string
@@ -29,7 +38,9 @@ export interface RuntimeEntraConfig {
 }
 
 export interface RuntimeSlackConfig {
-  botToken:      string
+  botToken?:     string
+  /** Incoming-webhook URL used for outbound automation alerts. */
+  webhookUrl?:   string
   signingSecret?: string
   workspaceId?:  string
 }
@@ -45,6 +56,7 @@ interface PersistedCredentials {
   intune?:       RuntimeIntuneConfig
   manageengine?: RuntimeManageEngineConfig
   openai?:       RuntimeOpenAIConfig
+  gemini?:       RuntimeGeminiConfig
   entra?:        RuntimeEntraConfig
   slack?:        RuntimeSlackConfig
 }
@@ -77,6 +89,7 @@ function persistCredentials(): void {
   if (store.intune)       snapshot.intune       = store.intune
   if (store.manageengine) snapshot.manageengine = store.manageengine
   if (store.openai)       snapshot.openai       = store.openai
+  if (store.gemini)       snapshot.gemini       = store.gemini
   if (store.entra)        snapshot.entra        = store.entra
   if (store.slack)        snapshot.slack        = store.slack
   try {
@@ -100,6 +113,7 @@ const store: Store = {
 export function setIntuneConfig(c: RuntimeIntuneConfig) { store.intune = c; persistCredentials() }
 export function setManageEngineConfig(c: RuntimeManageEngineConfig) { store.manageengine = c; persistCredentials() }
 export function setOpenAIConfig(c: RuntimeOpenAIConfig) { store.openai = c; persistCredentials() }
+export function setGeminiConfig(c: RuntimeGeminiConfig) { store.gemini = c; persistCredentials() }
 export function setEntraConfig(c: RuntimeEntraConfig) { store.entra = c; persistCredentials() }
 export function setSlackConfig(c: RuntimeSlackConfig) { store.slack = c; persistCredentials() }
 
@@ -140,6 +154,19 @@ export function getOpenAIConfig(): RuntimeOpenAIConfig | undefined {
   return undefined
 }
 
+export function getGeminiConfig(): RuntimeGeminiConfig | undefined {
+  if (store.gemini) return store.gemini
+  const { GEMINI_API_KEY: apiKey, GEMINI_MODEL: model, GEMINI_ENABLE_GOOGLE_SEARCH } = process.env
+  if (apiKey) {
+    return {
+      apiKey,
+      model: model || 'gemini-2.5-flash',
+      enableGoogleSearch: GEMINI_ENABLE_GOOGLE_SEARCH !== 'false',
+    }
+  }
+  return undefined
+}
+
 // Entra ID: try ENTRA_ vars first, auto-fall-back to INTUNE_ credentials
 // (same Microsoft tenant — existing Intune registrations often work)
 export function getEntraConfig(): RuntimeEntraConfig | undefined {
@@ -158,8 +185,8 @@ export function getEntraConfig(): RuntimeEntraConfig | undefined {
 
 export function getSlackConfig(): RuntimeSlackConfig | undefined {
   if (store.slack) return store.slack
-  const { SLACK_BOT_TOKEN: botToken, SLACK_SIGNING_SECRET: signingSecret, SLACK_WORKSPACE_ID: workspaceId } = process.env
-  if (botToken) return { botToken, ...(signingSecret ? { signingSecret } : {}), ...(workspaceId ? { workspaceId } : {}) }
+  const { SLACK_BOT_TOKEN: botToken, SLACK_WEBHOOK_URL: webhookUrl, SLACK_SIGNING_SECRET: signingSecret, SLACK_WORKSPACE_ID: workspaceId } = process.env
+  if (botToken || webhookUrl) return { ...(botToken ? { botToken } : {}), ...(webhookUrl ? { webhookUrl } : {}), ...(signingSecret ? { signingSecret } : {}), ...(workspaceId ? { workspaceId } : {}) }
   return undefined
 }
 
@@ -180,11 +207,12 @@ export function getFetchResult(
 
 // ─ Configured check ──────────────────────────────────────────────────────────
 
-export function isConfigured(source: 'intune' | 'manageengine' | 'openai' | 'entra' | 'slack'): boolean {
+export function isConfigured(source: 'intune' | 'manageengine' | 'openai' | 'gemini' | 'entra' | 'slack'): boolean {
   switch (source) {
     case 'intune':       return !!getIntuneConfig()
     case 'manageengine': return !!getManageEngineConfig()
     case 'openai':       return !!getOpenAIConfig()
+    case 'gemini':       return !!getGeminiConfig()
     case 'entra':        return !!getEntraConfig()
     case 'slack':        return !!getSlackConfig()
   }

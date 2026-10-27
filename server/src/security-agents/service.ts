@@ -32,7 +32,8 @@ export function scanDevice(
   device: Device,
   apps: AppStatus[],
   scanTime: string,
-  collectors: ISecurityAgentCollector[] = securityAgentCollectors
+  collectors: ISecurityAgentCollector[] = securityAgentCollectors,
+  inventoryAvailable = true
 ): DeviceSecurityStatus {
   // One entry per registered agent (not just installed ones), so the UI can
   // render an explicit "Not Installed" row/column instead of an absence.
@@ -48,6 +49,7 @@ export function scanDevice(
     connector: device.managementSource,
     lastSync: device.lastCheckIn,
     scanTime,
+    inventoryAvailable,
     agents,
     overallHealth: computeOverallHealth(agents),
     securityScore: computeSecurityScore(agents),
@@ -92,11 +94,11 @@ function compareVersions(a: string, b: string): number {
 }
 
 export function scanFleet(
-  devicesWithApps: Array<{ device: Device; apps: AppStatus[] }>,
+  devicesWithApps: Array<{ device: Device; apps: AppStatus[]; inventoryAvailable?: boolean }>,
   scanTime: string,
   collectors: ISecurityAgentCollector[] = securityAgentCollectors
 ): DeviceSecurityStatus[] {
-  const statuses = devicesWithApps.map(({ device, apps }) => scanDevice(device, apps, scanTime, collectors))
+  const statuses = devicesWithApps.map(({ device, apps, inventoryAvailable = true }) => scanDevice(device, apps, scanTime, collectors, inventoryAvailable))
   applyFleetRelativeVersionCheck(statuses)
   return statuses
 }
@@ -112,11 +114,13 @@ export function isVirtualHostname(hostname: string): boolean {
 const CRITICAL_COVERAGE_PCT = 70
 const WARNING_COVERAGE_PCT = 95
 
-function coverageHealth(falconPct: number, zscalerPct: number, totalDevices: number): CoverageHealth {
+function coverageHealth(falconPct: number | null, zscalerPct: number | null, totalDevices: number, inventoryUnavailable: number): CoverageHealth {
   if (totalDevices === 0) return 'Healthy'
-  const worst = Math.min(falconPct, zscalerPct)
+  const measuredCoverage = [falconPct, zscalerPct].filter((pct): pct is number => pct !== null)
+  if (measuredCoverage.length === 0) return 'Warning'
+  const worst = Math.min(...measuredCoverage)
   if (worst < CRITICAL_COVERAGE_PCT) return 'Critical'
-  if (worst < WARNING_COVERAGE_PCT) return 'Warning'
+  if (worst < WARNING_COVERAGE_PCT || inventoryUnavailable > 0) return 'Warning'
   return 'Healthy'
 }
 
@@ -125,21 +129,25 @@ function coverageHealth(falconPct: number, zscalerPct: number, totalDevices: num
 export function buildPlatformCoverage(statuses: DeviceSecurityStatus[], platform: 'Windows' | 'macOS'): PlatformCoverage {
   const devices = statuses.filter(s => s.operatingSystem === platform && !isVirtualHostname(s.hostname))
   const total = devices.length
-  const falconInstalled = devices.filter(s => findAgent(s, 'crowdstrike')?.installed).length
-  const zscalerInstalled = devices.filter(s => findAgent(s, 'zscaler')?.installed).length
-  const falconCoveragePct = total ? Math.round((falconInstalled / total) * 100) : 100
-  const zscalerCoveragePct = total ? Math.round((zscalerInstalled / total) * 100) : 100
+  const assessed = devices.filter(s => s.inventoryAvailable)
+  const inventoryUnavailableDevices = total - assessed.length
+  const falconInstalled = assessed.filter(s => findAgent(s, 'crowdstrike')?.installed).length
+  const zscalerInstalled = assessed.filter(s => findAgent(s, 'zscaler')?.installed).length
+  const falconCoveragePct = assessed.length ? Math.round((falconInstalled / assessed.length) * 100) : null
+  const zscalerCoveragePct = assessed.length ? Math.round((zscalerInstalled / assessed.length) * 100) : null
 
   return {
     platform,
     totalDevices: total,
+    inventoryAvailableDevices: assessed.length,
+    inventoryUnavailableDevices,
     falconInstalled,
     zscalerInstalled,
-    falconMissing: total - falconInstalled,
-    zscalerMissing: total - zscalerInstalled,
+    falconMissing: assessed.length - falconInstalled,
+    zscalerMissing: assessed.length - zscalerInstalled,
     falconCoveragePct,
     zscalerCoveragePct,
-    health: coverageHealth(falconCoveragePct, zscalerCoveragePct, total),
+    health: coverageHealth(falconCoveragePct, zscalerCoveragePct, total, inventoryUnavailableDevices),
   }
 }
 
@@ -149,6 +157,6 @@ export function listDevicesMissingAgent(
   agentKey: string
 ): MissingAgentDevice[] {
   return statuses
-    .filter(s => s.operatingSystem === platform && !isVirtualHostname(s.hostname) && !findAgent(s, agentKey)?.installed)
+    .filter(s => s.operatingSystem === platform && s.inventoryAvailable && !isVirtualHostname(s.hostname) && !findAgent(s, agentKey)?.installed)
     .map(s => ({ deviceId: s.deviceId, deviceName: s.deviceName, primaryUser: s.primaryUser, connector: s.connector, lastSync: s.lastSync }))
 }

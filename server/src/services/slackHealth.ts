@@ -58,6 +58,12 @@ async function checkOnce(): Promise<void> {
     Object.assign(state, { healthy: null, error: null, workspace: null })
     return
   }
+  if (!cfg.botToken) {
+    // Incoming webhooks have no read-only health endpoint. Do not post a test
+    // message from the background monitor just to determine connectivity.
+    Object.assign(state, { healthy: null, error: null, workspace: null, lastCheckedAt: Date.now() })
+    return
+  }
 
   const t0 = Date.now()
 

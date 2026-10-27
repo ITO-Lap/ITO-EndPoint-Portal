@@ -4,8 +4,9 @@ import { asyncHandler } from '../middleware/errorHandler.js'
 import {
   getEntraOverview, getEntraDevices, getEntraUsers, getEntraGroups,
   getEntraSecurity, syncDevice, diagnoseDevice,
-  getEntraGroupMemberReport, searchEntraGroups,
+  getEntraGroupMemberReport, searchEntraGroups, getMacVersionCheck,
 } from '../services/entraIntelligence.js'
+import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import { exportToCSV, exportToExcel } from '../services/reportExporter.js'
 
 const router = Router()
@@ -29,6 +30,14 @@ router.get('/devices', asyncHandler(async (req, res) => {
   if (params.os)         devOpts.os         = params.os
   const data = await getEntraDevices(devOpts)
   res.json({ success: true, data, meta: { total: data.length } })
+}))
+
+// GET /api/entra/mac-version-check — ManageEngine macOS versions vs Intune (serial) and Entra (device name)
+router.get('/mac-version-check', asyncHandler(async (_req, res) => {
+  const me = isManageEngineConfigured() ? await getManageEngineDevices() : []
+  const macs = me.filter(d => d.platform === 'macOS')
+  const data = await getMacVersionCheck(macs)
+  res.json({ success: true, data })
 }))
 
 // GET /api/entra/users?riskLevel=

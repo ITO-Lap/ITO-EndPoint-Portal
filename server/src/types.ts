@@ -9,6 +9,8 @@ export interface Device {
   lastCheckIn: string
   complianceState: 'Compliant' | 'Warning' | 'Non-Compliant'
   encryptionStatus: string
+  /** MDM-reported passcode state; 'Unknown' when the source does not return it. */
+  passcodeStatus?: 'Present' | 'Missing' | 'Unknown'
   primaryIssue: string
   policyFailed: string
   severity: 'Low' | 'Medium' | 'High' | 'Critical'

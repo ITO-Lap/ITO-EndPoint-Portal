@@ -5,33 +5,28 @@ import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
 import { DashboardContent } from './components/dashboard/DashboardContent'
 import { PlaceholderPage } from './components/layout/PlaceholderPage'
-import { UsersPage } from './pages/UsersPage'
-import { UserIntelligencePage } from './pages/UserIntelligencePage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { DocsPage } from './pages/DocsPage'
 import { SourceModal } from './components/devices/SourceModal'
 import { ReportsPage } from './components/reports/ReportsPage'
 import { SecurityPosturePage } from './pages/SecurityPosturePage'
-import { MacDevicesPage } from './pages/MacDevicesPage'
+import { ManagedDevicesPage } from './pages/ManagedDevicesPage'
 import { MacFleetReportsPage } from './pages/MacFleetReportsPage'
 import { EntraIntelligenceDashboard } from './components/entra/EntraIntelligenceDashboard'
-import { IntuneDevicesPage } from './pages/IntuneDevicesPage'
+import { StaleDevicesPage } from './pages/StaleDevicesPage'
 import { ManageEngineAppInventoryPage } from './pages/ManageEngineAppInventoryPage'
+import { AppGuardianPage } from './pages/AppGuardianPage'
 import { AutomationPage } from './components/automation/AutomationPage'
-import { IntelligenceDashboardPage } from './pages/IntelligenceDashboardPage'
-import { ComplianceIntelPage } from './pages/ComplianceIntelPage'
 import { PolicyConflictPage } from './pages/PolicyConflictPage'
 import { RiskScoringPage } from './pages/RiskScoringPage'
-import { ReportBuilderPage } from './pages/ReportBuilderPage'
 import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
-import { AuditLogPage } from './pages/AuditLogPage'
+import { PatchOperationsPage } from './pages/PatchOperationsPage'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
-import { SecurityPoliciesPage } from './pages/SecurityPoliciesPage'
 import { CopilotPanel } from './components/copilot/CopilotPanel'
 import { api, apiDeviceToDeviceData } from './api'
 import { useStats } from './hooks/useStats'
 import { useNotifications } from './hooks/useNotifications'
-import type { ConnectedSource, DeviceData, AppUser } from './types'
+import type { ConnectedSource, DeviceData } from './types'
 import {
   getRunbookForDevice,
 } from './data/dashboardData'
@@ -108,7 +103,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 const PAGE_META: Record<string, { description: string }> = {
-  'Users':              { description: 'Find a user to open their cross-system risk view.' },
   'Reports & Analytics':{ description: 'Generate compliance reports and view trend analytics.' },
   'Settings':           { description: 'Configure integrations, notification preferences, and account settings.' },
 }
@@ -121,7 +115,6 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<DeviceData | null>(null)
   const [selectedSource, setSelectedSource] = useState<ConnectedSource | null>(null)
-  const [selectedIntelUser, setSelectedIntelUser] = useState<AppUser | null>(null)
   const { notify } = useToast()
 
   // Reset scroll position whenever the active page changes — the app has no
@@ -278,37 +271,29 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                     lastUpdated={lastUpdated}
                     onRefresh={refreshStats}
                     onNavigate={setActivePage}
+                    viewerRole={viewerRole}
+                    userEmail={userEmail}
                   />
-                ) : activePage === 'Mac Devices' ? (
-                  <MacDevicesPage
+                ) : activePage === 'Managed Devices' ? (
+                  <ManagedDevicesPage
+                    viewerRole={viewerRole as UserToolRole}
+                    userEmail={userEmail}
                     onBack={() => setActivePage('Dashboard')}
                     onViewDevice={async (deviceName) => {
                       await handleDeviceSelect(deviceName)
                       setActivePage('Dashboard')
                     }}
                   />
-                ) : activePage === 'Intune Devices' ? (
-                  <IntuneDevicesPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'ManageEngine App Inventory' ? (
-                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} />
+                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
+                ) : activePage === 'Stale Devices' ? (
+                  <StaleDevicesPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
+                ) : activePage === 'App Guardian' ? (
+                  <AppGuardianPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Mac Fleet Reports' ? (
                   <MacFleetReportsPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Entra Intelligence' ? (
                   <EntraIntelligenceDashboard />
-                ) : activePage === 'Users' ? (
-                  <UsersPage
-                    viewerRole={viewerRole as import('./types').UserToolRole}
-                    onOpenUser={u => { setSelectedIntelUser(u); setActivePage('User Intelligence') }}
-                  />
-                ) : activePage === 'User Intelligence' && selectedIntelUser ? (
-                  <UserIntelligencePage
-                    user={selectedIntelUser}
-                    onBack={() => { setSelectedIntelUser(null); setActivePage('Users') }}
-                    onViewDevice={async (deviceName) => {
-                      await handleDeviceSelect(deviceName)
-                      setActivePage('Dashboard')
-                    }}
-                  />
                 ) : activePage === 'Settings' ? (
                   <SettingsPage viewerRole={viewerRole as import('./types').UserToolRole} />
                 ) : activePage === 'Documentation' ? (
@@ -319,26 +304,18 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
                   <SecurityPosturePage />
                 ) : activePage === 'Role Activity Audit' ? (
                   <RoleActivityAuditPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
-                ) : activePage === 'Security Policies' ? (
-                  <SecurityPoliciesPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Automation' ? (
                   <AutomationPage />
 
-                // ── Intelligence Platform pages ────────────────────────────────
-                ) : activePage === 'Intelligence Hub' ? (
-                  <IntelligenceDashboardPage onNavigate={setActivePage} />
-                ) : activePage === 'Compliance Intelligence' ? (
-                  <ComplianceIntelPage onBack={() => setActivePage('Intelligence Hub')} />
+                // ── Policy / risk / report pages ───────────────────────────────
                 ) : activePage === 'Policy Conflicts' ? (
-                  <PolicyConflictPage onBack={() => setActivePage('Intelligence Hub')} />
+                  <PolicyConflictPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Risk Scoring' ? (
-                  <RiskScoringPage onBack={() => setActivePage('Intelligence Hub')} />
-                ) : activePage === 'Report Builder' ? (
-                  <ReportBuilderPage onBack={() => setActivePage('Intelligence Hub')} />
+                  <RiskScoringPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Patch Operations' ? (
+                  <PatchOperationsPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Scheduled Reports' ? (
-                  <ScheduledReportsPage onBack={() => setActivePage('Intelligence Hub')} />
-                ) : activePage === 'Audit Log' ? (
-                  <AuditLogPage onBack={() => setActivePage('Intelligence Hub')} />
+                  <ScheduledReportsPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
 
                 ) : (
                   <PlaceholderPage

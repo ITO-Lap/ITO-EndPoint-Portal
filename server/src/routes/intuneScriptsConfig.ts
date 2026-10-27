@@ -56,6 +56,8 @@ const listQuerySchema = z.object({
   search:   z.string().max(200).optional(),
   category: z.string().max(80).optional(),
   platform: z.string().max(40).optional(),
+  sortBy: z.enum(['name', 'category', 'platform', 'modified']).optional(),
+  sortDirection: z.enum(['asc', 'desc']).optional(),
   page:     z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
 })
@@ -96,6 +98,26 @@ router.get('/items', requireAppRole(ALLOWED_ROLES), asyncHandler(async (req, res
   if (q.search) {
     const needle = q.search.toLowerCase()
     filtered = filtered.filter(i => i.displayName.toLowerCase().includes(needle))
+  }
+
+  if (q.sortBy) {
+    const getSortValue = (item: typeof filtered[number]): string | null => {
+      switch (q.sortBy) {
+        case 'name': return item.displayName
+        case 'category': return item.category
+        case 'platform': return String(IMPLIED_PLATFORM[item.type] ?? item.raw.platforms ?? item.raw.platformType ?? '')
+        case 'modified': return item.lastModifiedDateTime
+        default: return null
+      }
+    }
+    const direction = q.sortDirection === 'desc' ? -1 : 1
+    filtered = [...filtered].sort((a, b) => {
+      const left = getSortValue(a)
+      const right = getSortValue(b)
+      if (left == null) return right == null ? 0 : 1
+      if (right == null) return -1
+      return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }) * direction
+    })
   }
 
   const total = filtered.length

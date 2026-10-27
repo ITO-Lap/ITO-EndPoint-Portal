@@ -1,3 +1,4 @@
+import type { MacAppClassification, MacAppSource } from './macAppClassification.js'
 import type { Device, AppStatus } from '../types.js'
 import type { RuntimeManageEngineConfig } from '../store/integrationStore.js'
 import { getManageEngineConfig } from '../store/integrationStore.js'
@@ -10,33 +11,57 @@ interface TokenCache {
   token: string
   expiresAt: number
   clientId: string
+  /** Space-separated scopes Zoho granted to this token. */
+  scope: string
 }
 
 let tokenCache: TokenCache | null = null
 
-async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<string> {
-  if (tokenCache && tokenCache.clientId === cfg.clientId && Date.now() < tokenCache.expiresAt - 60_000) {
-    return tokenCache.token
-  }
+// Zoho enforces a per-minute rate limit on token exchanges for a given
+// refresh token; back-to-back requests (e.g. two processes refreshing close
+// together) get a transient 429. Retry only that case — a 400 means the
+// refresh token/scope itself is invalid and retrying won't help.
+const TOKEN_RETRY_DELAYS_MS = [1_000, 3_000]
 
+async function requestAccessToken(cfg: RuntimeManageEngineConfig): Promise<{ access_token?: string; error?: string; expires_in?: number; scope?: string }> {
   const body = new URLSearchParams({
     refresh_token: cfg.refreshToken,
     client_id:     cfg.clientId,
     client_secret: cfg.clientSecret,
     grant_type:    'refresh_token',
   })
-  const res = await fetch('https://accounts.zoho.com/oauth/v2/token', { method: 'POST', body })
-  if (!res.ok) throw new Error(`ManageEngine auth failed: ${res.status} ${res.statusText}`)
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch('https://accounts.zoho.com/oauth/v2/token', { method: 'POST', body })
+    if (res.status === 429 && attempt < TOKEN_RETRY_DELAYS_MS.length) {
+      await new Promise(r => setTimeout(r, TOKEN_RETRY_DELAYS_MS[attempt]))
+      continue
+    }
+    if (!res.ok) throw new Error(`ManageEngine auth failed: ${res.status} ${res.statusText}`)
+    return res.json() as Promise<{ access_token?: string; error?: string; expires_in?: number; scope?: string }>
+  }
+}
 
-  const data = await res.json() as { access_token?: string; error?: string; expires_in?: number }
+export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<string> {
+  if (tokenCache && tokenCache.clientId === cfg.clientId && Date.now() < tokenCache.expiresAt - 60_000) {
+    return tokenCache.token
+  }
+
+  const data = await requestAccessToken(cfg)
   if (!data.access_token) throw new Error(`ManageEngine auth failed: ${data.error ?? 'no access_token returned'}`)
 
   tokenCache = {
     token:     data.access_token,
     expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
     clientId:  cfg.clientId,
+    scope:     data.scope ?? '',
   }
   return tokenCache.token
+}
+
+/** Scopes granted to the current ManageEngine OAuth token (empty if none reported). */
+export async function getGrantedScopes(cfg: RuntimeManageEngineConfig): Promise<string[]> {
+  await getAccessToken(cfg)
+  return (tokenCache?.scope ?? '').split(/[\s,]+/).filter(Boolean)
 }
 
 async function meGet<T>(cfg: RuntimeManageEngineConfig, path: string): Promise<T> {
@@ -54,12 +79,12 @@ async function meGet<T>(cfg: RuntimeManageEngineConfig, path: string): Promise<T
 
 // ── Device list ────────────────────────────────────────────────────────────
 
-interface MEUser {
+export interface MEUser {
   user_email?: string
   user_name?: string
 }
 
-interface MEDevice {
+export interface MEDevice {
   device_id: string
   device_name?: string
   serial_number?: string
@@ -81,7 +106,7 @@ interface MEDeviceListResponse {
   paging?: { next?: string; previous?: string }
 }
 
-interface MEDeviceDetail extends MEDevice {
+export interface MEDeviceDetail extends MEDevice {
   security?: {
     storage_encryption?: boolean
     passcode_present?: boolean
@@ -94,12 +119,39 @@ interface MEDeviceDetail extends MEDevice {
 }
 
 interface MEProfile {
-  profile_id: string
-  profile_name: string
-  status: string
+  profile_id?: string | number
+  profile_name?: string
+  status?: string
   remarks?: string
+  localized_remarks?: string
   applied_time?: string
 }
+
+export interface ManageEngineDeviceProfileResult {
+  profileId: string | null
+  profileName: string
+  status: string | null
+  remarks: string | null
+  localizedRemarks: string | null
+  appliedTime: string | null
+}
+
+export interface ManageEngineDeviceProfileSnapshot {
+  profiles: ManageEngineDeviceProfileResult[]
+  lastSuccessfulSyncAt: string
+  stale: boolean
+}
+
+export interface ManageEngineFleetProfileResult {
+  deviceId: string
+  snapshot: ManageEngineDeviceProfileSnapshot | null
+  unavailable: boolean
+}
+
+const profileResultsCache = new Map<string, ManageEngineDeviceProfileSnapshot>()
+const profileResultsInFlight = new Map<string, Promise<ManageEngineDeviceProfileSnapshot>>()
+const PROFILE_RESULTS_CACHE_TTL_MS = 5 * 60 * 1000
+const PROFILE_RESULTS_CONCURRENCY = 8
 
 interface MEApp {
   app_name: string
@@ -149,7 +201,8 @@ function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
   const encrypted = detail?.security?.storage_encryption
   const compliance = mapComplianceState(detail)
   const primaryIssue =
-    detail?.security?.device_rooted ? 'Device rooted/jailbroken'
+    !detail ? 'Compliance details unavailable'
+    : detail.security?.device_rooted ? 'Device rooted/jailbroken'
     : encrypted === false ? 'Storage encryption disabled'
     : detail?.security?.passcode_present === false ? 'No passcode set'
     : 'None'
@@ -169,8 +222,9 @@ function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
     lastCheckIn,
     complianceState:  compliance,
     encryptionStatus: encrypted === undefined ? 'Unknown' : encrypted ? 'Encrypted' : 'Not Encrypted',
+    passcodeStatus:   detail?.security?.passcode_present === undefined ? 'Unknown' : detail.security.passcode_present ? 'Present' : 'Missing',
     primaryIssue,
-    policyFailed:     primaryIssue === 'None' ? 'None' : 'Security Policy',
+    policyFailed:     !detail ? 'Compliance data not returned' : primaryIssue === 'None' ? 'None' : 'Security Policy',
     severity:         primaryIssue === 'None' ? 'Low' : detail?.security?.device_rooted ? 'Critical' : 'Medium',
     confidence:       detail ? '95%' : '60%',
     firstDetected:    'N/A',
@@ -191,7 +245,13 @@ function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
   }
 }
 
-const CONCURRENCY = 8
+// Per-device detail fetch (fetchDetailsBatched) is N+1 under the hood —
+// whether Zoho's MDM On-Demand API has a bulk/export endpoint to avoid this
+// hasn't been checked against their API docs. Until then, this concurrency
+// knob is the only lever available, tunable without a code change if the
+// fleet grows past ~800-1000 devices and 30s isn't enough headroom — raise
+// cautiously, Zoho may rate-limit a too-aggressive burst.
+const CONCURRENCY = Number(process.env.MANAGEENGINE_FETCH_CONCURRENCY) || 16
 
 // mdm/devices defaults to 50 records per page (limit unset) and never returns more than one page
 // on its own — callers must follow `paging.next`/increment `offset` until metadata.total_record_count
@@ -236,6 +296,30 @@ export async function getManageEngineDevices(cfg?: RuntimeManageEngineConfig): P
   return active.map(d => mapMEDevice(d, details.get(String(d.device_id)) ?? null))
 }
 
+/** Raw (unmapped) active-device records for modules that need fields the
+ *  normalized Device drops (e.g. epoch check-in time, storage as numbers).
+ *  Read-only; same endpoints and filtering as getManageEngineDevices. */
+export interface ManageEngineRawDevice {
+  device: MEDevice
+  detail: MEDeviceDetail | null
+}
+
+export async function getManageEngineRawDevices(cfg?: RuntimeManageEngineConfig): Promise<ManageEngineRawDevice[]> {
+  const config = cfg ?? getManageEngineConfig()
+  if (!config) throw new Error('ManageEngine credentials not configured')
+  const active = (await fetchAllMEDevices(config)).filter(isActiveDevice)
+  const details = await fetchDetailsBatched(config, active.map(d => String(d.device_id)))
+  return active.map(d => ({ device: d, detail: details.get(String(d.device_id)) ?? null }))
+}
+
+/** Read-only device list (no per-device detail calls) for modules that only need list-level fields such as
+ *  `last_contact_time`. Same active-device filtering as getManageEngineDevices. */
+export async function getManageEngineActiveDeviceList(cfg?: RuntimeManageEngineConfig): Promise<MEDevice[]> {
+  const config = cfg ?? getManageEngineConfig()
+  if (!config) throw new Error('ManageEngine credentials not configured')
+  return (await fetchAllMEDevices(config)).filter(isActiveDevice)
+}
+
 export function isManageEngineConfigured(): boolean {
   return !!getManageEngineConfig()
 }
@@ -274,10 +358,20 @@ export async function getManageEngineDeviceApps(deviceId: string, cfg?: RuntimeM
 //    this API/scope, so nothing here is fabricated — it's the newest real
 //    install seen anywhere in the tenant)
 
-export interface MEAppRaw {
+// Optional macOS classification fields (see macAppClassification.ts); absent for Windows rows.
+export interface MEAppClassificationFields {
+  classification?: MacAppClassification
+  classificationReason?: string
+  installSource?: MacAppSource
+  confidence?: 'high' | 'medium' | 'low'
+}
+
+export interface MEAppRaw extends MEAppClassificationFields {
   appId: string
   name: string
   version: string
+  bundleId?: string
+  reportedBy?: string[]
 }
 
 export interface MEAppLogEntry {
@@ -292,13 +386,21 @@ export interface MEAppLogEntry {
   // this scope). Always null; kept as a field rather than omitted so the UI
   // can show an honest "not reported" state instead of hiding the column.
   errorDetails: string | null
+  classification?: MacAppClassification
+  classificationReason?: string
 }
 
-export interface MEAppEntry {
+export interface MEAppEntry extends MEAppClassificationFields {
+  bundleId?: string
+  reportedBy?: string[]
   appId: string
   name: string
   platform: 'Windows' | 'macOS'
   installedVersions: string[]
+  /** Device totals per installed version. Intune can provide these before its
+   * per-device records are loaded, so version details remain useful in the
+   * inventory table. */
+  versionCounts?: Array<{ version: string; deviceCount: number }>
   latestVersion: string
   deviceCount: number
   updateStatus: 'Up to date' | 'Update Available' | 'Unknown'
@@ -331,6 +433,12 @@ export function dedupeDevicesBySerial(devices: Device[]): Device[] {
   }
   return Array.from(bySerial.values())
 }
+
+// Higher = more visible; mirrors macAppClassification's priority (managed > manual > unknown > system).
+const CLASSIFICATION_RANK: Record<MacAppClassification, number> = {
+  managed_self_service: 3, manual_or_user_installed: 2, unknown_review_required: 1, system_preinstalled: 0,
+}
+const classificationRank = (c: MacAppClassification): number => CLASSIFICATION_RANK[c]
 
 function parseVersionParts(v: string): number[] | null {
   const nums = v.match(/\d+/g)
@@ -402,8 +510,23 @@ export function buildAppInventory(
           deviceCount: 0,
           updateStatus: 'Unknown',
           logs: [],
+          ...(app.bundleId ? { bundleId: app.bundleId } : {}),
+          ...(app.classification ? {
+            classification: app.classification, classificationReason: app.classificationReason ?? '',
+            installSource: app.installSource ?? 'unknown', confidence: app.confidence ?? 'low',
+          } : {}),
+          ...(app.reportedBy ? { reportedBy: [...app.reportedBy] } : {}),
         }
         bucket.set(app.appId, entry)
+      } else {
+        // Same app on another device: keep the most visible classification and the union of reporters.
+        if (app.classification && (!entry.classification || classificationRank(app.classification) > classificationRank(entry.classification))) {
+          entry.classification = app.classification
+          entry.classificationReason = app.classificationReason ?? ''
+          entry.installSource = app.installSource ?? 'unknown'
+          entry.confidence = app.confidence ?? 'low'
+        }
+        if (app.reportedBy) entry.reportedBy = [...new Set([...(entry.reportedBy ?? []), ...app.reportedBy])]
       }
 
       const version = app.version || 'Unknown'
@@ -416,6 +539,7 @@ export function buildAppInventory(
         status: 'Installed', // corrected to reflect update status once latestVersion is known, below
         lastSeen: device.lastCheckIn,
         errorDetails: null,
+        ...(app.classification ? { classification: app.classification, classificationReason: app.classificationReason ?? '' } : {}),
       })
     }
   }
@@ -430,6 +554,10 @@ export function buildAppInventory(
       entry.logs = entry.logs.map(l => ({
         ...l,
         status: l.version === 'Unknown' ? 'Unknown' : l.version === entry.latestVersion ? 'Installed' : 'Update Available',
+      }))
+      entry.versionCounts = entry.installedVersions.map(version => ({
+        version,
+        deviceCount: entry.logs.filter(log => log.version === version).length,
       }))
     }
   }
@@ -450,12 +578,18 @@ async function getManageEngineDeviceAppsRaw(deviceId: string, cfg: RuntimeManage
 }
 
 const APPS_CACHE_TTL_MS = 5 * 60 * 1000
-let appsCache: { entries: { windows: MEAppEntry[]; macos: MEAppEntry[] }; expiresAt: number } | null = null
+// A partial read must not be served as complete for the full TTL.
+const APPS_PARTIAL_CACHE_TTL_MS = 60 * 1000
 
-export async function getManageEngineAppInventory(
+/** How many enrolled devices had their installed-app list read; unread devices are missing from every count. */
+export interface ManageEngineAppCoverage { devicesTotal: number; devicesRead: number; devicesUnread: number; unreadSample: string[] }
+
+let appsCache: { entries: { windows: MEAppEntry[]; macos: MEAppEntry[] }; coverage: ManageEngineAppCoverage; expiresAt: number } | null = null
+
+export async function getManageEngineAppInventoryWithCoverage(
   cfg?: RuntimeManageEngineConfig,
-): Promise<{ windows: MEAppEntry[]; macos: MEAppEntry[] }> {
-  if (appsCache && Date.now() < appsCache.expiresAt) return appsCache.entries
+): Promise<{ entries: { windows: MEAppEntry[]; macos: MEAppEntry[] }; coverage: ManageEngineAppCoverage }> {
+  if (appsCache && Date.now() < appsCache.expiresAt) return { entries: appsCache.entries, coverage: appsCache.coverage }
 
   const config = cfg ?? getManageEngineConfig()
   if (!config) throw new Error('ManageEngine credentials not configured')
@@ -464,17 +598,32 @@ export async function getManageEngineAppInventory(
   const devices = dedupeDevicesBySerial(rawDevices)
 
   const appsByDeviceId = new Map<string, MEAppRaw[]>()
+  const readOnce = async (id: string) => {
+    try { return await getManageEngineDeviceAppsRaw(id, config) }
+    catch { return await getManageEngineDeviceAppsRaw(id, config) } // one retry for transient 429/5xx
+  }
   for (let i = 0; i < devices.length; i += CONCURRENCY) {
     const batch = devices.slice(i, i + CONCURRENCY)
-    const settled = await Promise.allSettled(batch.map(d => getManageEngineDeviceAppsRaw(d.id, config)))
+    const settled = await Promise.allSettled(batch.map(d => readOnce(d.id)))
     settled.forEach((s, idx) => {
       if (s.status === 'fulfilled') appsByDeviceId.set(batch[idx]!.id, s.value)
     })
   }
 
+  const unread = devices.filter(d => !appsByDeviceId.has(d.id))
+  const coverage: ManageEngineAppCoverage = {
+    devicesTotal: devices.length, devicesRead: devices.length - unread.length, devicesUnread: unread.length,
+    unreadSample: unread.slice(0, 5).map(d => d.deviceName),
+  }
   const entries = buildAppInventory(devices, appsByDeviceId)
-  appsCache = { entries, expiresAt: Date.now() + APPS_CACHE_TTL_MS }
-  return entries
+  appsCache = { entries, coverage, expiresAt: Date.now() + (unread.length ? APPS_PARTIAL_CACHE_TTL_MS : APPS_CACHE_TTL_MS) }
+  return { entries, coverage }
+}
+
+export async function getManageEngineAppInventory(
+  cfg?: RuntimeManageEngineConfig,
+): Promise<{ windows: MEAppEntry[]; macos: MEAppEntry[] }> {
+  return (await getManageEngineAppInventoryWithCoverage(cfg)).entries
 }
 
 // ── Per-device applied profiles (policy / configuration) ───────────────────
@@ -485,4 +634,92 @@ export async function getManageEngineDevicePolicies(deviceId: string, cfg?: Runt
 
   const data = await meGet<{ profiles: MEProfile[] }>(config, `mdm/devices/${deviceId}/profiles`)
   return (data.profiles ?? []).map(p => `${p.profile_name} — ${p.remarks || (p.status === '6' ? 'Applied' : 'Status ' + p.status)}`)
+}
+
+/**
+ * Return Endpoint Central's documented per-device profile association results.
+ * The API does not provide an overall device compliance verdict through this
+ * resource, so status values are passed through without interpreting them.
+ */
+export async function getManageEngineDeviceProfileResults(
+  deviceId: string,
+  cfg?: RuntimeManageEngineConfig,
+): Promise<ManageEngineDeviceProfileSnapshot> {
+  const config = cfg ?? getManageEngineConfig()
+  if (!config) throw new Error('ManageEngine credentials not configured')
+
+  const cacheKey = `${config.apiDomain.replace(/\/$/, '')}:${config.clientId}:${deviceId}`
+  const cachedSnapshot = profileResultsCache.get(cacheKey)
+  if (cachedSnapshot && Date.now() - Date.parse(cachedSnapshot.lastSuccessfulSyncAt) < PROFILE_RESULTS_CACHE_TTL_MS) {
+    return cachedSnapshot
+  }
+  const inFlight = profileResultsInFlight.get(cacheKey)
+  if (inFlight) return inFlight
+
+  const request = (async (): Promise<ManageEngineDeviceProfileSnapshot> => {
+    try {
+      const data = await meGet<{ profiles?: unknown }>(
+        config,
+        `mdm/devices/${encodeURIComponent(deviceId)}/profiles`,
+      )
+      if (!Array.isArray(data.profiles)) throw new Error('ManageEngine profile response did not contain a profiles array')
+
+      const snapshot: ManageEngineDeviceProfileSnapshot = {
+        profiles: data.profiles.map((entry: unknown) => {
+          const profile = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+          const profileId = profile.profile_id
+          const appliedTime = profile.applied_time
+          return {
+            profileId: typeof profileId === 'string' || typeof profileId === 'number' ? String(profileId) : null,
+            profileName: typeof profile.profile_name === 'string' ? profile.profile_name : 'Unknown profile',
+            status: typeof profile.status === 'string' ? profile.status : null,
+            remarks: typeof profile.remarks === 'string' ? profile.remarks : null,
+            localizedRemarks: typeof profile.localized_remarks === 'string' ? profile.localized_remarks : null,
+            appliedTime: typeof appliedTime === 'string' || typeof appliedTime === 'number' ? String(appliedTime) : null,
+          }
+        }),
+        lastSuccessfulSyncAt: new Date().toISOString(),
+        stale: false,
+      }
+      profileResultsCache.set(cacheKey, snapshot)
+      return snapshot
+    } catch (error) {
+      const cached = profileResultsCache.get(cacheKey)
+      if (cached) return { ...cached, stale: true }
+      throw error
+    }
+  })()
+
+  profileResultsInFlight.set(cacheKey, request)
+  try {
+    return await request
+  } finally {
+    if (profileResultsInFlight.get(cacheKey) === request) profileResultsInFlight.delete(cacheKey)
+  }
+}
+
+export async function getManageEngineDeviceProfileResultsForDevices(
+  deviceIds: string[],
+  cfg?: RuntimeManageEngineConfig,
+): Promise<ManageEngineFleetProfileResult[]> {
+  const config = cfg ?? getManageEngineConfig()
+  if (!config) throw new Error('ManageEngine credentials not configured')
+  await getAccessToken(config)
+
+  const uniqueIds = [...new Set(deviceIds)]
+  const results: ManageEngineFleetProfileResult[] = []
+
+  for (let i = 0; i < uniqueIds.length; i += PROFILE_RESULTS_CONCURRENCY) {
+    const batch = uniqueIds.slice(i, i + PROFILE_RESULTS_CONCURRENCY)
+    const settled = await Promise.allSettled(batch.map(deviceId => getManageEngineDeviceProfileResults(deviceId, config)))
+    settled.forEach((result, index) => {
+      results.push({
+        deviceId: batch[index]!,
+        snapshot: result.status === 'fulfilled' ? result.value : null,
+        unavailable: result.status === 'rejected',
+      })
+    })
+  }
+
+  return results
 }

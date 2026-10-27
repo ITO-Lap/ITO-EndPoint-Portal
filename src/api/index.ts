@@ -87,7 +87,189 @@ export interface DeviceAnalysis {
   steps: string[]
 }
 
+export interface PatchSystemStatus {
+  resourceId: string
+  /** Id the per-system patch report filters on (allsystems `resource_id_string`). */
+  detailResourceId: string
+  platform: 'Windows' | 'Mac' | 'Linux' | 'Other'
+  names: string[]
+  missingOsPatches: number
+  missingThirdPartyPatches: number
+  missingDriverPatches: number
+  missingBiosPatches: number
+  criticalPatchCount: number
+  importantPatchCount: number
+  moderatePatchCount: number
+  lowPatchCount: number
+  lastScanTime: string | null
+  lastSuccessfulScanTime: string | null
+  scanSucceeded: boolean
+}
+
+export type MissingPatchView = 'critical' | 'all' | 'os' | 'app'
+export type MissingPatchSeverity = 'Critical' | 'Important' | 'Moderate' | 'Low' | 'Unrated'
+
+export interface MissingPatch {
+  patchId: string
+  name: string
+  description: string
+  severity: MissingPatchSeverity
+  category: 'OS update' | 'Application update' | 'Other'
+  vendor: string | null
+  updateType: string | null
+  kb: string | null
+  bulletinId: string | null
+  cves: string[]
+  releasedAt: string | null
+  rebootRequirement: string | null
+  approvalStatus: string | null
+  deploymentStatus: string | null
+}
+
+export interface MissingPatchesResponse {
+  status: 'ok' | 'not_configured' | 'scope_required' | 'error'
+  patches: MissingPatch[]
+  fetchedAt?: string
+}
+
+export type PostureSource = 'all' | 'intune' | 'manageengine'
+export type PosturePillarId = 'encryption' | 'patching' | 'compliance' | 'checkin'
+
+export interface PosturePillarDevice {
+  id: string
+  deviceName: string
+  user: string
+  platform: string
+  source: string
+  serialNumber: string
+  status: 'pass' | 'fail' | 'unknown'
+  detail: string
+  /** Itemised findings, e.g. the missing critical patches on this device. */
+  items?: string[]
+}
+
+export interface PillarDeviceList {
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+  rows: PosturePillarDevice[]
+}
+
+export interface PillarDevicesParams {
+  source?: PostureSource
+  platform?: string
+  sourceKey?: string
+  status?: 'pass' | 'fail' | 'unknown'
+  q?: string
+  sortKey?: 'deviceName' | 'user' | 'platform' | 'source' | 'detail'
+  sortDir?: 'asc' | 'desc'
+  page?: number
+  pageSize?: number
+}
+
+export interface PostureBreakdownRow { key: string; assessed: number; passing: number; failing: number; notReported: number }
+
+export interface PosturePillar {
+  id: PosturePillarId
+  label: string
+  description: string
+  scope: string
+  weight: number
+  inScope: number
+  assessed: number
+  passing: number
+  failing: number
+  notReported: number
+  scorePct: number | null
+  unavailableReason?: string
+  byPlatform: PostureBreakdownRow[]
+  bySource: PostureBreakdownRow[]
+  topFindings: Array<{ label: string; devices: number }>
+}
+
+export interface SecurityPostureResult {
+  generatedAt: string
+  source: PostureSource
+  deviceCount: number
+  sourceCounts: { intune: number; manageengine: number }
+  pillars: PosturePillar[]
+  overall: { score: number | null; assessedPillars: number; totalPillars: number }
+}
+
+export interface PatchSystemsResponse {
+  configured: boolean
+  systems: PatchSystemStatus[]
+  error?: string
+}
+
+export interface PatchSeverityCounts { critical: number; high: number; other: number }
+export interface TopMissingPatch { name: string; kb: string | null; severity: string; deviceCount: number }
+export interface PatchPrioritySummaryResponse {
+  configured: boolean
+  windows: PatchSeverityCounts
+  macos: PatchSeverityCounts
+  topPatches: { windows: TopMissingPatch[]; macos: TopMissingPatch[] }
+  generatedAt?: string
+  error?: string
+}
+
+export type QueuePriority = 'Critical' | 'High' | 'Medium'
+export interface OperationalQueueRow {
+  deviceId: string
+  device: string
+  owner: string
+  issue: string
+  source: string
+  ageDays: number | null
+  priority: QueuePriority
+}
+export interface OperationalQueueResult { rows: OperationalQueueRow[]; generatedAt: string }
+
+export type EndpointHealthLevel = 'healthy' | 'attention' | 'high_risk' | 'critical'
+export interface EndpointHealthScore {
+  resourceId: string
+  detailResourceId: string
+  deviceName: string
+  platform: 'Windows' | 'Mac' | 'Linux' | 'Other'
+  osName?: string
+  score: number
+  level: EndpointHealthLevel
+  factors: Array<{ label: string; points: number }>
+  lastSuccessfulScanTime: string | null
+  criticalPatchCount: number
+  missingPatchCount: number
+}
+export interface PatchOperationsDashboard {
+  generatedAt: string
+  connector: { configured: boolean; healthy: boolean; latencyMs: number | null; message: string; lastRefreshAt: string | null }
+  coverage: { discovered: number; clientOs: number; assessed: number; unscanned: number; staleScans: number }
+  health: { score: number | null; level: EndpointHealthLevel | null; critical: number; highRisk: number; attention: number; healthy: number }
+  devices: EndpointHealthScore[]
+}
+export interface PatchRemediationAction {
+  id: string
+  type: 'scan' | 'deploy'
+  status: 'pending' | 'executed' | 'failed' | 'expired'
+  actorEmail: string
+  actorRole: string
+  createdAt: string
+  expiresAt: string
+  executedAt?: string
+  error?: string
+  resourceIds: string[]
+  patchIds?: string[]
+  deploymentPolicyTemplateId?: string
+  deadlineTime?: number
+}
+
 export interface ApiDevice {
+  /** Endpoint Central Patch Manager data — only present for agent-managed devices. */
+  patchStatus?: PatchSystemStatus
+  /** Project-calculated posture score (src/lib/macPostureScore.ts) — NOT a ManageEngine compliance verdict. */
+  posture?: import('../lib/macPostureScore').MacPostureScore
+  /** MDM-reported passcode state ('Unknown' when the source does not return it). */
+  passcodeStatus?: 'Present' | 'Missing' | 'Unknown'
   id: string
   deviceName: string
   user: string
@@ -149,6 +331,33 @@ export interface ApiDevice {
   laps?: LapsInfo
 }
 
+export interface ManageEngineDeviceProfileResult {
+  profileId: string | null
+  profileName: string
+  status: string | null
+  remarks: string | null
+  localizedRemarks: string | null
+  appliedTime: string | null
+}
+
+export interface ManageEngineDeviceProfileSnapshot {
+  profiles: ManageEngineDeviceProfileResult[]
+  lastSuccessfulSyncAt: string
+  stale: boolean
+}
+
+export interface ManageEngineFleetProfileResult {
+  deviceId: string
+  snapshot: ManageEngineDeviceProfileSnapshot | null
+  unavailable: boolean
+}
+
+export interface ManageEngineFleetProfileResultsResponse {
+  results: ManageEngineFleetProfileResult[]
+  deviceCount: number
+  unavailableCount: number
+}
+
 export interface ApiNotification {
   id: string
   message: string
@@ -178,7 +387,12 @@ export interface LapsInfo {
   passwordExpiresAt?: string
 }
 
+export type MacAppClassification = 'system_preinstalled' | 'managed_self_service' | 'manual_or_user_installed' | 'unknown_review_required'
+export type MacAppSource = 'intune' | 'endpoint_central' | 'self_service' | 'manual' | 'unknown'
+
 export interface ManageEngineAppLogEntry {
+  classification?: MacAppClassification
+  classificationReason?: string
   deviceId: string
   deviceName: string
   version: string
@@ -188,10 +402,19 @@ export interface ManageEngineAppLogEntry {
 }
 
 export interface ManageEngineAppEntry {
+  /** macOS only — see server/src/services/macAppClassification.ts. */
+  classification?: MacAppClassification
+  classificationReason?: string
+  installSource?: MacAppSource
+  confidence?: 'high' | 'medium' | 'low'
+  reportedBy?: string[]
+  bundleId?: string
   appId: string
   name: string
   platform: 'Windows' | 'macOS'
   installedVersions: string[]
+  /** Aggregate device totals are included even when detailed device logs load on demand. */
+  versionCounts?: Array<{ version: string; deviceCount: number }>
   latestVersion: string
   deviceCount: number
   updateStatus: 'Up to date' | 'Update Available' | 'Unknown'
@@ -207,6 +430,8 @@ export interface IntegrationStatusItem {
   latencyMs: number | null
   error: string | null
   healthy: boolean | null
+  /** Slack only — distinguishes outbound alerts from a full Bot OAuth integration. */
+  connectionType?: 'incoming_webhook' | 'bot_api' | null
 }
 
 // ── Reporting ─────────────────────────────────────────────────────────────────
@@ -304,12 +529,14 @@ export type CoverageHealth = 'Healthy' | 'Warning' | 'Critical'
 export interface PlatformCoverage {
   platform: 'Windows' | 'macOS'
   totalDevices: number
+  inventoryAvailableDevices: number
+  inventoryUnavailableDevices: number
   falconInstalled: number
   zscalerInstalled: number
   falconMissing: number
   zscalerMissing: number
-  falconCoveragePct: number
-  zscalerCoveragePct: number
+  falconCoveragePct: number | null
+  zscalerCoveragePct: number | null
   health: CoverageHealth
 }
 
@@ -326,6 +553,29 @@ export interface MissingAgentDevice {
   primaryUser: string
   connector: 'Microsoft Intune' | 'ManageEngine'
   lastSync: string
+}
+
+export interface MacSecurityAppDevice {
+  deviceId: string
+  deviceName: string
+  primaryUser: string
+  connector: 'Microsoft Intune' | 'ManageEngine'
+  lastSync: string
+  inventoryAvailable: boolean
+  zscaler: { installed: boolean; version: string | null }
+  crowdstrike: { installed: boolean; version: string | null }
+}
+
+export interface MacSecurityAppInventory {
+  platform: 'macOS'
+  totalDevices: number
+  inventoryAvailableDevices: number
+  inventoryUnavailableDevices: number
+  zscalerInstalled: number
+  crowdstrikeInstalled: number
+  /** Macs where both required security applications were found. */
+  bothAppsInstalled: number
+  devices: MacSecurityAppDevice[]
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -353,6 +603,17 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   const data = await res.json()
   if (!data.success) throw new Error(data.error ?? 'API error')
   return data.data as T
+}
+
+async function postAs<T>(path: string, body: unknown, role: string, email?: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-user-role': role, 'x-user-email': email ?? '' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({})) as { success?: boolean; data?: T; error?: string }
+  if (!res.ok || !data.success || !data.data) throw new Error(data.error ?? `${path}: ${res.status}`)
+  return data.data
 }
 
 async function put<T>(path: string, body: unknown): Promise<T> {
@@ -488,9 +749,6 @@ export interface CreateAutomationRuleInput {
   createdBy: string
 }
 
-export type { UserSignIn, UserDetails, UserDeviceDetail, UserHealthScore, UserIntelligenceTab } from '../types'
-import type { UserDetails } from '../types'
-
 export const api = {
   fetchStats:    () => get<ApiStats>('/api/devices/stats'),
   fetchDevices:  (q?: string) =>
@@ -523,8 +781,46 @@ export const api = {
   fetchDevicePolicies: (id: string) =>
     get<string[]>(`/api/devices/${id}/policies`),
 
-  fetchManageEngineAppsInventory: () =>
-    get<{ windows: ManageEngineAppEntry[]; macos: ManageEngineAppEntry[] }>('/api/integrations/manageengine/apps'),
+  fetchManageEngineDeviceProfileResults: (id: string) =>
+    get<ManageEngineDeviceProfileSnapshot>(`/api/devices/${encodeURIComponent(id)}/profile-results`),
+
+  fetchSecurityPosture: (source: PostureSource = 'all', refresh = false) =>
+    get<SecurityPostureResult>(`/api/security-posture?source=${source}${refresh ? '&refresh=1' : ''}`),
+
+  fetchPillarDevices: (pillarId: PosturePillar['id'], params: PillarDevicesParams = {}) => {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v))
+    return get<PillarDeviceList>(`/api/security-posture/pillars/${pillarId}/devices?${qs}`)
+  },
+
+  fetchPatchSystems: (platform?: 'Windows' | 'Mac' | 'Linux') =>
+    get<PatchSystemsResponse>(`/api/patch/systems${platform ? `?platform=${platform}` : ''}`),
+
+  fetchPatchPrioritySummary: () =>
+    get<PatchPrioritySummaryResponse>('/api/patch/priority-summary'),
+
+  fetchOperationalQueue: () =>
+    get<OperationalQueueResult>('/api/dashboard/operational-queue'),
+
+  fetchMissingPatches: (resourceId: string, view: MissingPatchView, refresh = false) =>
+    get<MissingPatchesResponse>(`/api/endpoint-central/devices/${encodeURIComponent(resourceId)}/missing-patches?view=${view}${refresh ? '&refresh=1' : ''}`),
+
+  fetchPatchOperations: (refresh = false) =>
+    get<PatchOperationsDashboard>(`/api/endpoint-central/operations${refresh ? '?refresh=1' : ''}`),
+  previewPatchRemediation: (input: { type: 'scan'; resourceIds: string[] } | { type: 'deploy'; resourceIds: string[]; patchIds: string[]; deploymentPolicyTemplateId: string; deadlineTime?: number }, role: string, email?: string) =>
+    postAs<PatchRemediationAction>('/api/endpoint-central/remediation/preview', input, role, email),
+  confirmPatchRemediation: (id: string, role: string, email?: string) =>
+    postAs<PatchRemediationAction>(`/api/endpoint-central/remediation/${encodeURIComponent(id)}/confirm`, {}, role, email),
+
+  fetchManageEngineFleetProfileResults: () =>
+    get<ManageEngineFleetProfileResultsResponse>('/api/devices/manageengine/profile-results'),
+
+  fetchManageEngineAppsInventory: (refresh = false, includeSystem = false) =>
+    get<{ windows: ManageEngineAppEntry[]; macos: ManageEngineAppEntry[]; coverage: { devices: number; withInventory: number; failed: number; windows: { devices: number; scanned: number }; macos: { devices: number; scanned: number } }; progress: { status: 'idle' | 'running'; scanned: number; total: number; startedAt: string | null; finishedAt: string | null }; hiddenSystemApps: number }>(`/api/integrations/manageengine/apps?${new URLSearchParams({ ...(refresh ? { refresh: '1' } : {}), ...(includeSystem ? { includeSystem: '1' } : {}) })}`),
+  fetchIntuneSelfServiceAppDevices: (appId: string) =>
+    get<ManageEngineAppLogEntry[]>(`/api/integrations/intune/self-service-apps/devices?appId=${encodeURIComponent(appId)}`),
+  fetchIntuneSelfServiceApps: (refresh = false) =>
+    get<{ windows: ManageEngineAppEntry[]; catalogWindowsApps: number; progress: { status: 'idle' | 'running'; startedAt: string | null; finishedAt: string | null; error: string | null } }>(`/api/integrations/intune/self-service-apps${refresh ? '?refresh=1' : ''}`),
 
   fetchEndpointProtectionCoverage: () =>
     get<EndpointProtectionCoverageResult>('/api/security-inventory/coverage'),
@@ -550,12 +846,6 @@ export const api = {
     post<{ id: string; configured: boolean }>(`/api/integrations/${id}/credentials`, { fields }),
   syncIntegration: (id: string) =>
     post<IntegrationSyncResult>(`/api/integrations/${id}/sync`, {}),
-
-  // Users (Microsoft Entra ID)
-  fetchUsers: () =>
-    get<import('../types').AppUser[]>('/api/users'),
-  fetchUserDetails: (id: string, email?: string) =>
-    get<UserDetails>(`/api/users/${encodeURIComponent(id)}${email ? `?email=${encodeURIComponent(email)}` : ''}`),
 
   // Jira
   jiraStatus: () =>

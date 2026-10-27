@@ -149,6 +149,20 @@ describe('buildPlatformCoverage', () => {
     expect(coverage.falconCoveragePct).toBe(60)
     expect(coverage.health).toBe('Critical')
   })
+
+  it('does not count failed app-inventory lookups as confirmed missing agents', () => {
+    const statuses = scanFleet([
+      { device: makeDevice(), apps: [], inventoryAvailable: false },
+    ], '2026-08-07T00:00:00Z', collectors)
+    const coverage = buildPlatformCoverage(statuses, 'Windows')
+
+    expect(coverage.inventoryUnavailableDevices).toBe(1)
+    expect(coverage.inventoryAvailableDevices).toBe(0)
+    expect(coverage.falconMissing).toBe(0)
+    expect(coverage.falconCoveragePct).toBeNull()
+    expect(coverage.health).toBe('Warning')
+    expect(listDevicesMissingAgent(statuses, 'Windows', 'crowdstrike')).toHaveLength(0)
+  })
 })
 
 describe('listDevicesMissingAgent', () => {

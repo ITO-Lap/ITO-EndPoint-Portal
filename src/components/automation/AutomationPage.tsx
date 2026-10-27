@@ -14,6 +14,8 @@ import type { AutomationRule, AutomationCategory, AutomationActionType, Automati
 import { useToast } from '../ui/ToastProvider'
 import { usePagination } from '../../hooks/usePagination'
 import { Pagination } from '../ui/Pagination'
+import { SortableHeader } from '../ui/SortableHeader'
+import { sortRows, toggleSortDirection, type SortDirection } from '../../lib/tableSorting'
 import { useCopilotPageContext } from '../../context/CopilotContextProvider'
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
@@ -431,6 +433,8 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
   const { executions, loading } = useAutomationExecutions(undefined, 50)
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed' | 'partial'>('all')
   const [selectedExec, setSelectedExec] = useState<AutomationExecution | null>(null)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   // Page-context awareness for the Endpoint Operations Copilot — set the
   // specific run id when one is open in the detail drawer.
@@ -441,7 +445,21 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
   }, [selectedExec, setCopilotPageContext])
 
   const filtered = statusFilter === 'all' ? executions : executions.filter(e => e.status === statusFilter)
-  const { page, setPage, totalPages, paginated } = usePagination(filtered, HISTORY_PAGE_SIZE)
+  const sortedExecutions = sortKey ? sortRows(filtered, execution => {
+    switch (sortKey) {
+      case 'ruleName': return execution.ruleName
+      case 'status': return execution.status
+      case 'started': return Date.parse(execution.triggeredAt) || execution.triggeredAt
+      case 'result': return execution.triggerReason
+      case 'duration': return execution.durationMs
+      default: return ''
+    }
+  }, sortDirection) : filtered
+  const { page, setPage, totalPages, paginated } = usePagination(sortedExecutions, HISTORY_PAGE_SIZE)
+  const handleSort = (key: string) => {
+    setSortDirection(direction => toggleSortDirection(sortKey, direction, key))
+    setSortKey(key)
+  }
 
   const hasDetail = (exec: AutomationExecution) =>
     exec.actionsExecuted.some(a => a.detail && Object.keys(a.detail).length > 0)
@@ -463,7 +481,7 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
             onClick={() => setStatusFilter(s)}
             className={`rounded-full border px-3 py-1 text-[0.68rem] font-semibold transition capitalize ${
               statusFilter === s
-                ? 'border-[#F46C00] bg-[#F46C00] text-white'
+                ? 'is-selected'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
@@ -494,11 +512,11 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <tr>
-                    <th className="px-4 py-3 text-left">Rule Name</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-left">Started</th>
-                    <th className="px-4 py-3 text-left">Result</th>
-                    <th className="px-4 py-3 text-right">Duration</th>
+                    <SortableHeader label="Rule Name" sortKey="ruleName" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-3 text-left" />
+                    <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-3 text-left" />
+                    <SortableHeader label="Started" sortKey="started" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-3 text-left" />
+                    <SortableHeader label="Result" sortKey="result" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-3 text-left" />
+                    <SortableHeader label="Duration" sortKey="duration" activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} className="px-4 py-3 text-right" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -852,6 +870,8 @@ interface CreateRuleForm {
   severity: 'Low' | 'Medium' | 'High' | 'Critical' | 'all'
   complianceState: 'Non-Compliant' | 'Warning' | 'all'
   actions: AutomationActionType[]
+  scheduleCron: string
+  slackChannel: string
   _aiReasoning?: string
 }
 
@@ -873,6 +893,8 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
     severity: 'all',
     complianceState: 'all',
     actions: ['send_notification'],
+    scheduleCron: '0 8 * * 1-5',
+    slackChannel: '',
     ...prefill,
   })
 
@@ -894,12 +916,12 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
         description: form.description,
         category:    form.category,
         enabled:     form.enabled,
-        trigger:     { type: form.triggerType, config: {} },
+        trigger:     { type: form.triggerType, config: form.triggerType === 'scheduled' ? { scheduleCron: form.scheduleCron } : {} },
         conditions:  { platform: form.platform, source: form.source, severity: form.severity, complianceState: form.complianceState },
         actions:     form.actions.map(type => ({
           type,
           label: ACTION_OPTIONS.find(a => a.value === type)?.label ?? type,
-          config: {},
+          config: type === 'slack_notify' && form.slackChannel.trim() ? { channel: form.slackChannel.trim() } : {},
         })),
         createdBy: 'Global Admin',
       })
@@ -933,6 +955,14 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
               <X className="h-4 w-4 text-slate-400" />
             </button>
           </div>
+
+          {form.triggerType === 'scheduled' && (
+            <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-3">
+              <label className="block text-[0.65rem] font-bold text-orange-800 mb-1">Run schedule</label>
+              <input value={form.scheduleCron} onChange={e => setForm(f => ({ ...f, scheduleCron: e.target.value }))} placeholder="0 8 * * 1-5" className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none" />
+              <p className="mt-1 text-[0.58rem] text-orange-700">5-field cron in server time. Example: <code>0 8 * * 1-5</code> sends weekdays at 8:00.</p>
+            </div>
+          )}
           <div className="mt-3 h-[2px] w-12 rounded-full" style={{ background: 'linear-gradient(90deg, #FFC600, #F46C00)' }} />
         </div>
 
@@ -1013,6 +1043,14 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
             </select>
           </div>
 
+          {form.actions.includes('slack_notify') && (
+            <div className="rounded-xl border border-[#4A154B]/20 bg-[#4A154B]/[0.03] p-3">
+              <label className="block text-[0.65rem] font-bold text-[#4A154B] mb-1">Slack channel ID</label>
+              <input value={form.slackChannel} onChange={e => setForm(f => ({ ...f, slackChannel: e.target.value }))} placeholder="C08S9K7G2AH" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none" />
+              <p className="mt-1 text-[0.58rem] text-slate-500">Optional for event rules; required for a precise scheduled Slack destination.</p>
+            </div>
+          )}
+
           {/* Conditions */}
           <div>
             <label className="block text-[0.65rem] font-bold text-slate-600 mb-1.5">
@@ -1055,7 +1093,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
                     onClick={() => toggleAction(action.value)}
                     className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[0.68rem] transition ${
                       selected
-                        ? 'border-[#F46C00] bg-orange-50 text-[#F46C00] font-bold'
+                        ? 'is-selected font-bold'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >

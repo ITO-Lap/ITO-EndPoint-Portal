@@ -147,6 +147,8 @@ export interface ListParams {
   search?: string
   category?: ResourceCategory
   platform?: string
+  sortBy?: 'name' | 'category' | 'platform' | 'modified'
+  sortDirection?: 'asc' | 'desc'
   page: number
   pageSize: number
 }

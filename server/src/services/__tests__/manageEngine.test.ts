@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import {
+  getManageEngineDeviceProfileResults,
+  getManageEngineDeviceProfileResultsForDevices,
   classifyAppPlatform,
   dedupeDevicesBySerial,
   compareVersions,
@@ -8,6 +10,117 @@ import {
   type MEAppRaw,
 } from '../manageEngine.js'
 import type { Device } from '../../types.js'
+
+const testConfig = {
+  clientId: 'profile-results-test-client',
+  clientSecret: 'test-secret',
+  refreshToken: 'test-refresh-token',
+  apiDomain: 'https://mdm.example.test',
+}
+
+function mockManageEngineFetch(apiResponse: Response | Error, tokenResponse = new Response(JSON.stringify({ access_token: 'test-access-token' }), { status: 200 })) {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(tokenResponse)
+    .mockImplementationOnce(() => apiResponse instanceof Error ? Promise.reject(apiResponse) : Promise.resolve(apiResponse))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+afterEach(() => vi.unstubAllGlobals())
+
+describe('getManageEngineDeviceProfileResults', () => {
+  it('preserves the API profile status and documented result fields', async () => {
+    const fetchMock = mockManageEngineFetch(new Response(JSON.stringify({ profiles: [{
+      profile_id: 123,
+      profile_name: 'FileVault Baseline',
+      status: 'SCHEDULED',
+      remarks: 'Executed Successfully',
+      localized_remarks: 'Applied',
+      applied_time: 1780000000000,
+    }] }), { status: 200 }))
+
+    await expect(getManageEngineDeviceProfileResults('mac-device-123', testConfig)).resolves.toMatchObject({
+      profiles: [{
+        profileId: '123',
+        profileName: 'FileVault Baseline',
+        status: 'SCHEDULED',
+        remarks: 'Executed Successfully',
+        localizedRemarks: 'Applied',
+        appliedTime: '1780000000000',
+      }],
+      stale: false,
+    })
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://mdm.example.test/api/v1/mdm/devices/mac-device-123/profiles')
+  })
+
+  it('keeps missing result attributes unknown instead of inferring a verdict', async () => {
+    mockManageEngineFetch(new Response(JSON.stringify({ profiles: [{}] }), { status: 200 }))
+    await expect(getManageEngineDeviceProfileResults('mac-device-unknown', { ...testConfig, clientId: 'unknown-client' })).resolves.toMatchObject({
+      profiles: [{
+        profileId: null,
+        profileName: 'Unknown profile',
+        status: null,
+        remarks: null,
+        localizedRemarks: null,
+        appliedTime: null,
+      }],
+      stale: false,
+    })
+  })
+
+  it('rejects authentication failures and API rate limits', async () => {
+    mockManageEngineFetch(new Response('', { status: 200 }), new Response('', { status: 401, statusText: 'Unauthorized' }))
+    await expect(getManageEngineDeviceProfileResults('mac-auth-failure', { ...testConfig, clientId: 'auth-failure-client' })).rejects.toThrow('ManageEngine auth failed: 401')
+
+    mockManageEngineFetch(new Response('rate limited', { status: 429, statusText: 'Too Many Requests' }))
+    await expect(getManageEngineDeviceProfileResults('mac-rate-limited', { ...testConfig, clientId: 'rate-limit-client' })).rejects.toThrow('ManageEngine API 429')
+  })
+
+  it('rejects timeouts and incomplete response shapes without returning a false empty result', async () => {
+    mockManageEngineFetch(new Error('request timed out'))
+    await expect(getManageEngineDeviceProfileResults('mac-timeout', { ...testConfig, clientId: 'timeout-client' })).rejects.toThrow('request timed out')
+
+    mockManageEngineFetch(new Response(JSON.stringify({}), { status: 200 }))
+    await expect(getManageEngineDeviceProfileResults('mac-incomplete', { ...testConfig, clientId: 'incomplete-client' })).rejects.toThrow('profiles array')
+  })
+
+  it('returns the last successful response as stale after refresh failure, then refreshes successfully', async () => {
+    const clientConfig = { ...testConfig, clientId: 'refresh-recovery-client' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'recovery-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ profile_id: 7, profile_name: 'Baseline', status: 'SCHEDULED' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('server error', { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ profile_id: 7, profile_name: 'Baseline', status: 'APPLIED' }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    vi.useFakeTimers()
+    const initial = await getManageEngineDeviceProfileResults('mac-refresh-recovery', clientConfig)
+    vi.setSystemTime(Date.now() + 5 * 60 * 1000 + 1)
+    const failedRefresh = await getManageEngineDeviceProfileResults('mac-refresh-recovery', clientConfig)
+    expect(failedRefresh).toMatchObject({ profiles: [{ status: 'SCHEDULED' }], stale: true })
+    expect(failedRefresh.lastSuccessfulSyncAt).toBe(initial.lastSuccessfulSyncAt)
+
+    const recovered = await getManageEngineDeviceProfileResults('mac-refresh-recovery', clientConfig)
+    expect(recovered).toMatchObject({ profiles: [{ status: 'APPLIED' }], stale: false })
+    expect(Number.isNaN(Date.parse(recovered.lastSuccessfulSyncAt))).toBe(false)
+    vi.useRealTimers()
+  })
+
+  it('returns partial fleet results when one device request is rate limited', async () => {
+    const clientConfig = { ...testConfig, clientId: 'fleet-partial-client' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'fleet-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ profiles: [{ profile_id: 10, profile_name: 'Baseline', status: 'SCHEDULED' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429, statusText: 'Too Many Requests' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getManageEngineDeviceProfileResultsForDevices(['mac-good', 'mac-limited', 'mac-good'], clientConfig)).resolves.toMatchObject([
+      { deviceId: 'mac-good', snapshot: { profiles: [{ status: 'SCHEDULED' }], stale: false }, unavailable: false },
+      { deviceId: 'mac-limited', snapshot: null, unavailable: true },
+    ])
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+})
 
 function makeDevice(overrides: Partial<Device> & Pick<Device, 'id'>): Device {
   return {

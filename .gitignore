@@ -28,6 +28,10 @@ server/node_modules
 
 # Runtime-persisted integration credentials (written by the backend on save)
 server/.integration-credentials.json
+server/.app-release-alerts.json
+server/.patch-remediation-actions.json
+server/.scheduled-reports.json
+server/.fleet-snapshots.json
 
 # Editor directories and files
 .vscode/*
@@ -40,3 +44,6 @@ server/.integration-credentials.json
 *.sln
 *.sw?
 .claude/
+
+# Endpoint Central app-inventory scan cache
+server/.cache
