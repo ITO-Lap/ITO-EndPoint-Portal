@@ -1,7 +1,8 @@
 # ITO Endpoint AI Copilot — Documentation Master Index
 
 > **Version:** 3.0 | **Last updated:** Jun 2026 | **Stack:** React 19 · Express · TypeScript · Tailwind 4  
-> **Product:** ITO Endpoint — Built on the Zinnia Platform
+> **Product:** ITO Endpoint — Built on the Zinnia Platform  
+> **Architect & lead developer:** Avinash Kumar Verma
 
 Welcome to the complete documentation for ITO Endpoint AI Copilot. Navigate directly to what you need.
 

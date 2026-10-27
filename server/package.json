@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "keywords": [],
-  "author": "",
+  "author": "Avinash Kumar Verma <avinash.verma@zinnia.com>",
   "license": "ISC",
   "type": "module",
   "dependencies": {

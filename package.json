@@ -1,6 +1,7 @@
 {
   "name": "endpoint-ai-copilot",
   "private": true,
+  "author": "Avinash Kumar Verma <avinash.verma@zinnia.com>",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
