@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Menu, Search, Settings } from 'lucide-react'
+import { Bell, ChevronDown, LogOut, Menu, Search, Settings } from 'lucide-react'
 import { ZinniaIcon } from '../ui/ZinniaLogo'
 import { useRef, useState, useEffect } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
@@ -18,6 +18,7 @@ interface HeaderProps {
   viewerRole?: string
   displayName?: string
   userEmail?: string
+  onSignOut?: () => void
 }
 
 export function Header({
@@ -25,7 +26,7 @@ export function Header({
   notificationOpen = false, notifications = [], onNotificationToggle,
   onMarkAllNotificationsRead, searchLoading = false,
   onProfileNav, viewerRole = 'Global Admin',
-  displayName, userEmail,
+  displayName, userEmail, onSignOut,
 }: HeaderProps) {
   const [searchInput, setSearchInput]     = useState(searchValue)
   const [profileOpen, setProfileOpen]     = useState(false)
@@ -210,6 +211,7 @@ export function Header({
                 style={{ boxShadow: '0 16px 48px rgba(14,165,233,0.10), 0 4px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.95)' }}
               >
                 <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #0EA5E9, #6366F1)' }} />
+                {userEmail && <p className="mt-2 truncate px-4 pb-1 text-[0.65rem] font-medium text-slate-400" title={userEmail}>{userEmail}</p>}
                 <div className="mt-1 space-y-0.5 px-1.5">
                   {[
                     { label: 'Settings',  icon: Settings, action: 'Settings' },
@@ -225,6 +227,17 @@ export function Header({
                       {label}
                     </button>
                   ))}
+                  {onSignOut && (
+                    <button
+                      type="button"
+                      onClick={() => { setProfileOpen(false); onSignOut() }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl water-glow"
+                      style={{ color: '#475569' }}
+                    >
+                      <LogOut className="h-3.5 w-3.5 flex-shrink-0" />
+                      Sign out
+                    </button>
+                  )}
                 </div>
               </div>
             )}

@@ -14,6 +14,8 @@ import automationsRouter from './routes/automations.js'
 import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
 import authRouter from './routes/auth.js'
+import { requireSessionExceptAuth } from './middleware/requireSession.js'
+import { authEnforced, passwordRequired } from './services/session.js'
 import intelligenceRouter from './routes/intelligence.js'
 import scheduledReportsRouter from './routes/scheduledReports.js'
 import securityInventoryRouter, { startSecurityInventoryWarmup, stopSecurityInventoryWarmup } from './routes/securityInventory.js'
@@ -79,6 +81,13 @@ app.use(requestLogger)
 app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() })
 })
+
+// Everything under /api needs a signed-in session, except sign-in itself.
+app.use('/api', requireSessionExceptAuth)
+if (authEnforced() && !passwordRequired()) {
+  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Set AUTH_PASSWORD (or move to Entra sign-in) before exposing this beyond a trusted network.')
+}
+if (!authEnforced()) console.warn('[auth] AUTH_ENFORCED=false: the API is NOT protected.')
 
 app.use('/api/devices',      apiLimiter, devicesRouter)
 app.use('/api/integrations', apiLimiter, integrationsRouter)

@@ -13,7 +13,10 @@
 import { Router } from 'express'
 import { createHmac, randomBytes } from 'crypto'
 import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
 import { getEntraConfig } from '../store/integrationStore.js'
+import { SESSION_SECRET, authEnforced, authenticate, passwordRequired, signSession, verifySession } from '../services/session.js'
+import { bearerToken } from '../middleware/requireSession.js'
 
 const router = Router()
 
@@ -23,7 +26,7 @@ const IT_ADMIN_GROUP     = 'ITO EndPoint Portal'
 const HELPDESK_GROUP     = 'Desktop Support'
 const REDIRECT_URI       = 'http://localhost:4000/api/auth/callback'
 const FRONTEND_ORIGIN    = process.env.FRONTEND_URL ?? 'http://localhost:5173'
-const JWT_SECRET         = process.env.SESSION_SECRET ?? randomBytes(32).toString('hex')
+const JWT_SECRET         = SESSION_SECRET
 const TOKEN_TTL_SECS     = 8 * 60 * 60 // 8 hours
 
 // ─── In-memory CSRF state store (state → expiry) ──────────────────────────────
@@ -208,6 +211,33 @@ router.post('/verify', (req, res) => {
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired session' })
   }
+})
+
+// ─── Portal sign-in (see services/session.ts) ────────────────────────────────
+const signInLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { success: false, error: 'Too many sign-in attempts, please try again later.' },
+})
+
+// GET /api/auth/config — tells the login page whether to ask for a password
+router.get('/config', (_req, res) => {
+  res.json({ success: true, data: { passwordRequired: passwordRequired(), enforced: authEnforced() } })
+})
+
+// POST /api/auth/session { email, password? } — signs in an allow-listed email
+router.post('/session', signInLimiter, (req, res) => {
+  const body = (req.body ?? {}) as { email?: unknown; password?: unknown }
+  const result = authenticate(body.email, body.password)
+  if (!result.ok) { res.status(result.status).json({ success: false, error: result.error }); return }
+  res.json({ success: true, data: { token: signSession(result.claims), user: result.claims } })
+})
+
+// GET /api/auth/me — the signed-in user for a Bearer token (used on page load)
+router.get('/me', (req, res) => {
+  const token = bearerToken(req)
+  const claims = token ? verifySession(token) : null
+  if (!claims) { res.status(401).json({ success: false, error: 'Not signed in.' }); return }
+  res.json({ success: true, data: claims })
 })
 
 export default router

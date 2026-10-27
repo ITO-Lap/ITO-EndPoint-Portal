@@ -1,3 +1,4 @@
+import { AuthGate } from './components/auth/AuthGate'
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { ToastProvider, useToast } from './components/ui/ToastProvider'
@@ -107,7 +108,7 @@ const PAGE_META: Record<string, { description: string }> = {
   'Settings':           { description: 'Configure integrations, notification preferences, and account settings.' },
 }
 
-function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string; displayName?: string; userEmail?: string }) {
+function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerRole: string; displayName?: string; userEmail?: string; onSignOut?: () => void }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [activePage, setActivePage] = useLocalStorage('activePage', 'Dashboard')
   const [searchInput, setSearchInput] = useState('')
@@ -251,6 +252,7 @@ function AppContent({ viewerRole, displayName, userEmail }: { viewerRole: string
               viewerRole={viewerRole}
               displayName={displayName}
               userEmail={userEmail}
+              {...(onSignOut ? { onSignOut } : {})}
             />
             <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
               <div className="mx-auto w-full max-w-[1600px]">
@@ -352,7 +354,9 @@ function App() {
   return (
     <ToastProvider>
       <NavVisibilityProvider>
-        <AppContent viewerRole="Global Admin" displayName="Avinash Verma" userEmail="admin@zinnia.com" />
+        <AuthGate>
+          {({ user, signOut }) => <AppContent viewerRole={user.role} displayName={user.displayName} userEmail={user.email} onSignOut={signOut} />}
+        </AuthGate>
       </NavVisibilityProvider>
     </ToastProvider>
   )
