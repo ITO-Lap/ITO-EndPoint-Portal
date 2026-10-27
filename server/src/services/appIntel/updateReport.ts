@@ -1,6 +1,7 @@
 import { getSlackConfig } from '../../store/integrationStore.js'
 import { sendSlackMessage } from '../slack.js'
 import { exportToExcel, type ReportColumn } from '../reportExporter.js'
+import { formatCount, type ReportOverview } from '../reportOverview.js'
 import { getAppIntelService } from './service.js'
 import { hasUpdateAvailable } from './query.js'
 import { compareVersions, parseVersion } from './version.js'
@@ -96,6 +97,32 @@ export async function sendUpdateReportToSlack(apps: AssessedApp[], meta: UpdateR
   return { ok: true, updatesAvailable: report.updatesAvailable, devicesBehind: report.devicesBehind }
 }
 
+export function buildUpdatesOverview(apps: AssessedApp[], meta: Pick<UpdateReportMeta, 'syncedAt' | 'errors'>): ReportOverview {
+  const updates = apps.filter(hasUpdateAvailable)
+  const devicesBehind = updates.reduce((n, a) => n + a.affectedDevices, 0)
+  const count = (pred: (a: AssessedApp) => boolean) => updates.filter(pred).length
+  const needsPackage = count(a => a.status === 'Package required' || a.status === 'Repackage required')
+  const unverifiable = apps.filter(a => !a.latest && a.status !== 'Native update').length
+  const top = [...updates].sort((a, b) => b.affectedDevices - a.affectedDevices)[0]
+  const problems = Object.keys(meta.errors).length
+  return {
+    title: 'Verified Application Updates',
+    fields: [
+      { label: 'Apps behind latest version', value: updates.length },
+      { label: 'Device-installs to update', value: devicesBehind },
+      { label: 'Windows / macOS apps', value: `${count(a => a.platform === 'windows')} / ${count(a => a.platform === 'macOS')}` },
+      { label: 'Package required', value: needsPackage },
+      { label: 'Existing package ready', value: count(a => a.status === 'Update available — existing package') },
+      { label: 'Vendor / native update', value: count(a => a.status === 'Native update') },
+      { label: 'Needs review', value: count(a => a.status === 'Review required') },
+      { label: 'No verified source', value: unverifiable },
+    ],
+    action: !updates.length ? 'No installed app is behind its latest verified version.'
+      : `${needsPackage ? `Package ${formatCount(needsPackage)} app${needsPackage === 1 ? '' : 's'} first. ` : ''}Biggest gap: ${top!.identity.displayName} (${formatCount(top!.affectedDevices)} of ${formatCount(top!.totalDevices)} devices behind).`,
+    footnote: `Inventory synced ${meta.syncedAt.slice(0, 16).replace('T', ' ')} UTC${problems ? ` · ${problems} sync warning${problems === 1 ? '' : 's'}, see workbook` : ''}`,
+  }
+}
+
 const columns: ReportColumn[] = [
   { key: 'app', label: 'Application', width: 32 }, { key: 'platform', label: 'Platform', width: 12 },
   { key: 'installed', label: 'Installed versions (behind)', width: 34 }, { key: 'latest', label: 'Latest verified', width: 18 },
@@ -105,7 +132,7 @@ const columns: ReportColumn[] = [
 ]
 
 /** Excel version of the update report for Scheduled Reports; built from the latest verified sync, never from stale-as-fresh data. */
-export async function createAppUpdatesReport(): Promise<{ content: Buffer; filename: string; rows: number }> {
+export async function createAppUpdatesReport(): Promise<{ content: Buffer; filename: string; rows: number; overview: ReportOverview }> {
   const svc = getAppIntelService()
   let snap = svc.getSnapshot()
   if (!snap) { await svc.startSync(); snap = svc.getSnapshot() }
@@ -120,5 +147,5 @@ export async function createAppUpdatesReport(): Promise<{ content: Buffer; filen
     subtitle: `Apps behind the latest verified vendor version (winget-pkgs / Homebrew). Inventory synced ${snap.syncedAt}.${caveats.length ? ` Caveats: ${caveats.join(' | ')}` : ''}`,
     generatedAt: new Date().toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length,
   })
-  return { content, filename: `verified-app-updates-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length }
+  return { content, filename: `verified-app-updates-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length, overview: buildUpdatesOverview(snap.apps, snap) }
 }

@@ -5,7 +5,8 @@
 // Express req/res. Mirrors the shape of createCriticalPatchReport() /
 // createStaleDevicesReport() (criticalPatchReport.ts / staleDevicesReport.ts).
 
-import { credentialsFromEnv, getManagedDevices } from './graphApi.js'
+import { credentialsFromEnv, getManagedDevices, type GraphManagedDevice } from './graphApi.js'
+import { countBy, formatCount, formatPercent, topBreakdown, type ReportOverview } from './reportOverview.js'
 import { exportToCSV, exportToExcel, exportToPDF, exportToPPTX, type ExportFormat, type ReportColumn } from './reportExporter.js'
 
 const COLUMNS: ReportColumn[] = [
@@ -22,9 +23,60 @@ const COLUMNS: ReportColumn[] = [
   { key: 'enrolledDateTime',  label: 'Enrolled',     width: 22 },
 ]
 
+const OS_LABELS: Record<string, string> = { windows: 'Windows', macos: 'macOS', ios: 'iOS', ipados: 'iPadOS', android: 'Android', linux: 'Linux' }
+const osLabel = (os: string | null | undefined) => OS_LABELS[(os ?? '').toLowerCase()] ?? (os || 'Unknown')
+const OWNER_LABELS: Record<string, string> = { company: 'Corporate', personal: 'Personal' }
+const daysAgoOf = (iso: string | null | undefined): number | null => { const t = Date.parse(iso ?? ''); return Number.isFinite(t) ? Math.floor((Date.now() - t) / 86_400_000) : null }
+
+export function buildInventoryOverview(devices: GraphManagedDevice[]): ReportOverview {
+  const total = devices.length
+  const notSynced = devices.filter(d => (daysAgoOf(d.lastSyncDateTime) ?? 0) >= 30).length
+  const unencrypted = devices.filter(d => !d.isEncrypted).length
+  return {
+    title: 'Device Inventory',
+    fields: [
+      { label: 'Total devices', value: total },
+      { label: 'By OS', value: topBreakdown(countBy(devices, d => osLabel(d.operatingSystem)), 4) },
+      { label: 'Ownership', value: topBreakdown(countBy(devices, d => OWNER_LABELS[(d.managedDeviceOwnerType ?? '').toLowerCase()] ?? 'Unknown')) },
+      { label: 'Encrypted', value: `${formatPercent(total - unencrypted, total)} (${formatCount(unencrypted)} not encrypted)` },
+      { label: 'Top manufacturers', value: topBreakdown(countBy(devices, d => d.manufacturer || 'Unknown')) },
+      { label: 'Enrolled in last 30 days', value: devices.filter(d => (daysAgoOf(d.enrolledDateTime) ?? Infinity) < 30).length },
+      { label: 'Not synced in 30+ days', value: notSynced },
+    ],
+    action: notSynced || unencrypted
+      ? [notSynced ? `Check the ${formatCount(notSynced)} device${notSynced === 1 ? '' : 's'} that ${notSynced === 1 ? 'has' : 'have'} not synced in 30+ days` : '', unencrypted ? `${notSynced ? 'and enforce' : 'Enforce'} encryption on ${formatCount(unencrypted)} device${unencrypted === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ') + '.'
+      : 'Inventory looks healthy. No action needed.',
+    footnote: 'Source: Microsoft Intune',
+  }
+}
+
+export function buildComplianceOverview(devices: GraphManagedDevice[]): ReportOverview {
+  const total = devices.length
+  const compliant = devices.filter(d => d.complianceState === 'compliant').length
+  const nonCompliant = devices.filter(d => d.complianceState === 'noncompliant')
+  const other = total - compliant - nonCompliant.length
+  const unencrypted = devices.filter(d => !d.isEncrypted).length
+  return {
+    title: 'Device Compliance',
+    fields: [
+      { label: 'Total devices', value: total },
+      { label: 'Compliance rate', value: formatPercent(compliant, total) },
+      { label: 'Compliant', value: compliant },
+      { label: 'Non-compliant', value: nonCompliant.length },
+      { label: 'Grace period / unknown / other', value: other },
+      { label: 'Not encrypted', value: unencrypted },
+      { label: 'Non-compliant by OS', value: topBreakdown(countBy(nonCompliant, d => osLabel(d.operatingSystem))) },
+    ],
+    action: nonCompliant.length
+      ? `Review the ${formatCount(nonCompliant.length)} non-compliant device${nonCompliant.length === 1 ? '' : 's'}${unencrypted ? ` and enforce encryption on ${formatCount(unencrypted)}` : ''}.`
+      : 'All reported devices are compliant. No action needed.',
+    footnote: 'Source: Microsoft Intune',
+  }
+}
+
 const EXTENSIONS: Record<ExportFormat, string> = { csv: 'csv', excel: 'xlsx', pdf: 'pdf', pptx: 'pptx' }
 
-async function createDeviceReport(reportType: 'compliance' | 'inventory', format: ExportFormat): Promise<{ content: Buffer; filename: string; rows: number }> {
+async function createDeviceReport(reportType: 'compliance' | 'inventory', format: ExportFormat): Promise<{ content: Buffer; filename: string; rows: number; overview: ReportOverview }> {
   const creds = credentialsFromEnv()
   const devices = await getManagedDevices(creds)
 
@@ -54,7 +106,7 @@ async function createDeviceReport(reportType: 'compliance' | 'inventory', format
     format === 'pdf'   ? await exportToPDF(data, COLUMNS, meta) :
     await exportToPPTX(data, meta, summary)
 
-  return { content, filename, rows: devices.length }
+  return { content, filename, rows: devices.length, overview: reportType === 'compliance' ? buildComplianceOverview(devices) : buildInventoryOverview(devices) }
 }
 
 export const createComplianceReport = (format: ExportFormat) => createDeviceReport('compliance', format)

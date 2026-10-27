@@ -20,6 +20,7 @@ import { getSlackConfig } from '../store/integrationStore.js'
 import { createAppUpdatesReport } from './appIntel/updateReport.js'
 import { sendReportEmail } from './reportEmail.js'
 import { sendFleetDigest } from './fleetDigest.js'
+import { buildOverviewMessage, overviewToText, type ReportOverview } from './reportOverview.js'
 import { sendDuplicateDevicesReport } from './entraDuplicateDevicesReport.js'
 
 function matchesPart(value: number, expression: string): boolean {
@@ -76,28 +77,35 @@ const CONTENT_TYPES: Record<string, string> = {
   pptx:  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 }
 
-async function generateReportContent(schedule: ScheduledReportRecord): Promise<{ content: Buffer; filename: string; rows: number }> {
+async function generateReportContent(schedule: ScheduledReportRecord): Promise<{ content: Buffer; filename: string; rows: number; overview?: ReportOverview }> {
   switch (schedule.report_type) {
     case 'fleet-digest':
     case 'entra-duplicate-devices': throw new Error(`${schedule.report_type} is delivered as a Slack message, not a file`)
     case 'critical-patching': { const r = await createCriticalPatchReport(); return { content: r.content, filename: r.filename, rows: r.rows } }
-    case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length } }
-    case 'app-updates':       { const r = await createAppUpdatesReport(); return { content: r.content, filename: r.filename, rows: r.rows } }
+    case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length, overview: r.overview } }
+    case 'app-updates':       { const r = await createAppUpdatesReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'compliance':        return createComplianceReport(schedule.format as ExportFormat)
     case 'inventory':         return createInventoryReport(schedule.format as ExportFormat)
   }
 }
 
-async function deliver(schedule: ScheduledReportRecord, content: Buffer, filename: string): Promise<{ ok: boolean; error?: string }> {
+async function deliver(schedule: ScheduledReportRecord, content: Buffer, filename: string, overview?: ReportOverview): Promise<{ ok: boolean; error?: string }> {
   const channelId = slackChannel(schedule.filters)
   if (channelId) {
     const cfg = getSlackConfig()
     if (!cfg?.botToken) return { ok: false, error: 'Slack Bot OAuth token is not configured.' }
-    return uploadSlackFile(cfg, { channelId, filename, title: schedule.name, content, initialComment: `📊 ${schedule.name}` })
+    // With an overview, the headline figures and the file arrive as one message
+    // (Slack ignores blocks when an initial comment is present, so send only one).
+    const today = new Date().toISOString().slice(0, 10)
+    return uploadSlackFile(cfg, {
+      channelId, filename, title: schedule.name, content,
+      ...(overview ? { blocks: buildOverviewMessage(overview, today).blocks } : { initialComment: `📊 ${schedule.name}` }),
+    })
   }
   if (schedule.recipients.length > 0) {
     return sendReportEmail({
-      recipients: schedule.recipients, subject: schedule.name, message: `Your scheduled report "${schedule.name}" is attached.`,
+      recipients: schedule.recipients, subject: schedule.name,
+      message: overview ? `${overviewToText(overview)}\n\nThe full report "${schedule.name}" is attached.` : `Your scheduled report "${schedule.name}" is attached.`,
       filename, content, contentType: CONTENT_TYPES[schedule.format] ?? 'application/octet-stream',
     })
   }
@@ -130,7 +138,7 @@ async function run(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'sch
       return { ok: true, runId: runRecord?.id, rows: result.groups ?? 0, filename: undefined }
     }
     const report = await generateReportContent(schedule)
-    const delivery = await deliver(schedule, report.content, report.filename)
+    const delivery = await deliver(schedule, report.content, report.filename, report.overview)
     if (!delivery.ok) throw new Error(delivery.error ?? 'Delivery failed')
     const runRecord = await store.recordReportRun(schedule.id, {
       status: 'completed', format: schedule.format, record_count: report.rows, file_size_bytes: report.content.length,

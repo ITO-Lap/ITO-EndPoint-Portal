@@ -70,6 +70,30 @@ describe('runScheduledReportNow — generation dispatch by report_type', () => {
 })
 
 describe('runScheduledReportNow — delivery dispatch', () => {
+  it('sends the overview blocks with the file (and no initial comment) when the report has an overview', async () => {
+    vi.mocked(createComplianceReport).mockResolvedValueOnce({ content: reportBuffer, filename: 'compliance.xlsx', rows: 10, overview: { title: 'Device Compliance', fields: [{ label: 'Total devices', value: 10 }], action: 'Act' } } as never)
+    reports = [makeReport({ filters: { slackChannelId: 'C123' } })]
+    await runScheduledReportNow('r1')
+    const upload = vi.mocked(uploadSlackFile).mock.calls[0]![1]
+    expect(upload.blocks?.length).toBeGreaterThan(0)
+    expect(upload).not.toHaveProperty('initialComment')
+  })
+
+  it('falls back to the plain comment for reports without an overview', async () => {
+    reports = [makeReport({ report_type: 'critical-patching', filters: { slackChannelId: 'C123' } })]
+    await runScheduledReportNow('r1')
+    const upload = vi.mocked(uploadSlackFile).mock.calls[0]![1]
+    expect(upload.initialComment).toContain('Test Report')
+    expect(upload).not.toHaveProperty('blocks')
+  })
+
+  it('puts the overview figures in the email body', async () => {
+    vi.mocked(createComplianceReport).mockResolvedValueOnce({ content: reportBuffer, filename: 'compliance.xlsx', rows: 10, overview: { title: 'Device Compliance', fields: [{ label: 'Total devices', value: 10 }], action: 'Act' } } as never)
+    reports = [makeReport({ recipients: ['a@corp.test'] })]
+    await runScheduledReportNow('r1')
+    expect(vi.mocked(sendReportEmail).mock.calls[0]![0].message).toContain('Total devices: 10')
+  })
+
   it('delivers via Slack when filters.slackChannelId is set', async () => {
     reports = [makeReport({ filters: { slackChannelId: 'C123' } })]
     await runScheduledReportNow('r1')
