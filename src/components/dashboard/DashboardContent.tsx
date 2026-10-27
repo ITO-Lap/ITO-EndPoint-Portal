@@ -22,6 +22,7 @@ import { ApplicationUpdatesPanel } from './ApplicationUpdatesPanel'
 import { SecurityWatchRow } from './SecurityWatchRow'
 import { OperationalQueueTable } from './OperationalQueueTable'
 import { setNotificationScheduleActor } from '../../api/notificationSchedule'
+import { canEditSlackSchedules } from '../../lib/permissions'
 
 function NoDeviceCard() {
   return (
@@ -160,7 +161,7 @@ export function DashboardContent({
         <ActionCenter onNavigate={onNavigate} />
 
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-3 w-full">
-          <QuickSlackSchedules canEdit={viewerRole === 'Global Admin'} onViewAll={() => onNavigate?.('Scheduled Reports')} />
+          <QuickSlackSchedules canEdit={canEditSlackSchedules(viewerRole)} onViewAll={() => onNavigate?.('Scheduled Reports')} />
           <PatchPriorityPanel onViewAll={() => onNavigate?.('Patch Operations')} />
           <ApplicationUpdatesPanel onViewAll={() => onNavigate?.('App Guardian')} />
         </div>

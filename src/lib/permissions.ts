@@ -15,6 +15,8 @@ export const PAGE_ROLES: Record<string, UserToolRole[]> = {
 
   // Security & Compliance
   'Security Posture':    ['Global Admin', 'IT Admin', 'Helpdesk'],
+  'Policy Conflicts':    ['Global Admin', 'IT Admin'],
+  'Risk Scoring':        ['Global Admin', 'IT Admin'],
   'Role Activity Audit': ['Global Admin', 'IT Admin', 'Helpdesk'],
   'Patch Operations':   ['Global Admin', 'IT Admin', 'Helpdesk'],
 
@@ -31,6 +33,9 @@ export const PAGE_ROLES: Record<string, UserToolRole[]> = {
   'Settings':            ['Global Admin', 'IT Admin'],
   'Documentation':       ['Global Admin', 'IT Admin', 'Helpdesk'],
 }
+
+/** Who may change the day/time of automatic Slack report deliveries (the server enforces the same roles). */
+export const canEditSlackSchedules = (role: UserToolRole | string): boolean => role === 'Global Admin' || role === 'IT Admin'
 
 // A page that is not listed above is Global Admin only (see canAccess). Listing here is deliberate and
 // explicit, so a new page cannot silently become invisible to IT Admins.

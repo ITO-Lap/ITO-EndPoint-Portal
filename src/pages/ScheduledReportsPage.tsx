@@ -3,6 +3,7 @@ import { Calendar, Plus, RefreshCw, Trash2, Play, CheckCircle, MessageSquare } f
 import { intelApi } from '../api/intelligence'
 import type { ScheduledReport, CreateScheduleInput } from '../api/intelligence'
 import { setNotificationScheduleActor } from '../api/notificationSchedule'
+import { canEditSlackSchedules } from '../lib/permissions'
 import { SlackScheduleSection } from '../components/notifications/SlackScheduleSection'
 
 const REPORT_TYPES = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices']
@@ -257,7 +258,7 @@ export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', user
               </div>
               {!!s.filters?.slackChannelId && (
                 <div className="mt-3 border-t border-slate-100 pt-3">
-                  <SlackScheduleSection module="scheduled_report" sourceId={s.id} canEdit={viewerRole === 'Global Admin'} />
+                  <SlackScheduleSection module="scheduled_report" sourceId={s.id} canEdit={canEditSlackSchedules(viewerRole)} />
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canAccess, isPageListed } from '../permissions'
+import { canAccess, canEditSlackSchedules, isPageListed } from '../permissions'
 import { navItems } from '../../data/dashboardData'
 
 describe('Scheduled Reports access', () => {
@@ -19,11 +19,21 @@ describe('unlisted pages', () => {
     expect(canAccess('IT Admin', 'Some New Page')).toBe(false)
   })
 
-  // Pages in the sidebar that are not in the permission table are invisible to IT Admin and Helpdesk. These two are
-  // known and need a decision on who should see them; any other page added without an entry fails this test.
-  const AWAITING_DECISION = ['Policy Conflicts', 'Risk Scoring']
-  it('are limited to the pages still awaiting a role decision', () => {
-    const unlisted = navItems.map(i => i.title).filter(t => !isPageListed(t))
-    expect(unlisted.sort()).toEqual([...AWAITING_DECISION].sort())
+  // Every sidebar page needs an explicit role entry; a page added without one fails here instead of silently
+  // becoming invisible to IT Admins.
+  it('do not exist: every sidebar page has an explicit role entry', () => {
+    expect(navItems.map(i => i.title).filter(t => !isPageListed(t))).toEqual([])
+  })
+})
+
+describe('IT Admin', () => {
+  it('can open every page in the sidebar', () => {
+    const blocked = navItems.filter(i => !canAccess('IT Admin', i.title)).map(i => i.title)
+    expect(blocked).toEqual([])
+  })
+  it('can edit Slack schedules; Helpdesk cannot', () => {
+    expect(canEditSlackSchedules('Global Admin')).toBe(true)
+    expect(canEditSlackSchedules('IT Admin')).toBe(true)
+    expect(canEditSlackSchedules('Helpdesk')).toBe(false)
   })
 })

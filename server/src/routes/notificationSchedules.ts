@@ -8,9 +8,8 @@
 // module reuses this same route, store, and scheduler by registering its own
 // handler.
 //
-// RBAC: editing is Global Admin only (matches docs/ROLES.md's existing
-// "Notification settings (org)" row); reads are open to any role (read-only
-// for everyone else). Same client-supplied x-user-role header trust model as
+// RBAC: editing is Global Admin and IT Admin; reads are open to any role
+// (read-only for Helpdesk). Same client-supplied x-user-role header trust model as
 // every other recent feature in this app — see middleware/requireRole.ts's
 // top-of-file note on that known limitation.
 //
@@ -31,7 +30,7 @@ import { recordAuditLog } from '../services/auditLog.js'
 const router = Router()
 router.use(identifyAuditActor)
 
-const EDIT_ROLES = ['Global Admin']
+const EDIT_ROLES = ['Global Admin', 'IT Admin']
 
 interface SeedSchedule { frequency: NotificationFrequency; weekdays: number[]; execution_time: string; timezone: string }
 
@@ -121,7 +120,7 @@ const updateScheduleSchema = z.object({
   path: ['timezone'],
 })
 
-// PATCH /api/notification-schedules/:module/:sourceId — Global Admin only
+// PATCH /api/notification-schedules/:module/:sourceId — Global Admin and IT Admin
 router.patch('/:module/:sourceId', requireAppRole(EDIT_ROLES), asyncHandler(async (req, res) => {
   const { module, sourceId } = req.params as { module: string; sourceId: string }
   const input = updateScheduleSchema.parse(req.body)

@@ -134,6 +134,7 @@ A tightly scoped read-only role for front-line support agents who need to look u
 | Automation settings | ✅ | ❌ | ❌ |
 | Security settings | ✅ | View only | ❌ |
 | Notification settings (org) | ✅ | ❌ | ❌ |
+| Slack notification schedule (Scheduled Reports) | ✅ | ✅ | View only |
 | Notification settings (own) | ✅ | ✅ | ✅ |
 | Data & Privacy | ✅ | ❌ | ❌ |
 | Danger Zone | ✅ | ❌ | ❌ |
@@ -143,7 +144,7 @@ A tightly scoped read-only role for front-line support agents who need to look u
 | Assign / change roles | ✅ | ❌ | ❌ |
 | Edit own profile | ✅ | ✅ | ✅ |
 
-> **Notification settings (org)** includes editing the day/time schedule of automatic Slack notifications (Scheduled Reports → Slack Notification Schedule). Only Global Admin can edit; IT Admin and Helpdesk see the schedule read-only. See `server/src/routes/notificationSchedules.ts`.
+> **Slack notification schedule** is the day/time of automatic Slack deliveries (Scheduled Reports → Slack Notification Schedule). Global Admin and IT Admin can edit it; Helpdesk cannot open Scheduled Reports. Other org-wide notification settings remain Global Admin only. See `server/src/routes/notificationSchedules.ts`.
 
 ---
 

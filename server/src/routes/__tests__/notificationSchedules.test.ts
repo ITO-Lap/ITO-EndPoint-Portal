@@ -178,10 +178,18 @@ describe('notification schedules — day/time editing (file-based store, no data
     } finally { server.close() }
   })
 
-  it('rejects a non-Global-Admin PATCH with 403 (req #6)', async () => {
+  it('allows an IT Admin to save the schedule', async () => {
     const { server, baseUrl } = await startServer()
     try {
       const res = await httpRequest('PATCH', `${baseUrl}/scheduled_report/report-1`, { 'x-user-role': 'IT Admin' }, VALID_PATCH_BODY)
+      expect(res.status).toBe(200)
+    } finally { server.close() }
+  })
+
+  it('rejects a Helpdesk PATCH with 403 (req #6)', async () => {
+    const { server, baseUrl } = await startServer()
+    try {
+      const res = await httpRequest('PATCH', `${baseUrl}/scheduled_report/report-1`, { 'x-user-role': 'Helpdesk' }, VALID_PATCH_BODY)
       expect(res.status).toBe(403)
     } finally { server.close() }
   })
