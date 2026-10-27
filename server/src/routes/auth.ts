@@ -5,7 +5,7 @@
  *   http://localhost:4000/api/auth/callback
  *
  * Role mapping:
- *   avinash.verma@zinnia.com        → Global Admin
+ *   emails in AUTH_ALLOWED_EMAILS   → Global Admin (default avinash.verma@zinnia.com)
  *   member of "ITO EndPoint Portal" → IT Admin
  *   member of "Desktop Support"     → Helpdesk
  *   anyone else                     → 403
@@ -15,16 +15,16 @@ import { createHmac, randomBytes } from 'crypto'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
 import { getEntraConfig } from '../store/integrationStore.js'
-import { SESSION_SECRET, authEnforced, authenticate, passwordRequired, signSession, verifySession } from '../services/session.js'
+import { SESSION_SECRET, allowedEmails, authEnforced, authenticate, emailSignInEnabled, passwordRequired, signSession, verifySession } from '../services/session.js'
 import { bearerToken } from '../middleware/requireSession.js'
 
 const router = Router()
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const GLOBAL_ADMIN_EMAIL = 'avinash.verma@zinnia.com'
 const IT_ADMIN_GROUP     = 'ITO EndPoint Portal'
 const HELPDESK_GROUP     = 'Desktop Support'
-const REDIRECT_URI       = 'http://localhost:4000/api/auth/callback'
+// Must match a Web redirect URI registered on the Entra app. Set AUTH_REDIRECT_URI for any non-local deployment.
+const REDIRECT_URI       = process.env.AUTH_REDIRECT_URI ?? 'http://localhost:4000/api/auth/callback'
 const FRONTEND_ORIGIN    = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 const JWT_SECRET         = SESSION_SECRET
 const TOKEN_TTL_SECS     = 8 * 60 * 60 // 8 hours
@@ -147,9 +147,9 @@ router.get('/callback', async (req, res) => {
     const tokens = await tokenRes.json() as { access_token: string; id_token: string }
 
     // 2. Get user profile
-    const me = await graphGet<{ displayName: string; userPrincipalName: string; id: string }>(
+    const me = await graphGet<{ displayName: string; userPrincipalName: string; mail?: string | null; id: string }>(
       tokens.access_token,
-      '/me?$select=displayName,userPrincipalName,id'
+      '/me?$select=displayName,userPrincipalName,mail,id'
     )
     if (!me) throw new Error('Failed to retrieve user profile from Microsoft Graph')
 
@@ -160,7 +160,9 @@ router.get('/callback', async (req, res) => {
     // 3. Determine role
     let role: string | null = null
 
-    if (email === GLOBAL_ADMIN_EMAIL) {
+    let groupLookupFailed = false
+    const allowed = allowedEmails()
+    if (allowed.includes(email) || allowed.includes((me.mail ?? '').toLowerCase())) {
       role = 'Global Admin'
     } else {
       const appToken = await getAppToken()
@@ -169,16 +171,20 @@ router.get('/callback', async (req, res) => {
           appToken,
           `/users/${encodeURIComponent(userId)}/memberOf?$select=displayName&$top=100`
         )
+        if (!memberOf) groupLookupFailed = true
         const groups = (memberOf?.value ?? []).map(g => g.displayName)
         if (groups.includes(IT_ADMIN_GROUP))   role = 'IT Admin'
         else if (groups.includes(HELPDESK_GROUP)) role = 'Helpdesk'
+      } else {
+        groupLookupFailed = true
       }
     }
 
     if (!role) {
-      const msg = encodeURIComponent(
-        `Access denied. ${email} is not a member of '${IT_ADMIN_GROUP}' or '${HELPDESK_GROUP}'.`
-      )
+      // A failed lookup is a server/permission problem, not proof the user lacks access: say so.
+      const msg = encodeURIComponent(groupLookupFailed
+        ? `Signed in as ${email}, but group membership could not be checked. Ask an administrator to grant the app the GroupMember.Read.All permission.`
+        : `Access denied. ${email} is not a member of '${IT_ADMIN_GROUP}' or '${HELPDESK_GROUP}'.`)
       res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${msg}`)
       return
     }
@@ -190,7 +196,8 @@ router.get('/callback', async (req, res) => {
       { expiresIn: TOKEN_TTL_SECS }
     )
 
-    res.redirect(`${FRONTEND_ORIGIN}/?session_token=${sessionToken}`)
+    // Fragment, not query string: it is never sent to a server, logged, or passed in a Referer header.
+    res.redirect(`${FRONTEND_ORIGIN}/#session_token=${sessionToken}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Authentication error'
     res.redirect(`${FRONTEND_ORIGIN}/?auth_error=${encodeURIComponent(msg)}`)
@@ -221,7 +228,7 @@ const signInLimiter = rateLimit({
 
 // GET /api/auth/config — tells the login page whether to ask for a password
 router.get('/config', (_req, res) => {
-  res.json({ success: true, data: { passwordRequired: passwordRequired(), enforced: authEnforced() } })
+  res.json({ success: true, data: { passwordRequired: passwordRequired(), enforced: authEnforced(), emailSignIn: emailSignInEnabled(), microsoft: !!getEntraConfig() } })
 })
 
 // POST /api/auth/session { email, password? } — signs in an allow-listed email

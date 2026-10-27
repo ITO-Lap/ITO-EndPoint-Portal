@@ -54,12 +54,61 @@ async function readEnvelope<T>(res: Response): Promise<{ data?: T; error?: strin
   try { return await res.json() as { data?: T; error?: string } } catch { return {} }
 }
 
-export async function fetchAuthConfig(): Promise<{ passwordRequired: boolean }> {
+export interface AuthConfig { passwordRequired: boolean; emailSignIn: boolean; microsoft: boolean }
+
+export async function fetchAuthConfig(): Promise<AuthConfig> {
   try {
-    const { data } = await readEnvelope<{ passwordRequired: boolean }>(await fetch(`${BASE_URL}/api/auth/config`))
-    return { passwordRequired: !!data?.passwordRequired }
+    const { data } = await readEnvelope<Partial<AuthConfig>>(await fetch(`${BASE_URL}/api/auth/config`))
+    return { passwordRequired: !!data?.passwordRequired, emailSignIn: data?.emailSignIn ?? true, microsoft: !!data?.microsoft }
   } catch {
-    return { passwordRequired: false }
+    return { passwordRequired: false, emailSignIn: true, microsoft: false }
+  }
+}
+
+/** Sends the browser to Microsoft's sign-in page; Microsoft returns it to the app with a session token. */
+export async function startMicrosoftSignIn(): Promise<void> {
+  let res: Response
+  try { res = await fetch(`${BASE_URL}/api/auth/login`) }
+  catch { throw new Error('Could not reach the server. Check your connection and try again.') }
+  const { data, error } = await readEnvelope<{ url: string }>(res)
+  if (!res.ok || !data?.url) throw new Error(error ?? 'Microsoft sign-in is not available.')
+  window.location.href = data.url
+}
+
+export interface RedirectResult { token?: string; error?: string }
+let redirect: RedirectResult | undefined
+
+/**
+ * What Microsoft sign-in left in the URL: a session token in the fragment (never sent to a
+ * server or logged) or an auth_error in the query. Read once and removed from the address
+ * bar immediately, so a reload or a copied link cannot replay it.
+ */
+export function takeRedirect(): RedirectResult {
+  if (redirect) return redirect
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const search = new URLSearchParams(window.location.search)
+  const token = hash.get('session_token')
+  const error = search.get('auth_error')
+  redirect = { ...(token ? { token } : {}), ...(error ? { error } : {}) }
+  if (token || error) {
+    hash.delete('session_token'); search.delete('auth_error')
+    const query = search.toString(); const frag = hash.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${frag ? `#${frag}` : ''}`)
+  }
+  return redirect
+}
+export const __resetRedirectForTests = (): void => { redirect = undefined }
+
+/** Validates a token returned by Microsoft sign-in with the server, and stores the session if valid. */
+export async function verifyToken(token: string): Promise<SessionUser | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+    const user = res.ok ? (await readEnvelope<SessionUser>(res)).data : undefined
+    if (!user) return null
+    saveSession({ token, user })
+    return user
+  } catch {
+    return null
   }
 }
 

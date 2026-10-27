@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import jwt from 'jsonwebtoken'
-import { authenticate, displayNameFor, signSession, verifySession, SESSION_SECRET } from '../session.js'
+import { authenticate, emailSignInEnabled, displayNameFor, signSession, verifySession, SESSION_SECRET } from '../session.js'
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -19,6 +19,20 @@ describe('authenticate (passwordless)', () => {
     vi.stubEnv('AUTH_ALLOWED_EMAILS', 'a@zinnia.com, b@zinnia.com')
     expect(authenticate('b@zinnia.com').ok).toBe(true)
     expect(authenticate('avinash.verma@zinnia.com').ok).toBe(false)
+  })
+})
+
+describe('AUTH_PASSWORDLESS=false', () => {
+  it('turns email sign-in off, so only Microsoft sign-in works', () => {
+    vi.stubEnv('AUTH_PASSWORDLESS', 'false')
+    expect(emailSignInEnabled()).toBe(false)
+    expect(authenticate('avinash.verma@zinnia.com')).toMatchObject({ ok: false, status: 403, error: expect.stringContaining('Microsoft sign-in') })
+  })
+  it('keeps email + password sign-in available when a password is configured', () => {
+    vi.stubEnv('AUTH_PASSWORDLESS', 'false')
+    vi.stubEnv('AUTH_PASSWORD', 'pw')
+    expect(emailSignInEnabled()).toBe(true)
+    expect(authenticate('avinash.verma@zinnia.com', 'pw').ok).toBe(true)
   })
 })
 

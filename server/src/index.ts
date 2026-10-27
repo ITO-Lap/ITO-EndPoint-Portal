@@ -15,7 +15,7 @@ import slackRouter from './routes/slack.js'
 import entraRouter from './routes/entra.js'
 import authRouter from './routes/auth.js'
 import { requireSessionExceptAuth } from './middleware/requireSession.js'
-import { authEnforced, passwordRequired } from './services/session.js'
+import { authEnforced, emailSignInEnabled, passwordRequired } from './services/session.js'
 import intelligenceRouter from './routes/intelligence.js'
 import scheduledReportsRouter from './routes/scheduledReports.js'
 import securityInventoryRouter, { startSecurityInventoryWarmup, stopSecurityInventoryWarmup } from './routes/securityInventory.js'
@@ -84,8 +84,8 @@ app.get('/health', (_req, res) => {
 
 // Everything under /api needs a signed-in session, except sign-in itself.
 app.use('/api', requireSessionExceptAuth)
-if (authEnforced() && !passwordRequired()) {
-  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Set AUTH_PASSWORD (or move to Entra sign-in) before exposing this beyond a trusted network.')
+if (authEnforced() && emailSignInEnabled() && !passwordRequired()) {
+  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Set AUTH_PASSWORD, or AUTH_PASSWORDLESS=false to use Microsoft sign-in only, before exposing this beyond a trusted network.')
 }
 if (!authEnforced()) console.warn('[auth] AUTH_ENFORCED=false: the API is NOT protected.')
 

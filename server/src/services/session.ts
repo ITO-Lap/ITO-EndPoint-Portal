@@ -8,6 +8,7 @@
 //
 //   AUTH_ALLOWED_EMAILS  comma-separated, default avinash.verma@zinnia.com
 //   AUTH_PASSWORD        when set, the password is required as well
+//   AUTH_PASSWORDLESS    "false" turns off email-only sign-in (use Microsoft sign-in)
 //   AUTH_ENFORCED        "false" turns the API gate off (local debugging only)
 //   SESSION_SECRET       signing key; if unset a random one is used and every
 //                        restart signs everyone out
@@ -25,6 +26,8 @@ export const allowedEmails = (): string[] =>
   (process.env['AUTH_ALLOWED_EMAILS'] ?? DEFAULT_ALLOWED).split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 export const authEnforced = (): boolean => process.env['AUTH_ENFORCED'] !== 'false'
 export const passwordRequired = (): boolean => !!process.env['AUTH_PASSWORD']
+/** Email sign-in is available unless AUTH_PASSWORDLESS=false and no password is configured. */
+export const emailSignInEnabled = (): boolean => process.env['AUTH_PASSWORDLESS'] !== 'false' || passwordRequired()
 
 /** "avinash.verma@zinnia.com" → "Avinash Verma" */
 export function displayNameFor(email: string): string {
@@ -36,6 +39,7 @@ const digest = (v: string) => createHash('sha256').update(v).digest()
 export type AuthResult = { ok: true; claims: SessionClaims } | { ok: false; status: 401 | 403; error: string }
 
 export function authenticate(emailInput: unknown, passwordInput?: unknown): AuthResult {
+  if (!emailSignInEnabled()) return { ok: false, status: 403, error: 'Email sign-in is turned off. Use Microsoft sign-in.' }
   const email = typeof emailInput === 'string' ? emailInput.trim().toLowerCase() : ''
   const allowed = email.length > 0 && allowedEmails().includes(email)
   if (passwordRequired()) {

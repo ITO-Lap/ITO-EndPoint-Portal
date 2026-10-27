@@ -58,7 +58,7 @@ describe('sign-in endpoints', () => {
   })
   it('requires the password when AUTH_PASSWORD is set, and /config says so', async () => {
     vi.stubEnv('AUTH_PASSWORD', 'pw')
-    expect((await call('GET', '/api/auth/config')).json['data']).toEqual({ passwordRequired: true, enforced: true })
+    expect((await call('GET', '/api/auth/config')).json['data']).toMatchObject({ passwordRequired: true, enforced: true, emailSignIn: true })
     expect((await call('POST', '/api/auth/session', { body: { email: 'avinash.verma@zinnia.com' } })).status).toBe(401)
     expect((await call('POST', '/api/auth/session', { body: { email: 'avinash.verma@zinnia.com', password: 'pw' } })).status).toBe(200)
   })

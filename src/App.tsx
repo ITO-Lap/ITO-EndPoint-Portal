@@ -1,6 +1,5 @@
 import { AuthGate } from './components/auth/AuthGate'
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { useLocalStorage } from './hooks/useLocalStorage'
 import { ToastProvider, useToast } from './components/ui/ToastProvider'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
@@ -110,7 +109,8 @@ const PAGE_META: Record<string, { description: string }> = {
 
 function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerRole: string; displayName?: string; userEmail?: string; onSignOut?: () => void }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [activePage, setActivePage] = useLocalStorage('activePage', 'Dashboard')
+  // Always open on the Dashboard (on page load and after sign-in), not on the last page visited.
+  const [activePage, setActivePage] = useState('Dashboard')
   const [searchInput, setSearchInput] = useState('')
   const [searchLoading, setSearchLoading] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
