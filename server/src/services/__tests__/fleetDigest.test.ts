@@ -1,14 +1,21 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../routes/devices.js', () => ({ fetchAllDevices: vi.fn() }))
-vi.mock('../endpointCentralPatch.js', () => ({ getPatchSystems: vi.fn() }))
+vi.mock('../endpointCentralPatch.js', () => ({ getPatchSystems: vi.fn(), getFleetCriticalPatches: vi.fn() }))
+vi.mock('../fleetDigestReport.js', () => ({ buildFleetDigestWorkbook: vi.fn() }))
 vi.mock('../criticalPatchReport.js', () => ({ isSupportedCriticalPatchClient: vi.fn(() => true) }))
 vi.mock('../staleDevicesReport.js', () => ({ STALE_DAYS: 30 }))
-vi.mock('../slack.js', () => ({ sendSlackBlocks: vi.fn() }))
+vi.mock('../slack.js', () => ({ sendSlackBlocks: vi.fn(), uploadSlackFile: vi.fn() }))
 vi.mock('../../store/integrationStore.js', () => ({ getSlackConfig: vi.fn() }))
 vi.mock('../../store/fleetSnapshotStore.js', () => ({ listSnapshots: vi.fn(() => []), saveSnapshot: vi.fn() }))
 
-import { pickBaseline, formatDelta, buildActions, buildDigestMessage } from '../fleetDigest.js'
+import { pickBaseline, formatDelta, buildActions, buildDigestMessage, sendFleetDigest } from '../fleetDigest.js'
+import { fetchAllDevices } from '../../routes/devices.js'
+import { getPatchSystems, getFleetCriticalPatches } from '../endpointCentralPatch.js'
+import { sendSlackBlocks, uploadSlackFile } from '../slack.js'
+import { getSlackConfig } from '../../store/integrationStore.js'
+import { saveSnapshot } from '../../store/fleetSnapshotStore.js'
+import { buildFleetDigestWorkbook } from '../fleetDigestReport.js'
 import type { FleetSnapshot } from '../../store/fleetSnapshotStore.js'
 
 const snap = (date: string, overrides: Partial<FleetSnapshot> = {}): FleetSnapshot => ({
@@ -68,5 +75,53 @@ describe('buildDigestMessage', () => {
     const { blocks } = buildDigestMessage(snap('2026-10-26', { stale: 7 }), snap('2026-10-19', { stale: 10 }))
     expect(JSON.stringify(blocks)).toContain('🟢 ▼ 3')
     expect(JSON.stringify(blocks)).toContain('vs 2026-10-19')
+  })
+})
+
+describe('sendFleetDigest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getSlackConfig).mockReturnValue({ botToken: 'xoxb-test' } as never)
+    vi.mocked(fetchAllDevices).mockResolvedValue({ devices: [{ platform: 'Windows', complianceState: 'Compliant', lastCheckIn: new Date().toISOString() }] as never, mock: false })
+    vi.mocked(getPatchSystems).mockResolvedValue([])
+    vi.mocked(getFleetCriticalPatches).mockResolvedValue(new Map())
+    vi.mocked(sendSlackBlocks).mockResolvedValue({ ok: true, ts: '1700000000.000100' })
+    vi.mocked(uploadSlackFile).mockResolvedValue({ ok: true })
+    vi.mocked(buildFleetDigestWorkbook).mockResolvedValue(Buffer.from('xlsx'))
+  })
+
+  it('posts the message, saves the snapshot, and uploads the workbook into the message thread', async () => {
+    const result = await sendFleetDigest('C123')
+    expect(result.ok).toBe(true)
+    expect(saveSnapshot).toHaveBeenCalledOnce()
+    expect(uploadSlackFile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ channelId: 'C123', threadTs: '1700000000.000100', filename: expect.stringMatching(/^endpoint-fleet-health-\d{4}-\d{2}-\d{2}\.xlsx$/) }))
+  })
+
+  it('does not post or save a snapshot when no devices are returned', async () => {
+    vi.mocked(fetchAllDevices).mockResolvedValue({ devices: [], mock: false })
+    expect((await sendFleetDigest('C123')).ok).toBe(false)
+    expect(sendSlackBlocks).not.toHaveBeenCalled()
+    expect(saveSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('does not save a snapshot when the Slack post fails', async () => {
+    vi.mocked(sendSlackBlocks).mockResolvedValue({ ok: false, error: 'channel_not_found' })
+    expect(await sendFleetDigest('C123')).toMatchObject({ ok: false, error: 'channel_not_found' })
+    expect(saveSnapshot).not.toHaveBeenCalled()
+    expect(uploadSlackFile).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed Excel upload after the message has posted', async () => {
+    vi.mocked(uploadSlackFile).mockResolvedValue({ ok: false, error: 'missing_scope' })
+    const result = await sendFleetDigest('C123')
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('Digest posted, but the Excel upload failed: missing_scope')
+  })
+
+  it('still sends when Patch Manager is down, with no patch metric', async () => {
+    vi.mocked(getPatchSystems).mockRejectedValue(new Error('down'))
+    const result = await sendFleetDigest('C123')
+    expect(result.ok).toBe(true)
+    expect(result.snapshot?.criticalPatchDevices).toBeNull()
   })
 })

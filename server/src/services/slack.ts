@@ -12,6 +12,8 @@ export interface SlackFileUpload {
   title: string
   content: Buffer
   initialComment: string
+  /** Posts the file as a reply in this message's thread instead of the channel. */
+  threadTs?: string
 }
 
 /** Sends a small operational alert. Bot delivery targets a channel; webhook
@@ -38,15 +40,15 @@ export async function sendSlackMessage(cfg: RuntimeSlackConfig, channelId: strin
 
 /** Posts a Block Kit message to a channel (bot token required). `text` is the
  * notification / accessibility fallback shown where blocks are not rendered. */
-export async function sendSlackBlocks(cfg: RuntimeSlackConfig, channelId: string, text: string, blocks: unknown[]): Promise<{ ok: boolean; error?: string }> {
+export async function sendSlackBlocks(cfg: RuntimeSlackConfig, channelId: string, text: string, blocks: unknown[]): Promise<{ ok: boolean; error?: string; ts?: string }> {
   if (!cfg.botToken) return { ok: false, error: 'A Bot OAuth token is required to post Slack blocks.' }
   try {
     const res = await fetchWithTimeout('https://slack.com/api/chat.postMessage', {
       method: 'POST', headers: { Authorization: `Bearer ${cfg.botToken}`, 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ channel: channelId, text, blocks, unfurl_links: false }),
     })
-    const body = await res.json() as { ok: boolean; error?: string }
-    return body.ok ? { ok: true } : { ok: false, error: body.error ?? 'Slack rejected the message.' }
+    const body = await res.json() as { ok: boolean; error?: string; ts?: string }
+    return body.ok ? { ok: true, ...(body.ts ? { ts: body.ts } : {}) } : { ok: false, error: body.error ?? 'Slack rejected the message.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Slack send failed.' }
   }
@@ -145,7 +147,7 @@ export async function uploadSlackFile(cfg: RuntimeSlackConfig, upload: SlackFile
     const completeRequest = await fetchWithTimeout('https://slack.com/api/files.completeUploadExternal', {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.botToken}`, 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ files: [{ id: uploadInfo.file_id, title: upload.title }], channel_id: upload.channelId, initial_comment: upload.initialComment }),
+      body: JSON.stringify({ files: [{ id: uploadInfo.file_id, title: upload.title }], channel_id: upload.channelId, initial_comment: upload.initialComment, ...(upload.threadTs ? { thread_ts: upload.threadTs } : {}) }),
     })
     const completeInfo = await completeRequest.json() as { ok: boolean; error?: string }
     return completeInfo.ok ? { ok: true, fileId: uploadInfo.file_id } : { ok: false, error: completeInfo.error ?? 'Slack could not complete the file upload.' }

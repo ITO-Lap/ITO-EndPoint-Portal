@@ -4,10 +4,11 @@
 // the next digest has something to compare against.
 
 import { fetchAllDevices } from '../routes/devices.js'
-import { getPatchSystems } from './endpointCentralPatch.js'
+import { getPatchSystems, getFleetCriticalPatches, type MissingPatch, type PatchSystemStatus } from './endpointCentralPatch.js'
 import { isSupportedCriticalPatchClient } from './criticalPatchReport.js'
 import { STALE_DAYS } from './staleDevicesReport.js'
-import { sendSlackBlocks } from './slack.js'
+import { sendSlackBlocks, uploadSlackFile } from './slack.js'
+import { buildFleetDigestWorkbook, type FleetReportData } from './fleetDigestReport.js'
 import { getSlackConfig } from '../store/integrationStore.js'
 import { listSnapshots, saveSnapshot, type FleetSnapshot } from '../store/fleetSnapshotStore.js'
 
@@ -15,20 +16,30 @@ const DAY_MS = 86_400_000
 const TARGET_BASELINE_DAYS = 7
 const MAX_BASELINE_AGE_DAYS = 14
 
-export async function collectFleetSnapshot(now = new Date()): Promise<FleetSnapshot> {
+export async function collectFleetData(): Promise<FleetReportData> {
   const { devices } = await fetchAllDevices()
+  let patchSystems: PatchSystemStatus[] | null = null
+  let patchesBySystem: Map<string, MissingPatch[]> | null = null
+  try {
+    patchSystems = await getPatchSystems()
+  } catch (error) {
+    console.error('[fleet-digest] Patch Manager unavailable, omitting patch metric:', error)
+  }
+  if (patchSystems) {
+    try { patchesBySystem = await getFleetCriticalPatches() }
+    catch (error) { console.error('[fleet-digest] Per-patch detail unavailable:', error) }
+  }
+  return { devices, patchSystems, patchesBySystem }
+}
+
+export function buildSnapshot({ devices, patchSystems }: FleetReportData, now = new Date()): FleetSnapshot {
   const stale = devices.filter(d => {
     const ts = Date.parse(d.lastCheckIn)
     return Number.isFinite(ts) && Math.floor((now.getTime() - ts) / DAY_MS) >= STALE_DAYS
   }).length
-
-  let criticalPatchDevices: number | null = null
-  try {
-    const systems = await getPatchSystems()
-    criticalPatchDevices = systems.filter(s => s.scanSucceeded && s.criticalPatchCount > 0 && isSupportedCriticalPatchClient(s)).length
-  } catch (error) {
-    console.error('[fleet-digest] Patch Manager unavailable, omitting patch metric:', error)
-  }
+  const criticalPatchDevices = patchSystems
+    ? patchSystems.filter(s => s.scanSucceeded && s.criticalPatchCount > 0 && isSupportedCriticalPatchClient(s)).length
+    : null
 
   const byPlatform: Record<string, number> = {}
   for (const d of devices) byPlatform[d.platform] = (byPlatform[d.platform] ?? 0) + 1
@@ -100,13 +111,30 @@ export function buildDigestMessage(current: FleetSnapshot, baseline: FleetSnapsh
 export async function sendFleetDigest(channelId: string): Promise<{ ok: boolean; error?: string; snapshot?: FleetSnapshot }> {
   const cfg = getSlackConfig()
   if (!cfg?.botToken) return { ok: false, error: 'Slack Bot OAuth token is not configured.' }
-  const current = await collectFleetSnapshot()
+  const now = new Date()
+  const data = await collectFleetData()
+  const current = buildSnapshot(data, now)
   if (current.total === 0) return { ok: false, error: 'No device data available (no MDM source is connected or returned devices).' }
   const baseline = pickBaseline(current, listSnapshots())
   const { text, blocks } = buildDigestMessage(current, baseline)
-  const result = await sendSlackBlocks(cfg, channelId, text, blocks)
+
+  const posted = await sendSlackBlocks(cfg, channelId, text, blocks)
+  if (!posted.ok) return { ok: false, ...(posted.error ? { error: posted.error } : {}), snapshot: current }
   // Record only after a successful post and only for real data, so an outage
   // can never become a misleading 0-device baseline.
-  if (result.ok) saveSnapshot(current)
-  return { ...result, snapshot: current }
+  saveSnapshot(current)
+
+  // The workbook rides along as a reply in the digest's thread.
+  try {
+    const content = await buildFleetDigestWorkbook(data, current, baseline, buildActions(current), now)
+    const uploaded = await uploadSlackFile(cfg, {
+      channelId, filename: `endpoint-fleet-health-${current.date}.xlsx`, title: `Endpoint Fleet Health ${current.date}`, content,
+      initialComment: 'Full detail behind this digest: summary, non-compliant devices, stale devices and missing critical patches.',
+      ...(posted.ts ? { threadTs: posted.ts } : {}),
+    })
+    if (!uploaded.ok) return { ok: false, error: `Digest posted, but the Excel upload failed: ${uploaded.error ?? 'unknown error'}`, snapshot: current }
+  } catch (error) {
+    return { ok: false, error: `Digest posted, but the Excel report could not be built: ${error instanceof Error ? error.message : String(error)}`, snapshot: current }
+  }
+  return { ok: true, snapshot: current }
 }
