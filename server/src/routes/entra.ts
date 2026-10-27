@@ -8,6 +8,8 @@ import {
 } from '../services/entraIntelligence.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import { exportToCSV, exportToExcel } from '../services/reportExporter.js'
+import { collectDuplicateDeviceReport } from '../services/entraDuplicateDevices.js'
+import { buildDuplicateDevicesWorkbook, summarize } from '../services/entraDuplicateDevicesReport.js'
 
 const router = Router()
 
@@ -122,6 +124,21 @@ router.get('/groups/report/export', asyncHandler(async (req, res) => {
 router.get('/security', asyncHandler(async (_req, res) => {
   const data = await getEntraSecurity()
   res.json({ success: true, data })
+}))
+
+// GET /api/entra/duplicate-devices — groups of Entra device objects that represent the same device
+router.get('/duplicate-devices', asyncHandler(async (_req, res) => {
+  const report = await collectDuplicateDeviceReport()
+  res.json({ success: true, data: { summary: summarize(report), groups: report.groups, intuneJoined: report.intuneJoined, generatedAt: report.generatedAt } })
+}))
+
+// GET /api/entra/duplicate-devices/export — the same report as an Excel download
+router.get('/duplicate-devices/export', asyncHandler(async (_req, res) => {
+  const now = new Date()
+  const content = await buildDuplicateDevicesWorkbook(await collectDuplicateDeviceReport(now), now)
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader('Content-Disposition', `attachment; filename="duplicate-entra-devices-${now.toISOString().slice(0, 10)}.xlsx"`)
+  res.send(content)
 }))
 
 // POST /api/entra/devices/:id/sync

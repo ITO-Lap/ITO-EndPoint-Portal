@@ -20,6 +20,7 @@ import { getSlackConfig } from '../store/integrationStore.js'
 import { createAppUpdatesReport } from './appIntel/updateReport.js'
 import { sendReportEmail } from './reportEmail.js'
 import { sendFleetDigest } from './fleetDigest.js'
+import { sendDuplicateDevicesReport } from './entraDuplicateDevicesReport.js'
 
 function matchesPart(value: number, expression: string): boolean {
   return expression.split(',').some(part => {
@@ -77,7 +78,8 @@ const CONTENT_TYPES: Record<string, string> = {
 
 async function generateReportContent(schedule: ScheduledReportRecord): Promise<{ content: Buffer; filename: string; rows: number }> {
   switch (schedule.report_type) {
-    case 'fleet-digest':      throw new Error('fleet-digest is delivered as a Slack message, not a file')
+    case 'fleet-digest':
+    case 'entra-duplicate-devices': throw new Error(`${schedule.report_type} is delivered as a Slack message, not a file`)
     case 'critical-patching': { const r = await createCriticalPatchReport(); return { content: r.content, filename: r.filename, rows: r.rows } }
     case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length } }
     case 'app-updates':       { const r = await createAppUpdatesReport(); return { content: r.content, filename: r.filename, rows: r.rows } }
@@ -115,6 +117,17 @@ async function run(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'sch
         error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
       })
       return { ok: true, runId: runRecord?.id, rows: digest.snapshot?.total ?? 0, filename: undefined }
+    }
+    if (schedule.report_type === 'entra-duplicate-devices') {
+      const channelId = slackChannel(schedule.filters)
+      if (!channelId) throw new Error('The duplicate Entra devices report is delivered to Slack; configure a Slack channel for this schedule.')
+      const result = await sendDuplicateDevicesReport(channelId)
+      if (!result.ok) throw new Error(result.error ?? 'Delivery failed')
+      const runRecord = await store.recordReportRun(schedule.id, {
+        status: 'completed', format: schedule.format, record_count: result.groups ?? 0, file_size_bytes: null,
+        error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
+      })
+      return { ok: true, runId: runRecord?.id, rows: result.groups ?? 0, filename: undefined }
     }
     const report = await generateReportContent(schedule)
     const delivery = await deliver(schedule, report.content, report.filename)

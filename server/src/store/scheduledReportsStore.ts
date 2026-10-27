@@ -20,7 +20,7 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { isDbAvailable, query } from '../db/index.js'
 
-export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest'
+export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest' | 'entra-duplicate-devices'
 export type ReportFormat = 'pdf' | 'excel' | 'csv' | 'pptx'
 export type NotificationFrequency = 'daily' | 'weekly'
 

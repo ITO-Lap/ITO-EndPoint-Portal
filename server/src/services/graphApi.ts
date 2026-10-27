@@ -463,6 +463,32 @@ export async function getUsers(creds: TenantCredentials): Promise<GraphUser[]> {
   })
 }
 
+// ─── Entra ID directory device objects (Graph /devices) ──────────────────────
+// Needs the Device.Read.All application permission. `id` is the directory
+// object ID; `deviceId` is the device identity that Intune reports as azureADDeviceId.
+export interface GraphEntraDevice {
+  id: string
+  deviceId: string | null
+  displayName: string | null
+  operatingSystem: string | null
+  operatingSystemVersion: string | null
+  trustType: string | null
+  isManaged: boolean | null
+  isCompliant: boolean | null
+  accountEnabled: boolean | null
+  registrationDateTime: string | null
+  approximateLastSignInDateTime: string | null
+}
+
+const ENTRA_DEVICE_SELECT = [
+  'id', 'deviceId', 'displayName', 'operatingSystem', 'operatingSystemVersion', 'trustType',
+  'isManaged', 'isCompliant', 'accountEnabled', 'registrationDateTime', 'approximateLastSignInDateTime',
+].join(',')
+
+export async function getEntraDirectoryDevices(creds: TenantCredentials): Promise<GraphEntraDevice[]> {
+  return graphGetAll<GraphEntraDevice>(creds, '/devices', { '$select': ENTRA_DEVICE_SELECT, '$top': '999' })
+}
+
 // ─── Helper: build creds from environment (single-tenant default) ─────────────
 export function credentialsFromEnv(): TenantCredentials {
   const tenantId     = process.env.INTUNE_TENANT_ID     ?? process.env.ENTRA_TENANT_ID ?? ''
