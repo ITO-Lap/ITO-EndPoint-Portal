@@ -6,7 +6,7 @@
  *
  * Role mapping:
  *   emails in AUTH_ALLOWED_EMAILS   → Global Admin, after Microsoft has verified them
- *   member of "ITO EndPoint Portal" → IT Admin
+ *   member of "ITO EndPoint Portal" → IT Admin (nested groups count; name matched ignoring case)
  *   member of "Desktop Support"     → Helpdesk
  *   anyone else                     → 403
  */
@@ -21,8 +21,14 @@ import { bearerToken } from '../middleware/requireSession.js'
 const router = Router()
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const IT_ADMIN_GROUP     = 'ITO EndPoint Portal'
-const HELPDESK_GROUP     = 'Desktop Support'
+// Roles come from group membership. A group matches by Object ID when AUTH_*_GROUP_ID is set (exact, and
+// survives a rename; a same-named group does not qualify), otherwise by display name ignoring case and surrounding spaces.
+const itAdminGroup       = () => process.env.AUTH_IT_ADMIN_GROUP ?? 'ITO EndPoint Portal'
+const helpdeskGroup      = () => process.env.AUTH_HELPDESK_GROUP ?? 'Desktop Support'
+interface UserGroup { id: string; name: string }
+const normalize          = (v: string | undefined) => (v ?? '').trim().toLowerCase()
+const inGroup            = (groups: UserGroup[], name: string, id: string | undefined) =>
+  normalize(id) ? groups.some(g => normalize(g.id) === normalize(id)) : groups.some(g => normalize(g.name) === normalize(name))
 // Where Microsoft sends the browser back, and where the app lives. On localhost these are the dev
 // defaults (API on :4000, Vite on :5173). On any other host they are taken from the request itself
 // (the deployed site is served by this same server), so a deployment works without extra settings;
@@ -86,6 +92,20 @@ async function getAppToken(): Promise<string | null> {
   const data = await res.json() as { access_token: string; expires_in: number }
   appTokenCache = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1_000 }
   return appTokenCache.token
+}
+
+/** Id and display name of every group the user belongs to, directly or through nested groups, following all pages. null if Graph could not answer. */
+async function listUserGroups(token: string, userId: string): Promise<UserGroup[] | null> {
+  const groups: UserGroup[] = []
+  let url: string | undefined = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userId)}/transitiveMemberOf/microsoft.graph.group?$select=id,displayName&$top=999`
+  for (let page = 0; url && page < 20; page++) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: upstream() })
+    if (!res.ok) return null
+    const body = await res.json() as { value?: Array<{ id?: string; displayName?: string | null }>; '@odata.nextLink'?: string }
+    for (const g of body.value ?? []) if (g.id || g.displayName) groups.push({ id: g.id ?? '', name: g.displayName ?? '' })
+    url = body['@odata.nextLink']
+  }
+  return groups
 }
 
 async function graphGet<T>(token: string, path: string): Promise<T | null> {
@@ -211,14 +231,15 @@ router.get('/callback', async (req, res) => {
     } else {
       const appToken = await getAppToken()
       if (appToken) {
-        const memberOf = await graphGet<{ value: Array<{ displayName: string }> }>(
-          appToken,
-          `/users/${encodeURIComponent(userId)}/memberOf?$select=displayName&$top=100`
-        )
-        if (!memberOf) groupLookupFailed = true
-        const groups = (memberOf?.value ?? []).map(g => g.displayName)
-        if (groups.includes(IT_ADMIN_GROUP))   role = 'IT Admin'
-        else if (groups.includes(HELPDESK_GROUP)) role = 'Helpdesk'
+        const groups = await listUserGroups(appToken, userId)
+        if (!groups) groupLookupFailed = true
+        else if (inGroup(groups, itAdminGroup(), process.env.AUTH_IT_ADMIN_GROUP_ID)) role = 'IT Admin'
+        else if (inGroup(groups, helpdeskGroup(), process.env.AUTH_HELPDESK_GROUP_ID)) role = 'Helpdesk'
+        else {
+          // Help diagnose "I am in the group but was refused": log what Graph returned (group names only).
+          const close = groups.map(g => g.name).filter(g => /endpoint|portal|desktop|ito/i.test(g)).slice(0, 10)
+          console.warn(`[auth] ${email} belongs to ${groups.length} group(s); none is '${itAdminGroup()}' or '${helpdeskGroup()}'. Similar names: ${close.length ? close.join(' | ') : 'none'}`)
+        }
       } else {
         groupLookupFailed = true
       }
@@ -228,7 +249,7 @@ router.get('/callback', async (req, res) => {
       // A failed lookup is a server/permission problem, not proof the user lacks access: say so.
       const msg = encodeURIComponent(groupLookupFailed
         ? `Signed in as ${email}, but group membership could not be checked. Ask an administrator to grant the app the GroupMember.Read.All permission.`
-        : `Access denied. ${email} is not a member of '${IT_ADMIN_GROUP}' or '${HELPDESK_GROUP}'.`)
+        : `Access denied. ${email} is not a member of '${itAdminGroup()}' or '${helpdeskGroup()}'.`)
       res.redirect(`${frontendOrigin}/?auth_error=${msg}`)
       return
     }

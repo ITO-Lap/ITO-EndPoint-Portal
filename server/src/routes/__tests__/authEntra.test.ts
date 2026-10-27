@@ -14,6 +14,7 @@ let base = ''
 const realFetch = globalThis.fetch
 let profile: Record<string, unknown>
 let memberOf: { status: number; body: unknown }
+let memberOfPage2: unknown = { value: [] }
 
 beforeAll(async () => {
   const app = express()
@@ -27,13 +28,15 @@ afterAll(() => new Promise<void>(r => server.close(() => r())))
 
 beforeEach(() => {
   profile = { displayName: 'Pat Example', userPrincipalName: 'pat@zinnia.com', mail: 'pat@zinnia.com', id: 'user-1' }
-  memberOf = { status: 200, body: { value: [{ displayName: 'ITO EndPoint Portal' }] } }
+  memberOf = { status: 200, body: { value: [{ id: 'g-itadmin', displayName: 'ITO EndPoint Portal' }] } }
+  memberOfPage2 = { value: [] }
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input)
     if (url.startsWith(base)) return realFetch(input, init)
     if (url.includes('/oauth2/v2.0/token')) return new Response(JSON.stringify({ access_token: 'graph-token', id_token: 'id', expires_in: 3600 }))
     if (url.includes('/me?')) return new Response(JSON.stringify(profile))
-    if (url.includes('/memberOf')) return new Response(JSON.stringify(memberOf.body), { status: memberOf.status })
+    if (url.includes('skiptoken=page2')) return new Response(JSON.stringify(memberOfPage2))
+    if (url.includes('/transitiveMemberOf/microsoft.graph.group')) return new Response(JSON.stringify(memberOf.body), { status: memberOf.status })
     return new Response('{}', { status: 404 })
   })
 })
@@ -74,6 +77,37 @@ describe('Microsoft sign-in', () => {
     profile = { displayName: 'Avinash Verma', userPrincipalName: 'avinash.verma@zinnia.com', mail: 'avinash.verma@zinnia.com', id: 'user-2' }
     memberOf = { status: 500, body: {} }
     expect(verifySession(tokenFrom((await callback()).location)!)).toMatchObject({ email: 'avinash.verma@zinnia.com', role: 'Global Admin' })
+  })
+
+  it('matches the group name ignoring case and spaces ("ITO Endpoint Portal" is the same group)', async () => {
+    memberOf = { status: 200, body: { value: [{ displayName: '  ITO Endpoint Portal ' }] } }
+    expect(verifySession(tokenFrom((await callback()).location)!)?.role).toBe('IT Admin')
+  })
+
+  it('finds the group on a later page of results, not just the first', async () => {
+    memberOf = { status: 200, body: { value: [{ displayName: 'Marketing' }], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/users/user-1/transitiveMemberOf/microsoft.graph.group?$skiptoken=page2' } }
+    memberOfPage2 = { value: [{ displayName: 'Desktop Support' }] }
+    expect(verifySession(tokenFrom((await callback()).location)!)?.role).toBe('Helpdesk')
+  })
+
+  it('asks Graph for transitive membership, so nested group members are included', async () => {
+    vi.mocked(globalThis.fetch).mockClear()
+    await callback()
+    const groupCalls = vi.mocked(globalThis.fetch).mock.calls.map(([u]) => String(u)).filter(u => u.includes('MemberOf'))
+    expect(groupCalls.length).toBeGreaterThan(0)
+    expect(groupCalls.every(u => u.includes('/transitiveMemberOf/microsoft.graph.group'))).toBe(true)
+  })
+
+  it('uses AUTH_IT_ADMIN_GROUP when set, and says in the log what it did find when refusing', async () => {
+    vi.stubEnv('AUTH_IT_ADMIN_GROUP', 'Zinnia Endpoint Admins')
+    memberOf = { status: 200, body: { value: [{ displayName: 'ITO EndPoint Portal' }, { displayName: 'Marketing' }] } }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { location } = await callback()
+    expect(location.searchParams.get('auth_error')).toContain("'Zinnia Endpoint Admins'")
+    expect(warn.mock.calls.flat().join(' ')).toContain('belongs to 2 group(s)')
+    expect(warn.mock.calls.flat().join(' ')).toContain('Similar names: ITO EndPoint Portal')
+    warn.mockRestore()
+    vi.unstubAllEnvs()
   })
 
   it('denies a Zinnia user who is in neither group, without issuing a token', async () => {
@@ -164,6 +198,28 @@ describe('Microsoft sign-in', () => {
       vi.stubEnv('NODE_ENV', 'production')
       const forwarded = await realFetch(`${base}/api/auth/login`, { headers: { 'x-forwarded-host': 'ito-endpoint.deployhub.zinnia.io', 'x-forwarded-proto': 'https' } })
       expect(forwarded.status).toBe(200)
+    })
+  })
+
+  describe('matching groups by Object ID', () => {
+    afterEach(() => vi.unstubAllEnvs())
+    it('does not accept a same-named group with a different ID once an ID is configured', async () => {
+      vi.stubEnv('AUTH_IT_ADMIN_GROUP_ID', 'f8824510-8aad-4735-b458-bdb6bf32ece3')
+      memberOf = { status: 200, body: { value: [{ id: 'some-other-id', displayName: 'ITO EndPoint Portal' }] } }
+      const { location } = await callback()
+      expect(location.searchParams.get('auth_error')).toContain('Access denied')
+      expect(tokenFrom(location)).toBeNull()
+    })
+    it('grants the role by ID even when the group has a different display name', async () => {
+      vi.stubEnv('AUTH_IT_ADMIN_GROUP_ID', 'F8824510-8AAD-4735-B458-BDB6BF32ECE3')
+      memberOf = { status: 200, body: { value: [{ id: 'f8824510-8aad-4735-b458-bdb6bf32ece3', displayName: 'Renamed Group' }] } }
+      expect(verifySession(tokenFrom((await callback()).location)!)?.role).toBe('IT Admin')
+    })
+    it('maps the helpdesk group by ID', async () => {
+      vi.stubEnv('AUTH_HELPDESK_GROUP', 'ITOps desktops')
+      vi.stubEnv('AUTH_HELPDESK_GROUP_ID', '51a27c4a-6a12-4db0-9546-aa2364cc5b5e')
+      memberOf = { status: 200, body: { value: [{ id: '51a27c4a-6a12-4db0-9546-aa2364cc5b5e', displayName: 'ITOps desktops' }] } }
+      expect(verifySession(tokenFrom((await callback()).location)!)?.role).toBe('Helpdesk')
     })
   })
 })
