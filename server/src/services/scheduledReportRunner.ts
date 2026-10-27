@@ -20,6 +20,7 @@ import { getSlackConfig } from '../store/integrationStore.js'
 import { createAppUpdatesReport } from './appIntel/updateReport.js'
 import { sendReportEmail } from './reportEmail.js'
 import { sendFleetDigest } from './fleetDigest.js'
+import { addNotification } from '../data/notificationStore.js'
 import { buildOverviewMessage, overviewToText, type ReportOverview } from './reportOverview.js'
 import { sendDuplicateDevicesReport } from './entraDuplicateDevicesReport.js'
 
@@ -112,7 +113,7 @@ async function deliver(schedule: ScheduledReportRecord, content: Buffer, filenam
   return { ok: false, error: 'This schedule has no Slack channel or email recipients configured.' }
 }
 
-async function run(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'scheduler') {
+async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'scheduler') {
   const startedAt = new Date().toISOString()
   try {
     if (schedule.report_type === 'fleet-digest') {
@@ -151,6 +152,19 @@ async function run(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'sch
       status: 'failed', format: schedule.format, record_count: null, file_size_bytes: null,
       error_message: message, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
     })
+    throw error
+  }
+}
+
+/** Runs a schedule and puts the outcome on the bell, so automatic deliveries are visible without opening Slack. */
+async function run(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'scheduler') {
+  const destination = slackChannel(schedule.filters) ? 'to Slack' : 'by email'
+  try {
+    const result = await execute(schedule, triggeredBy)
+    addNotification(`${schedule.name} delivered ${destination}${triggeredBy === 'manual' ? ' (manual run)' : ''}.`, 'success')
+    return result
+  } catch (error) {
+    addNotification(`${schedule.name} could not be delivered ${destination}: ${error instanceof Error ? error.message : String(error)}`, 'error')
     throw error
   }
 }

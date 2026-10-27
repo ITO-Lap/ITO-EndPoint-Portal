@@ -35,6 +35,7 @@ import { createComplianceReport, createInventoryReport } from '../complianceInve
 import { uploadSlackFile } from '../slack.js'
 import { sendReportEmail } from '../reportEmail.js'
 import { runScheduledReportNow, runDueReports } from '../scheduledReportRunner.js'
+import { getNotifications, markAllRead } from '../../data/notificationStore.js'
 
 function makeReport(overrides: Partial<(typeof reports)[number]> = {}): (typeof reports)[number] {
   return {
@@ -66,6 +67,25 @@ describe('runScheduledReportNow — generation dispatch by report_type', () => {
     reports = [makeReport({ report_type: reportType, filters: { slackChannelId: 'C1' } })]
     await runScheduledReportNow('r1')
     expect(generatorFn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('runScheduledReportNow — bell notifications', () => {
+  it('adds an unread success notification when a Slack delivery succeeds', async () => {
+    markAllRead()
+    const before = getNotifications().length
+    reports = [makeReport({ name: 'Weekly Stale', filters: { slackChannelId: 'C123' } })]
+    await runScheduledReportNow('r1')
+    const [latest] = getNotifications()
+    expect(getNotifications()).toHaveLength(before + 1)
+    expect(latest).toMatchObject({ message: 'Weekly Stale delivered to Slack (manual run).', type: 'success', read: false })
+  })
+
+  it('adds an error notification with the reason when delivery fails', async () => {
+    vi.mocked(uploadSlackFile).mockResolvedValueOnce({ ok: false, error: 'channel_not_found' })
+    reports = [makeReport({ name: 'Weekly Stale', filters: { slackChannelId: 'C123' } })]
+    await expect(runScheduledReportNow('r1')).rejects.toThrow('channel_not_found')
+    expect(getNotifications()[0]).toMatchObject({ message: 'Weekly Stale could not be delivered to Slack: channel_not_found', type: 'error', read: false })
   })
 })
 

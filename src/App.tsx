@@ -352,7 +352,7 @@ function App() {
   return (
     <ToastProvider>
       <NavVisibilityProvider>
-        <AppContent viewerRole="Global Admin" displayName="Admin" userEmail="admin@zinnia.com" />
+        <AppContent viewerRole="Global Admin" displayName="Avinash Verma" userEmail="admin@zinnia.com" />
       </NavVisibilityProvider>
     </ToastProvider>
   )

@@ -32,6 +32,7 @@ server/.app-release-alerts.json
 server/.patch-remediation-actions.json
 server/.scheduled-reports.json
 server/.fleet-snapshots.json
+server/.notifications.json
 
 # Editor directories and files
 .vscode/*

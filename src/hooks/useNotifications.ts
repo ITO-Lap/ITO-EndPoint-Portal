@@ -9,10 +9,14 @@ function toItem({ id, message, read }: { id: string; message: string; read: bool
 export function useNotifications() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
+  // Poll so deliveries that happen while the page is open light up the bell without a reload.
   useEffect(() => {
-    api.fetchNotifications()
+    const refresh = () => api.fetchNotifications()
       .then(items => setNotifications(items.map(toItem)))
       .catch(() => {})
+    void refresh()
+    const timer = setInterval(() => { void refresh() }, 60_000)
+    return () => clearInterval(timer)
   }, [])
 
   const markAllRead = useCallback(async () => {
