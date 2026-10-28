@@ -1,3 +1,4 @@
+import { dataFile } from '../store/dataDir.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getManageEngineConfig } from '../store/integrationStore.js'
@@ -115,7 +116,7 @@ const BASE_DELAY_MS = 2_500
 const MAX_RETRIES = 8
 const RESCAN_AFTER_MS = 6 * 60 * 60 * 1000
 const PUBLISH_EVERY = 25
-const CACHE_FILE = path.resolve(process.cwd(), '.cache', 'endpoint-central-app-inventory.v2.json')
+const CACHE_FILE = dataFile('cache/endpoint-central-app-inventory.v2.json', [path.resolve(process.cwd(), '.cache', 'endpoint-central-app-inventory.v2.json')])
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 

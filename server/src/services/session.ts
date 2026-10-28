@@ -11,13 +11,12 @@
 //   AUTH_ENFORCED        "false" turns the API gate off (local debugging only)
 //   SESSION_SECRET       signing key; if unset one is generated and saved to server/.session-secret
 
+import { dataFile, legacyServerFile } from '../store/dataDir.js'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { chmodSync, readFileSync, writeFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
 import jwt from 'jsonwebtoken'
 
-// SESSION_SECRET if set; otherwise a key generated once and kept in server/.session-secret (git-ignored,
+// SESSION_SECRET if set; otherwise a key generated once and kept in DATA_DIR/session-secret (git-ignored,
 // owner-only), so restarts do not sign everyone out or break a Microsoft sign-in that is in flight.
 // Tests (NODE_ENV=test) use a throwaway in-memory key.
 function loadSecret(): string {
@@ -25,7 +24,7 @@ function loadSecret(): string {
   if (fromEnv) return fromEnv
   const generated = randomBytes(32).toString('hex')
   if (process.env['NODE_ENV'] === 'test') return generated
-  const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../.session-secret')
+  const file = dataFile('session-secret', [legacyServerFile('.session-secret')])
   try { const saved = readFileSync(file, 'utf-8').trim(); if (saved.length >= 32) return saved } catch { /* not created yet */ }
   try { writeFileSync(file, generated, { mode: 0o600 }); chmodSync(file, 0o600) }
   catch (e) { console.warn('[auth] Could not persist a session key; sessions will end when the server restarts:', e) }

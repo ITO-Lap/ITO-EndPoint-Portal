@@ -159,3 +159,12 @@ describe('buildUpdatesChecks', () => {
     expect(checks.every(c => c.status === 'ok')).toBe(true)
   })
 })
+
+describe('stale sources', () => {
+  it('warns that a source is showing its last good sync, instead of reporting it missing', async () => {
+    const { buildFleetDataChecks } = await import('../fleetDataQuality.js')
+    const checks = buildFleetDataChecks({ devices: [], staleSources: [{ source: 'intune', savedAt: '2026-10-28T08:15:00.000Z' }], graphIntuneCount: null })
+    expect(checks.find(c => c.label === 'Source freshness')?.detail).toContain('2026-10-28 08:15 UTC')
+    expect(checks.some(c => c.label === 'Source completeness')).toBe(false)
+  })
+})

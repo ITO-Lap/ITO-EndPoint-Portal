@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs'
+import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from './dataDir.js'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -73,12 +73,11 @@ interface Store extends PersistedCredentials {
 // ─ Persistence ───────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const CREDS_FILE = resolve(__dirname, '../../../../server/.integration-credentials.json')
+const CREDS_FILE = dataFile('integration-credentials.json', [resolve(__dirname, '../../../../server/.integration-credentials.json'), legacyServerFile('.integration-credentials.json')])
 
 function loadPersistedCredentials(): PersistedCredentials {
   try {
-    const raw = readFileSync(CREDS_FILE, 'utf-8')
-    return JSON.parse(raw) as PersistedCredentials
+    return readJsonFile<PersistedCredentials>(CREDS_FILE) ?? {}
   } catch {
     return {}
   }
@@ -93,7 +92,7 @@ function persistCredentials(): void {
   if (store.entra)        snapshot.entra        = store.entra
   if (store.slack)        snapshot.slack        = store.slack
   try {
-    writeFileSync(CREDS_FILE, JSON.stringify(snapshot, null, 2), 'utf-8')
+    writeJsonAtomic(CREDS_FILE, snapshot)
   } catch (e) {
     console.error('[integrationStore] Failed to persist credentials:', e)
   }

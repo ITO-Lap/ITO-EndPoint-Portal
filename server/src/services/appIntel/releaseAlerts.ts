@@ -1,6 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from '../../store/dataDir.js'
 import { hasUpdateAvailable } from './query.js'
 import { sendUpdateReportToSlack } from './updateReport.js'
 import { compareVersions } from './version.js'
@@ -13,19 +11,20 @@ interface ReleaseAlertState {
   initializedAt: string
   lastSentAt: string | null
 }
-const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../../.app-release-alerts.json')
+const file = dataFile('app-release-alerts.json', [legacyServerFile('.app-release-alerts.json')])
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 function readState(): ReleaseAlertState | null {
   try {
-    const raw = JSON.parse(readFileSync(file, 'utf8')) as ReleaseAlertState | ReleaseBaseline
+    const raw = readJsonFile<ReleaseAlertState | ReleaseBaseline>(file)
+    if (!raw) return null
     if ('versions' in raw && 'pending' in raw) return raw as ReleaseAlertState
     // Migrate the former flat baseline without creating an alert storm.
     return { versions: raw as ReleaseBaseline, pending: {}, initializedAt: new Date().toISOString(), lastSentAt: null }
   } catch { return null }
 }
 function saveState(state: ReleaseAlertState): void {
-  try { writeFileSync(file, JSON.stringify(state, null, 2), 'utf8') } catch (error) { console.error('[app-release-alerts] Could not persist state:', error) }
+  try { writeJsonAtomic(file, state) } catch (error) { console.error('[app-release-alerts] Could not persist state:', error) }
 }
 
 export interface VerifiedReleaseChange { key: string; app: string; platform: 'windows' | 'macOS'; previous: string; latest: string; source: string; affectedDevices: number }

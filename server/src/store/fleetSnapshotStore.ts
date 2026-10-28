@@ -5,9 +5,7 @@
 // calendar day (a second snapshot on the same day replaces the first). Single-
 // process-safe only, like the JSON backend of scheduledReportsStore.ts.
 
-import { readFileSync, writeFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
+import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from './dataDir.js'
 
 export interface FleetSnapshot {
   /** Calendar day the snapshot represents, YYYY-MM-DD (UTC). */
@@ -23,14 +21,12 @@ export interface FleetSnapshot {
   byPlatform: Record<string, number>
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const STORE_FILE = resolve(__dirname, '../../.fleet-snapshots.json')
+const STORE_FILE = dataFile('fleet-snapshots.json', [legacyServerFile('.fleet-snapshots.json')])
 const MAX_SNAPSHOTS = 120
 
 function load(): FleetSnapshot[] {
   try {
-    const parsed = JSON.parse(readFileSync(STORE_FILE, 'utf-8')) as { snapshots?: FleetSnapshot[] }
-    return parsed.snapshots ?? []
+    return readJsonFile<{ snapshots?: FleetSnapshot[] }>(STORE_FILE)?.snapshots ?? []
   } catch {
     return []
   }
@@ -47,7 +43,7 @@ export function saveSnapshot(snapshot: FleetSnapshot): void {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-MAX_SNAPSHOTS)
   try {
-    writeFileSync(STORE_FILE, JSON.stringify({ snapshots }, null, 2), 'utf-8')
+    writeJsonAtomic(STORE_FILE, { snapshots })
   } catch (e) {
     console.error('[fleetSnapshotStore] Failed to persist snapshots:', e)
   }

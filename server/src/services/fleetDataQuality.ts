@@ -32,7 +32,7 @@ const serialKey = (d: Device): string | null => {
 }
 
 /** Runs the Graph count (when there are Intune devices) and builds the fleet checks for a fetchAllDevices result. */
-export async function collectFleetDataChecks(fetched: Pick<FleetCheckInput, 'devices' | 'failedSources'>): Promise<DataCheck[]> {
+export async function collectFleetDataChecks(fetched: Pick<FleetCheckInput, 'devices' | 'failedSources' | 'staleSources'>): Promise<DataCheck[]> {
   const hasIntune = fetched.devices.some(d => d.managementSource === SOURCE_LABEL.intune)
   return buildFleetDataChecks({ ...fetched, graphIntuneCount: hasIntune ? await getIntuneGraphCount() : null })
 }
@@ -40,10 +40,12 @@ export async function collectFleetDataChecks(fetched: Pick<FleetCheckInput, 'dev
 export interface FleetCheckInput {
   devices: Device[]
   failedSources?: Array<{ source: 'intune' | 'manageengine'; error: string }> | undefined
+  /** Sources that were unreachable; their last saved list is what `devices` holds. */
+  staleSources?: Array<{ source: 'intune' | 'manageengine'; savedAt: string }> | undefined
   graphIntuneCount: number | null
 }
 
-export function buildFleetDataChecks({ devices, failedSources = [], graphIntuneCount }: FleetCheckInput): DataCheck[] {
+export function buildFleetDataChecks({ devices, failedSources = [], staleSources = [], graphIntuneCount }: FleetCheckInput): DataCheck[] {
   const checks: DataCheck[] = []
   const bySource = (label: string) => devices.filter(d => d.managementSource === label)
   const intune = bySource(SOURCE_LABEL.intune)
@@ -52,12 +54,14 @@ export function buildFleetDataChecks({ devices, failedSources = [], graphIntuneC
   // 1. Did every configured source answer?
   if (failedSources.length) {
     for (const f of failedSources) checks.push(warn('Source completeness', `${SOURCE_LABEL[f.source]} did not return data (${f.error}). Every figure in this report excludes it.`))
-  } else {
+  } else if (!staleSources.length) {
     checks.push(ok('Source completeness', `Every configured source answered (Intune ${n(intune.length)}, ManageEngine ${n(me.length)}).`))
   }
 
+  for (const st of staleSources) checks.push(warn('Source freshness', `${SOURCE_LABEL[st.source]} could not be reached, so its figures are from the last good sync at ${st.savedAt.slice(0, 16).replace('T', ' ')} UTC.`))
+
   // 2. Intune rows vs Microsoft Graph's own count (skipped when Intune itself failed or is absent).
-  if (!failedSources.some(f => f.source === 'intune') && intune.length > 0) checks.push(reconcileCount('Intune count vs Microsoft Graph', intune.length, graphIntuneCount))
+  if (!failedSources.some(f => f.source === 'intune') && !staleSources.some(f => f.source === 'intune') && intune.length > 0) checks.push(reconcileCount('Intune count vs Microsoft Graph', intune.length, graphIntuneCount))
 
   // 3. The same physical device enrolled in both sources is counted in both.
   const intuneSerials = new Set(intune.map(serialKey).filter((s): s is string => !!s))

@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler.js'
 import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies } from '../services/intune.js'
 import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies, getManageEngineDeviceProfileResults, getManageEngineDeviceProfileResultsForDevices } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
+import { loadSourceDevices, saveSourceDevices, type DeviceSource } from '../store/deviceSnapshotStore.js'
 import type { Device, DashboardStats } from '../types.js'
 
 const router = Router()
@@ -44,9 +45,13 @@ export interface FetchedDevices {
   mock: boolean
   /** Sources that were configured but failed this fetch; their devices are missing from `devices`. */
   failedSources?: Array<{ source: 'intune' | 'manageengine'; error: string }>
+  /** Sources that failed this fetch but whose last good list (saved at `savedAt`) is included in `devices`. */
+  staleSources?: Array<{ source: 'intune' | 'manageengine'; savedAt: string }>
 }
+const pick = (f: FetchedDevices): FetchedDevices => ({ devices: f.devices, mock: f.mock, ...(f.failedSources ? { failedSources: f.failedSources } : {}), ...(f.staleSources ? { staleSources: f.staleSources } : {}) })
 let devicesCache: (FetchedDevices & { expiresAt: number }) | null = null
 let devicesFetchInFlight: Promise<FetchedDevices> | null = null
+let warmStartTried = false
 
 async function fetchWithDeadline<T>(source: string, fetcher: () => Promise<T>): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
@@ -64,12 +69,41 @@ async function fetchWithDeadline<T>(source: string, fetcher: () => Promise<T>): 
 
 export async function fetchAllDevices(): Promise<FetchedDevices> {
   if (devicesCache && Date.now() < devicesCache.expiresAt) {
-    return { devices: devicesCache.devices, mock: devicesCache.mock, ...(devicesCache.failedSources ? { failedSources: devicesCache.failedSources } : {}) }
+    return pick(devicesCache)
   }
-  if (devicesFetchInFlight) return devicesFetchInFlight
+  // While the post-restart background sync runs, keep answering from the saved lists rather than queueing behind it.
+  if (devicesFetchInFlight) return devicesCache?.expiresAt === 0 ? pick(devicesCache) : devicesFetchInFlight
 
   const anyConfigured = isIntuneConfigured() || isManageEngineConfigured()
   if (!anyConfigured) return { devices: [], mock: false }
+
+  // First call after a restart/deploy: answer at once from the last saved lists and sync in the background,
+  // instead of making the first page wait (up to 30s) on Intune and ManageEngine.
+  if (!devicesCache && !warmStartTried) {
+    warmStartTried = true
+    const warm = loadWarmStart()
+    if (warm) {
+      devicesCache = { ...warm, expiresAt: 0 }
+      void refreshDevices().catch(error => console.error('[fetchAllDevices] background refresh failed:', error))
+      return warm
+    }
+  }
+  return refreshDevices()
+}
+
+function loadWarmStart(): FetchedDevices | null {
+  const devices: Device[] = []
+  const staleSources: NonNullable<FetchedDevices['staleSources']> = []
+  for (const [source, configured] of [['intune', isIntuneConfigured()], ['manageengine', isManageEngineConfigured()]] as const) {
+    if (!configured) continue
+    const snap = loadSourceDevices(source)
+    if (snap) { devices.push(...snap.devices); staleSources.push({ source, savedAt: snap.savedAt }) }
+  }
+  return devices.length ? { devices, mock: false, staleSources } : null
+}
+
+async function refreshDevices(): Promise<FetchedDevices> {
+  if (devicesFetchInFlight) return devicesFetchInFlight
 
   const fetchPromise = (async () => {
     const [intuneResult, meResult] = await Promise.allSettled([
@@ -79,6 +113,7 @@ export async function fetchAllDevices(): Promise<FetchedDevices> {
 
     const devices: Device[] = []
     const failedSources: NonNullable<FetchedDevices['failedSources']> = []
+    const staleSources: NonNullable<FetchedDevices['staleSources']> = []
     const sources = [
       { result: intuneResult,  key: 'intune'        },
       { result: meResult,      key: 'manageengine'  },
@@ -87,9 +122,13 @@ export async function fetchAllDevices(): Promise<FetchedDevices> {
     for (const { result, key } of sources) {
       if (result.status === 'fulfilled') {
         devices.push(...result.value)
+        saveSourceDevices(key as DeviceSource, result.value)
       } else {
         console.error(`[fetchAllDevices] ${key} error:`, result.reason)
-        failedSources.push({ source: key, error: result.reason instanceof Error ? result.reason.message : 'Unknown error' })
+        // Keep showing the last good list for a source that is down, and say so, rather than dropping its devices.
+        const lastGood = loadSourceDevices(key as DeviceSource)
+        if (lastGood) { devices.push(...lastGood.devices); staleSources.push({ source: key, savedAt: lastGood.savedAt }) }
+        else failedSources.push({ source: key, error: result.reason instanceof Error ? result.reason.message : 'Unknown error' })
         recordFetchResult(key, {
           deviceCount: 0,
           lastFetchAt: Date.now(),
@@ -99,7 +138,7 @@ export async function fetchAllDevices(): Promise<FetchedDevices> {
       }
     }
 
-    const fetched: FetchedDevices = { devices, mock: false, ...(failedSources.length ? { failedSources } : {}) }
+    const fetched: FetchedDevices = { devices, mock: false, ...(failedSources.length ? { failedSources } : {}), ...(staleSources.length ? { staleSources } : {}) }
     devicesCache = { ...fetched, expiresAt: Date.now() + CACHE_TTL_MS }
     return fetched
   })()

@@ -19,7 +19,7 @@ const TARGET_BASELINE_DAYS = 7
 const MAX_BASELINE_AGE_DAYS = 14
 
 export async function collectFleetData(): Promise<FleetReportData> {
-  const { devices, failedSources } = await fetchAllDevices()
+  const { devices, failedSources, staleSources } = await fetchAllDevices()
   let patchSystems: PatchSystemStatus[] | null = null
   let patchesBySystem: Map<string, MissingPatch[]> | null = null
   try {
@@ -31,13 +31,13 @@ export async function collectFleetData(): Promise<FleetReportData> {
     try { patchesBySystem = await getFleetCriticalPatches() }
     catch (error) { console.error('[fleet-digest] Per-patch detail unavailable:', error) }
   }
-  return { devices, patchSystems, patchesBySystem, failedSources }
+  return { devices, patchSystems, patchesBySystem, failedSources, staleSources }
 }
 
 /** Source, Graph-reconciliation and patch checks for the digest's figures. */
 export async function collectDigestDataChecks(data: FleetReportData): Promise<DataCheck[]> {
   return [
-    ...await collectFleetDataChecks({ devices: data.devices, failedSources: data.failedSources }),
+    ...await collectFleetDataChecks({ devices: data.devices, failedSources: data.failedSources, staleSources: data.staleSources }),
     ...buildPatchDataChecks(data.devices, data.patchSystems),
     ...(data.patchSystems && !data.patchesBySystem ? [warn('Patch detail', 'Per-patch detail was unavailable; the Critical Patches sheet lists devices without patch names, ages or CVEs.')] : []),
   ]

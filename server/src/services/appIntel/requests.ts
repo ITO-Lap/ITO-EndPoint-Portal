@@ -1,3 +1,4 @@
+import { dataFile } from '../../store/dataDir.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -131,7 +132,7 @@ export function eligibility(app: AssessedApp, kind: RequestKind): { ok: true } |
 
 export interface RequestStore { all(): AppRequestRecord[]; add(r: AppRequestRecord): void }
 
-export function createFileRequestStore(file: string | null = path.resolve(process.cwd(), '.cache', 'app-requests.v1.json')): RequestStore {
+export function createFileRequestStore(file: string | null = dataFile('cache/app-requests.v1.json', [path.resolve(process.cwd(), '.cache', 'app-requests.v1.json')])): RequestStore {
   let records: AppRequestRecord[] = []
   if (file) { try { const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as AppRequestRecord[]; if (Array.isArray(parsed)) records = parsed } catch { /* none yet */ } }
   return {

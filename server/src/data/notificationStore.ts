@@ -1,24 +1,21 @@
-import { readFileSync, writeFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
+import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from '../store/dataDir.js'
 import type { Notification } from '../types.js'
 
-// Notifications survive restarts (server/.notifications.json, git-ignored), so a
+// Notifications survive restarts and deploys (DATA_DIR/notifications.json), so a
 // delivery that happened overnight is still on the bell in the morning. Tests
 // (NODE_ENV=test) keep them in memory only.
-const STORE_FILE = resolve(dirname(fileURLToPath(import.meta.url)), '../../.notifications.json')
 const PERSIST = process.env['NODE_ENV'] !== 'test'
+const STORE_FILE = PERSIST ? dataFile('notifications.json', [legacyServerFile('.notifications.json')]) : ''
 const MAX_NOTIFICATIONS = 200
 
 function load(): Notification[] {
   if (!PERSIST) return []
-  try { return (JSON.parse(readFileSync(STORE_FILE, 'utf-8')) as { notifications?: Notification[] }).notifications ?? [] }
-  catch { return [] }
+  return readJsonFile<{ notifications?: Notification[] }>(STORE_FILE)?.notifications ?? []
 }
 
 function persist(): void {
   if (!PERSIST) return
-  try { writeFileSync(STORE_FILE, JSON.stringify({ notifications: _notifications }, null, 2), 'utf-8') }
+  try { writeJsonAtomic(STORE_FILE, { notifications: _notifications }) }
   catch (e) { console.error('[notificationStore] Failed to persist notifications:', e) }
 }
 

@@ -1,6 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from '../store/dataDir.js'
 
 export type PatchRemediationAction = {
   id: string
@@ -18,13 +16,13 @@ export type PatchRemediationAction = {
   deadlineTime?: number
 }
 
-const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../.patch-remediation-actions.json')
+const file = dataFile('patch-remediation-actions.json', [legacyServerFile('.patch-remediation-actions.json')])
 let actions: PatchRemediationAction[] = load()
 
 function load(): PatchRemediationAction[] {
-  try { return JSON.parse(readFileSync(file, 'utf8')) as PatchRemediationAction[] } catch { return [] }
+  return readJsonFile<PatchRemediationAction[]>(file) ?? []
 }
-function persist() { writeFileSync(file, JSON.stringify(actions.slice(-250), null, 2), 'utf8') }
+function persist() { writeJsonAtomic(file, actions.slice(-250)) }
 function expire(action: PatchRemediationAction): PatchRemediationAction {
   if (action.status === 'pending' && new Date(action.expiresAt).getTime() <= Date.now()) action.status = 'expired'
   return action

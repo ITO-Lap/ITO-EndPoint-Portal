@@ -24,6 +24,7 @@ export interface FleetReportData {
   patchesBySystem: Map<string, MissingPatch[]> | null
   /** MDM sources that failed to return devices (see fetchAllDevices). */
   failedSources?: Array<{ source: 'intune' | 'manageengine'; error: string }> | undefined
+  staleSources?: Array<{ source: 'intune' | 'manageengine'; savedAt: string }> | undefined
 }
 
 type Row = Record<string, string | number>

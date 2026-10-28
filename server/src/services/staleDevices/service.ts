@@ -1,5 +1,6 @@
 // Stale Devices service: background sync of Intune (Windows) and Endpoint Central MDM (Windows + macOS) into a
 // normalised in-scope snapshot, cached in memory and on disk. Read-only; page loads never call the sources.
+import { dataFile } from '../../store/dataDir.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { isIntuneConfigured, getIntuneStaleDeviceRecords } from '../intune.js'
@@ -49,7 +50,7 @@ export interface StaleDevicesServiceOptions {
 export function createStaleDevicesService(opts: StaleDevicesServiceOptions = {}) {
   const providers = opts.providers ?? liveProviders
   const now = opts.now ?? Date.now
-  const cacheFile = opts.cacheFile === undefined ? path.resolve(process.cwd(), '.cache', 'stale-devices.v1.json') : opts.cacheFile
+  const cacheFile = opts.cacheFile === undefined ? dataFile('cache/stale-devices.v1.json', [path.resolve(process.cwd(), '.cache', 'stale-devices.v1.json')]) : opts.cacheFile
 
   let snapshot: StaleSnapshot = emptySnapshot()
   let syncing: Promise<void> | null = null

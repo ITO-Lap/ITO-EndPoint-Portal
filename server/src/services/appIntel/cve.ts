@@ -1,3 +1,4 @@
+import { dataFile } from '../../store/dataDir.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { catalogForBundleId, catalogForWingetId } from './catalog.js'
@@ -152,7 +153,7 @@ export function createCveStore(opts: CveStoreOptions = {}) {
   const now = opts.now ?? Date.now
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>(r => setTimeout(r, ms)))
   const delayMs = opts.delayMs ?? (opts.apiKey ? 700 : 6500)
-  const cacheFile = opts.cacheFile === undefined ? path.resolve(process.cwd(), '.cache', 'app-cve.v1.json') : opts.cacheFile
+  const cacheFile = opts.cacheFile === undefined ? dataFile('cache/app-cve.v1.json', [path.resolve(process.cwd(), '.cache', 'app-cve.v1.json')]) : opts.cacheFile
   const cache = new Map<string, CacheEntry>()
   if (cacheFile) {
     try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(cacheFile, 'utf8')) as Record<string, CacheEntry>)) cache.set(k, v) } catch { /* no usable cache */ }

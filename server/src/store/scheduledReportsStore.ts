@@ -14,10 +14,8 @@
 // Every exported function is async so both backends share one call-site
 // contract — callers never need to know which backend is live.
 
+import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from './dataDir.js'
 import { randomUUID } from 'crypto'
-import { readFileSync, writeFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
 import { isDbAvailable, query } from '../db/index.js'
 
 export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest' | 'entra-duplicate-devices'
@@ -147,8 +145,7 @@ interface StoreFile {
 // Resolves to <repo>/server/.scheduled-reports.json whether running from
 // compiled server/dist/store/ or (in tests) directly from server/src/store/
 // — both sit exactly two levels below server/.
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const STORE_FILE = resolve(__dirname, '../../.scheduled-reports.json')
+const STORE_FILE = dataFile('scheduled-reports.json', [legacyServerFile('.scheduled-reports.json')])
 const MAX_RUNS_PER_REPORT = 50
 const MAX_AUDIT_ENTRIES = 200
 
@@ -158,8 +155,7 @@ function emptyFile(): StoreFile {
 
 function load(): StoreFile {
   try {
-    const raw = readFileSync(STORE_FILE, 'utf-8')
-    const parsed = JSON.parse(raw) as Partial<StoreFile>
+    const parsed = readJsonFile<Partial<StoreFile>>(STORE_FILE) ?? {}
     return { reports: parsed.reports ?? [], notificationSchedules: parsed.notificationSchedules ?? [], auditLog: parsed.auditLog ?? [] }
   } catch {
     return emptyFile()
@@ -168,7 +164,7 @@ function load(): StoreFile {
 
 function persist(): void {
   try {
-    writeFileSync(STORE_FILE, JSON.stringify(state, null, 2), 'utf-8')
+    writeJsonAtomic(STORE_FILE, state)
   } catch (e) {
     console.error('[scheduledReportsStore] Failed to persist store:', e)
   }
