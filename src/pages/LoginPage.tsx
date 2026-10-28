@@ -4,13 +4,6 @@ import { ZinniaIcon } from '../components/ui/ZinniaLogo'
 import { fetchAuthConfig, signIn, startMicrosoftSignIn, type AuthConfig, type SessionUser } from '../api/session'
 import './login.css'
 
-const MicrosoftLogo = () => (
-  <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true">
-    <rect x="1" y="1" width="9" height="9" fill="#F25022" /><rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-    <rect x="1" y="11" width="9" height="9" fill="#00A4EF" /><rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-  </svg>
-)
-
 // A fixed constellation (0-100 viewBox); nearby nodes are joined, so the graph is stable between renders.
 const NODES: Array<[number, number]> = [
   [8, 18], [20, 8], [31, 24], [14, 38], [27, 47], [42, 14], [48, 34], [38, 58], [56, 52], [66, 22],
@@ -122,8 +115,8 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
 
             {showMicrosoft && (
               <button type="button" className="lg-btn lg-btn-ms" onClick={() => void microsoft()} disabled={submitting}>
-                <MicrosoftLogo />
-                Sign in with Microsoft
+                <ZinniaIcon className="h-5 w-auto" />
+                Sign in with Zinnia
               </button>
             )}
 

@@ -12,6 +12,7 @@ vi.mock('../../api', () => ({
 vi.mock('../../components/security/EndpointProtectionCoverage', () => ({ EndpointProtectionCoverage: () => <div>coverage stub</div> }))
 
 import { api } from '../../api'
+import { ToastProvider } from '../../components/ui/ToastProvider'
 import { SecurityPosturePage } from '../SecurityPosturePage'
 
 const fetchPosture = vi.mocked(api.fetchSecurityPosture)
@@ -54,7 +55,7 @@ beforeEach(() => {
 })
 
 const openPillar = async (name: RegExp) => {
-  render(<SecurityPosturePage />)
+  render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
   await userEvent.click(await screen.findByRole('button', { name }))
   return screen.findByRole('region', { name: /details$/ })
 }
@@ -62,14 +63,14 @@ const lastParams = () => fetchDevices.mock.calls.at(-1)![1]
 
 describe('tiles', () => {
   it('show live counts and never the old hardcoded demo figures', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     expect(await screen.findByRole('button', { name: /Disk Encryption: 75%/ })).toBeInTheDocument()
     expect(screen.queryByText('447')).not.toBeInTheDocument()
     expect(screen.queryByText(/estimated from mock/i)).not.toBeInTheDocument()
   })
 
   it('Critical Patching tile names the most common missing critical patches', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     const tile = await screen.findByRole('button', { name: /Critical Patching: 25%/ })
     expect(within(tile).getByText('Top missing critical patches')).toBeInTheDocument()
     expect(within(tile).getByText(PATCH_A)).toBeInTheDocument()
@@ -79,7 +80,7 @@ describe('tiles', () => {
   })
 
   it('renders N/A (not 0%) for a pillar with nothing assessed', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     const tile = await screen.findByRole('button', { name: /MDM Compliance: no data/ })
     expect(within(tile).getByText('N/A')).toBeInTheDocument()
   })
@@ -188,13 +189,13 @@ describe('details panel', () => {
   })
 
   it('explains why a pillar is unavailable', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     await userEvent.click(await screen.findByRole('button', { name: /MDM Compliance: no data/ }))
     expect(await screen.findByText('No native verdict.')).toBeInTheDocument()
   })
 
   it('opens from the keyboard and closes again', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     const tile = await screen.findByRole('button', { name: /Disk Encryption: 75%/ })
     tile.focus()
     await userEvent.keyboard('{Enter}')
@@ -206,14 +207,14 @@ describe('details panel', () => {
 
 describe('page', () => {
   it('Top Risks come from the live pillars and link to the devices', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     await userEvent.click(await screen.findByRole('button', { name: /2 devices without disk encryption enabled/ }))
     await userEvent.click(screen.getByRole('button', { name: 'View 2 devices' }))
     expect(await screen.findByRole('region', { name: 'Disk Encryption details' })).toBeInTheDocument()
   })
 
   it('switching source requests that source and resets the open details', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     await userEvent.click(await screen.findByRole('button', { name: /Disk Encryption: 75%/ }))
     await userEvent.click(screen.getByRole('tab', { name: /ManageEngine/ }))
     await waitFor(() => expect(fetchPosture).toHaveBeenCalledWith('manageengine', false))
@@ -221,7 +222,7 @@ describe('page', () => {
   })
 
   it('passes the active source to the device list', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     await userEvent.click(await screen.findByRole('tab', { name: /ManageEngine/ }))
     await userEvent.click(await screen.findByRole('button', { name: /Disk Encryption: 75%/ }))
     await waitFor(() => expect(fetchDevices).toHaveBeenCalledWith('encryption', expect.objectContaining({ source: 'manageengine' })))
@@ -229,14 +230,14 @@ describe('page', () => {
 
   it('shows an error with Retry when the posture cannot be loaded', async () => {
     fetchPosture.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(result())
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     expect(await screen.findByRole('alert')).toHaveTextContent('could not be loaded')
     await userEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('button', { name: /Disk Encryption: 75%/ })).toBeInTheDocument()
   })
 
   it('labels the CIS table as static reference values', async () => {
-    render(<SecurityPosturePage />)
+    render(<ToastProvider><SecurityPosturePage /></ToastProvider>)
     expect(await screen.findByText(/Static reference values — not calculated from your fleet/)).toBeInTheDocument()
   })
 })

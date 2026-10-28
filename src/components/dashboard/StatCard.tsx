@@ -33,8 +33,8 @@ export function StatCard({ data, onClick, selected = false }: StatCardProps) {
       style={selected ? {
         boxShadow: 'var(--water-glow-lg)',
         borderColor: 'rgba(14,165,233,0.50)',
-        ringColor: 'rgba(14,165,233,0.30)',
-      } : {}}
+        '--tw-ring-color': 'rgba(14,165,233,0.30)',
+      } as React.CSSProperties : {}}
     >
       {/* Top gradient stripe */}
       <div

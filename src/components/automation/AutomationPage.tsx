@@ -921,7 +921,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
         actions:     form.actions.map(type => ({
           type,
           label: ACTION_OPTIONS.find(a => a.value === type)?.label ?? type,
-          config: type === 'slack_notify' && form.slackChannel.trim() ? { channel: form.slackChannel.trim() } : {},
+          config: (type === 'slack_notify' && form.slackChannel.trim() ? { channel: form.slackChannel.trim() } : {}) as Record<string, string>,
         })),
         createdBy: 'Global Admin',
       })

@@ -48,7 +48,7 @@ const aPatch = { patchId: '1', name: 'macOS-27.0.1.zip', description: 'macOS 27.
 beforeEach(() => { fetchMissing.mockReset(); fetchMissing.mockResolvedValue(ok([aPatch])) })
 
 const renderModal = (kpiId: Parameters<typeof KpiModal>[0]['kpiId'], onClose = vi.fn()) =>
-  render(<KpiModal kpiId={kpiId} allDevices={fleet} appliedFilters="Platform: macOS" onClose={onClose} />)
+  render(<ToastProvider><KpiModal kpiId={kpiId} allDevices={fleet} appliedFilters="Platform: macOS" onClose={onClose} /></ToastProvider>)
 
 describe('Patch Health card filters', () => {
   it('Missing Critical Patches → Macs with a critical missing patch', () => {

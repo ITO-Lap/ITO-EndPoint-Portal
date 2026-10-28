@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { installAuthFetch, saveSession, getSession, clearSession, signIn, fetchCurrentUser } from '../session'
 
-const user = { email: 'avinash.verma@zinnia.com', displayName: 'Avinash Verma', role: 'Global Admin' }
+const user = { email: 'avinash.verma@zinnia.com', displayName: 'Avinash Verma', role: 'Global Admin', permissions: {} }
 const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 let base: ReturnType<typeof vi.fn>
 let uninstall: () => void
