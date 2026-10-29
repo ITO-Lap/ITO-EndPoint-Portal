@@ -1,3 +1,4 @@
+import { ApplicationSecurityTabs } from '../components/appIntel/ApplicationSecurityTabs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity, AlertTriangle, Apple, ArrowDownToLine, ArrowRight,
@@ -11,7 +12,7 @@ import { SortableHeader } from '../components/ui/SortableHeader'
 import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 
 type View = 'Overview' | 'My Apps'
-type Props = { onBack: () => void }
+type Props = { onBack: () => void; onNavigate?: (page: string) => void }
 
 function Stat({ label, value, detail, tone, icon: Icon }: {
   label: string
@@ -71,7 +72,7 @@ function AppDetails({ entry, onClose }: { entry: ManageEngineAppEntry; onClose: 
   )
 }
 
-export function AppGuardianPage({ onBack }: Props) {
+export function AppGuardianPage({ onBack, onNavigate }: Props) {
   const [apps, setApps] = useState<ManageEngineAppEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -126,6 +127,7 @@ export function AppGuardianPage({ onBack }: Props) {
 
   return (
     <div className="app-guardian page-enter">
+      <ApplicationSecurityTabs active="App Guardian" onNavigate={onNavigate} />
       <header className="ag-header">
         <div className="ag-heading-lockup">
           <div className="ag-brand-icon"><ShieldCheck size={22} /></div>

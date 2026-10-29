@@ -287,11 +287,11 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                     }}
                   />
                 ) : activePage === 'ManageEngine App Inventory' ? (
-                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
+                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} onNavigate={setActivePage} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
                 ) : activePage === 'Stale Devices' ? (
                   <StaleDevicesPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
                 ) : activePage === 'App Guardian' ? (
-                  <AppGuardianPage onBack={() => setActivePage('Dashboard')} />
+                  <AppGuardianPage onBack={() => setActivePage('Dashboard')} onNavigate={setActivePage} />
                 ) : activePage === 'Mac Fleet Reports' ? (
                   <MacFleetReportsPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Entra Intelligence' ? (

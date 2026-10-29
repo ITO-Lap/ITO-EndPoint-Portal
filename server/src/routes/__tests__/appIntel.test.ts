@@ -160,3 +160,34 @@ describe('app-intel route', () => {
     server.close()
   })
 })
+
+describe('app-intel export', () => {
+  it('exports the same filtered list as /apps, as CSV and as Excel, with formula-safe cells', async () => {
+    const { server, base } = await start()
+    const csv = await call(`${base}/export?platform=macOS&format=csv`)
+    expect(csv.status).toBe(200)
+    expect(csv.text).toContain('Application Name')
+    expect(csv.text).toContain('Acme')
+    expect(csv.text).not.toContain('Safari') // OS-native apps are excluded, as on screen
+    expect(csv.text.split('\r\n')).toHaveLength(1 + (await call(`${base}/apps?platform=macOS`)).json.data.total)
+    expect((await call(`${base}/export?platform=macOS&format=csv&q=zoom`)).text).not.toContain('Acme')
+    const xlsx = await call(`${base}/export?platform=macOS&format=xlsx`)
+    expect(xlsx.status).toBe(200)
+    expect(xlsx.text.startsWith('PK')).toBe(true) // zip container
+    server.close()
+  })
+
+  it('exports one app\'s devices and validates input and role', async () => {
+    const { server, base, service } = await start()
+    const key = service.getSnapshot()!.apps.find(a => a.identity.displayName.includes('zoom'))!.key
+    const devices = await call(`${base}/export?platform=macOS&format=csv&key=${encodeURIComponent(key)}`)
+    expect(devices.text).toContain('Mac-1')
+    expect(devices.text).toContain('Update required') // 5.0.0 is behind 6.1.0
+    expect((await call(`${base}/export?platform=macOS&format=csv&key=missing`)).status).toBe(404)
+    expect((await call(`${base}/export?platform=macOS&format=pdf`)).status).toBe(400)
+    expect((await call(`${base}/export?format=csv`)).status).toBe(400)
+    expect((await call(`${base}/export?platform=macOS&format=csv`, 'GET', 'End User')).status).toBe(403)
+    server.close()
+  })
+})
+

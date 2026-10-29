@@ -243,7 +243,25 @@ async function request<T>(path: string, method: 'GET' | 'POST' = 'GET', payload?
   return body.data as T
 }
 
+/** Downloads the CSV/Excel export of the filtered inventory, or of one app's devices when `key` is given. */
+async function downloadExport(f: Pick<AppListFilters, 'platform'> & Partial<AppListFilters>, format: 'csv' | 'xlsx', key?: string): Promise<void> {
+  const { page: _page, pageSize: _pageSize, ...rest } = f
+  const qs = new URLSearchParams({ format })
+  for (const [k, v] of Object.entries(rest)) if (v !== undefined && v !== '') qs.set(k, String(v))
+  if (key) qs.set('key', key)
+  const res = await fetch(`${BASE}/export?${qs}`, { headers: { 'x-user-role': currentRole, 'x-user-email': currentEmail } })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error ?? `Export failed (${res.status})`)
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? `application-export.${format}`
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a'); a.href = url; a.download = name
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+}
+
 export const appIntelApi = {
+  exportReport: downloadExport,
   status: () => request<SyncStatus & { capabilities: Capabilities }>('/status'),
   sync: () => request<SyncStatus>('/sync', 'POST'),
   summary: (platform: AppPlatform) => request<{ state: SyncStatus; summary: AppSummary | null }>(`/summary?platform=${platform}`),

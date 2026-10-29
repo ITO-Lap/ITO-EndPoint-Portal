@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Layers, RefreshCw, Search, Info, CheckCircle, AlertTriangle, ChevronDown, Package, ExternalLink, Send } from 'lucide-react'
+import { Layers, RefreshCw, Search, Info, CheckCircle, AlertTriangle, ChevronDown, Package, ExternalLink, Send, Download } from 'lucide-react'
 import { appIntelApi, setAppIntelActor, APP_STATUSES, INSTALL_SOURCE_LABEL, PROVIDER_LABEL } from '../api/appIntel'
 import type { AppListFilters, AppListResult, AppPlatform, AppRow, AppStatus, AppSummary, Capabilities, InstallSource, ProviderCapability, ProviderId, RequestKind, SyncStatus } from '../api/appIntel'
 import { SortableHeader } from '../components/ui/SortableHeader'
@@ -8,6 +8,8 @@ import { AppDetailDrawer } from '../components/appIntel/AppDetailDrawer'
 import { RequestDialog } from '../components/appIntel/RequestDialog'
 import { ConfidenceBadge, CveCell, InstallSourceBadge, PackagingBadge, ProviderBadge, StatusBadge } from '../components/appIntel/badges'
 import { timeAgo } from '../components/appIntel/format'
+import { hasPermission } from '../lib/permissions'
+import { usePermissions } from '../context/PermissionsContext'
 
 const PAGE_SIZE = 25
 const PACKAGING_ROW_STATUSES = ['Package required', 'Repackage required', 'Update available — existing package']
@@ -65,7 +67,8 @@ interface CardDef { id: string; label: string; value: number | null; hint: strin
 export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }: { viewerRole?: string; userEmail?: string; embedded?: boolean } = {}) {
   // Idempotent module-level setting; must be in place before the first request is issued.
   if (viewerRole) setAppIntelActor(viewerRole, userEmail)
-  const canWrite = viewerRole === 'Global Admin' || viewerRole === 'IT Admin'
+  const permissions = usePermissions()
+  const canWrite = hasPermission(viewerRole ?? '', permissions, 'appIntel.write')
   const [platform, setPlatform] = useState<AppPlatform>('windows')
   const [status, setStatus] = useState<AppStatus | ''>('')
   const [provider, setProvider] = useState<ProviderId | ''>('')
@@ -179,6 +182,13 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
             <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />Sync now
           </button>
+          {(['csv', 'xlsx'] as const).map(fmt => (
+            <button key={fmt} type="button" disabled={syncing || noData}
+              onClick={() => { setReportMsg(`Preparing ${fmt === 'csv' ? 'CSV' : 'Excel'} export…`); appIntelApi.exportReport(filters, fmt).then(() => setReportMsg(null)).catch(e => setReportMsg(e instanceof Error ? `Export failed: ${e.message}` : 'Export failed.')) }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
+              <Download className="h-3.5 w-3.5" />Export {fmt === 'csv' ? 'CSV' : 'Excel'}
+            </button>
+          ))}
           {canWrite && (
             <button type="button" onClick={sendReport} disabled={syncing || noData}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">

@@ -256,6 +256,15 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
               </Section>
 
               <Section title={`Affected devices (${detail.devices.length})`}>
+                <div className="flex gap-2">
+                  {(['csv', 'xlsx'] as const).map(fmt => (
+                    <button key={fmt} type="button" disabled={detail.devices.length === 0}
+                      onClick={() => { void appIntelApi.exportReport({ platform: row.platform }, fmt, row.key).catch(e => window.alert(e instanceof Error ? e.message : 'Export failed.')) }}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[0.65rem] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                      Export devices ({fmt === 'csv' ? 'CSV' : 'Excel'})
+                    </button>
+                  ))}
+                </div>
                 {detail.devices.length === 0 ? (
                   <p className="text-xs text-slate-500">{detail.devicesNote ?? 'No device list is available for this app from the connected providers.'}</p>
                 ) : (

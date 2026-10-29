@@ -1,3 +1,4 @@
+import { ApplicationSecurityTabs } from '../components/appIntel/ApplicationSecurityTabs'
 import { Fragment, useState, useEffect, useMemo } from 'react'
 import {
   Settings, RefreshCw,
@@ -326,7 +327,7 @@ function AppsPlatformTable({ entries, platformLoading, loadLogs, macControls }: 
   )
 }
 
-interface Props { onBack: () => void; viewerRole?: string; userEmail?: string }
+interface Props { onBack: () => void; viewerRole?: string; userEmail?: string; onNavigate?: (page: string) => void }
 
 type AppSource = 'endpoint-central' | 'intune' | 'verified'
 type EcData = Awaited<ReturnType<typeof api.fetchManageEngineAppsInventory>>
@@ -334,7 +335,7 @@ type EcData = Awaited<ReturnType<typeof api.fetchManageEngineAppsInventory>>
 // App inventory by source. Endpoint Central: full agent scan minus OS/updates/bundled components, so what
 // remains is manual or Self Service installs (the API has no install-source field to split those two).
 // Intune: Windows apps assigned as "available" (Company Portal Self Service) with per-device install state.
-export function ManageEngineAppInventoryPage({ onBack, viewerRole, userEmail }: Props) {
+export function ManageEngineAppInventoryPage({ onBack, viewerRole, userEmail, onNavigate }: Props) {
   const [source, setSource]   = useState<AppSource>('endpoint-central')
   const [ec, setEc]           = useState<EcData | null>(null)
   const [intune, setIntune]   = useState<Awaited<ReturnType<typeof api.fetchIntuneSelfServiceApps>> | null>(null)
@@ -381,6 +382,7 @@ export function ManageEngineAppInventoryPage({ onBack, viewerRole, userEmail }: 
 
   return (
     <div className="flex flex-col gap-5 w-full page-enter">
+      <ApplicationSecurityTabs active="ManageEngine App Inventory" onNavigate={onNavigate} />
       {/* Header */}
       <div className="glass rounded-2xl overflow-hidden">
         <div className="h-[3px]" style={{ background: 'linear-gradient(90deg,#FF6B35,#F46C00,#FFB800)' }} />
