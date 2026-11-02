@@ -847,6 +847,8 @@ const TRIGGER_OPTIONS: { value: AutomationTriggerType; label: string }[] = [
   { value: 'app_deploy_failed',     label: 'App deployment fails' },
   { value: 'cert_expiring',         label: 'Certificate expiring soon' },
   { value: 'stale_device',          label: 'Stale / inactive device detected' },
+  { value: 'agent_missing',         label: 'Intune device missing Endpoint Central agent (or the reverse)' },
+  { value: 'agent_stale',           label: 'One management agent silent while the other still reports' },
 ]
 
 const ACTION_OPTIONS: { value: AutomationActionType; label: string }[] = [

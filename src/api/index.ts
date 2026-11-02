@@ -660,6 +660,7 @@ export interface AutomationRule {
     type: AutomationTriggerType
     config: Record<string, string | number | boolean>
   }
+  | 'agent_missing' | 'agent_stale'
   conditions: {
     platform: 'Windows' | 'macOS' | 'Linux' | 'all'
     source: 'intune' | 'manageengine' | 'all'

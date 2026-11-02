@@ -25,6 +25,7 @@ const triggerSchema = z.object({
     'new_enrollment', 'scheduled', 'risky_signin', 'drift_detected',
     'encryption_off', 'script_failure',
     'enrollment_failed', 'sync_failure', 'app_deploy_failed', 'cert_expiring', 'stale_device',
+    'agent_missing', 'agent_stale',
   ]),
   config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 })

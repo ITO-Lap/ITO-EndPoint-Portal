@@ -151,6 +151,8 @@ export type AutomationTriggerType =
   | 'sync_failure'
   | 'app_deploy_failed'
   | 'cert_expiring'
+  | 'agent_missing'
+  | 'agent_stale'
   | 'stale_device'
 
 export type AutomationActionType =

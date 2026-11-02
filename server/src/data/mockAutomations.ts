@@ -13,10 +13,33 @@ export const automationExecutions: AutomationExecution[] = []
 let _rules: AutomationRule[]         = [...automationRules]
 let _executions: AutomationExecution[] = [...automationExecutions]
 
+const slack = [{ type: 'slack_notify' as const, label: 'Notify #it-alerts', config: { channel: '#it-alerts' } }]
+const jira = [{ type: 'create_jira' as const, label: 'Create Jira ticket', config: {} }]
+const starter = (id: string, name: string, description: string, category: AutomationRule['category'], trigger: AutomationRule['trigger'],
+  platform: AutomationRule['conditions']['platform'], source: AutomationRule['conditions']['source'], actions: AutomationRule['actions']): AutomationRule => ({
+  id: `starter-${id}`, name, description, category, enabled: false, trigger,
+  conditions: { platform, source, severity: 'all', complianceState: 'all' }, actions, triggerCount: 0, createdAt: new Date().toISOString(), createdBy: 'system',
+})
+
+/** Suggested rules added once, on first start. All are created disabled so nothing alerts until an admin turns them on. */
+export const starterRules = (): AutomationRule[] => [
+  starter('win-no-ec-agent', 'Windows: Intune device without Endpoint Central agent', 'Company Portal / Intune reports the device but Endpoint Central has no record of it.', 'compliance', { type: 'agent_missing', config: {} }, 'Windows', 'intune', slack),
+  starter('win-no-intune', 'Windows: Endpoint Central device not enrolled in Intune', 'Endpoint Central reports the device but it is not in Intune (no Company Portal).', 'compliance', { type: 'agent_missing', config: {} }, 'Windows', 'manageengine', slack),
+  starter('win-agent-silent', 'Windows: one agent silent while the other reports', 'One management agent has been silent 7+ days while the other heard from the device within 2 days.', 'drift', { type: 'agent_stale', config: { days: 7 } }, 'Windows', 'all', slack),
+  starter('win-bitlocker', 'Windows: BitLocker off', 'Encryption is off or pending on a Windows device.', 'security', { type: 'encryption_off', config: {} }, 'Windows', 'all', jira),
+  starter('mac-filevault', 'macOS: FileVault off', 'Encryption is off or pending on a Mac.', 'security', { type: 'encryption_off', config: {} }, 'macOS', 'all', jira),
+  starter('mac-silent', 'macOS: no check-in for 14 days', 'Early warning before a Mac becomes stale.', 'drift', { type: 'device_offline', config: { days: 14 } }, 'macOS', 'all', slack),
+]
+
 export function loadAutomations(file: string | null = defaultFile()): void {
   if (!file) return
   const saved = readJsonFile<{ rules?: AutomationRule[]; executions?: AutomationExecution[] }>(file)
-  if (!saved) return
+  if (!saved) {
+    // First start with no saved file: offer the starter rules (disabled) and save them.
+    _rules = [..._rules, ...starterRules()]
+    saveAutomations(file)
+    return
+  }
   if (Array.isArray(saved.rules)) _rules = saved.rules
   if (Array.isArray(saved.executions)) _executions = saved.executions
 }

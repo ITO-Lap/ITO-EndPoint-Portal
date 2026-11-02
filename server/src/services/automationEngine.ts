@@ -45,7 +45,44 @@ export interface EngineRunResult {
 
 // ── Device Condition Matching ─────────────────────────────────────────────────
 
-function deviceMatchesTrigger(device: Device, trigger: AutomationRule['trigger']): boolean {
+// Cross-source view for the dual-agent triggers: Intune and Endpoint Central (ManageEngine) report the same
+// physical device as two records. Records without a usable serial are never judged, to avoid false alerts.
+type SerialIndex = Map<string, { intune?: Device; manageengine?: Device }>
+
+const serialKey = (d: Device): string | null => {
+  const s = (d.serialNumber ?? '').trim().toUpperCase()
+  return s && s !== 'UNKNOWN' && s !== 'N/A' ? s : null
+}
+const sourceOf = (d: Device): 'intune' | 'manageengine' => (d.managementSource.toLowerCase().includes('intune') ? 'intune' : 'manageengine')
+
+export function buildSerialIndex(devices: Device[]): SerialIndex {
+  const index: SerialIndex = new Map()
+  for (const d of devices) {
+    const key = serialKey(d)
+    if (!key) continue
+    const entry = index.get(key) ?? {}
+    entry[sourceOf(d)] ??= d
+    index.set(key, entry)
+  }
+  return index
+}
+
+const daysSince = (iso: string): number => (Date.now() - new Date(iso).getTime()) / 86_400_000
+
+function deviceMatchesAgentTrigger(device: Device, trigger: AutomationRule['trigger'], index: SerialIndex): boolean {
+  const key = serialKey(device)
+  if (!key) return false
+  const entry = index.get(key) ?? {}
+  const mine = sourceOf(device)
+  const other = entry[mine === 'intune' ? 'manageengine' : 'intune']
+  if (trigger.type === 'agent_missing') return !other
+  // agent_stale: this record has been silent for `days`, while the other source heard from the device recently.
+  const days = Number(trigger.config.days ?? 7)
+  return !!other && daysSince(device.lastCheckIn) >= days && daysSince(other.lastCheckIn) < 2
+}
+
+function deviceMatchesTrigger(device: Device, trigger: AutomationRule['trigger'], index?: SerialIndex): boolean {
+  if (trigger.type === 'agent_missing' || trigger.type === 'agent_stale') return index ? deviceMatchesAgentTrigger(device, trigger, index) : false
   const enc = (device.encryptionStatus ?? '').toLowerCase()
   switch (trigger.type) {
     case 'encryption_off':
@@ -109,8 +146,13 @@ function deviceMatchesConditions(device: Device, conditions: AutomationRule['con
 }
 
 export function findMatchingDevices(rule: AutomationRule, devices: Device[]): Device[] {
+  const dual = rule.trigger.type === 'agent_missing' || rule.trigger.type === 'agent_stale'
+  // If either source returned nothing (not configured, or its read failed) there is nothing to compare
+  // against, so every device would look "missing": raise no alerts instead of a false fleet-wide one.
+  if (dual && !(devices.some(d => sourceOf(d) === 'intune') && devices.some(d => sourceOf(d) === 'manageengine'))) return []
+  const index = dual ? buildSerialIndex(devices) : undefined
   return devices.filter(d =>
-    deviceMatchesTrigger(d, rule.trigger) && deviceMatchesConditions(d, rule.conditions),
+    deviceMatchesTrigger(d, rule.trigger, index) && deviceMatchesConditions(d, rule.conditions),
   )
 }
 
