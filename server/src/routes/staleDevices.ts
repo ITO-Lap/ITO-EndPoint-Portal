@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Request } from 'express'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { requireAppRole } from '../middleware/requireRole.js'
+import { requireCapability } from '../middleware/requireRole.js'
 import { getStaleDevicesService, type StaleDevicesService } from '../services/staleDevices/service.js'
 import {
   BUCKETS, MANAGED_BY, SORT_KEYS, STALE_VIEWS, STATUSES, filterDevices, paginate, safeTimezone, sortDevices, summarize, toCsv,
@@ -14,9 +14,8 @@ import type { StalePlatform } from '../services/staleDevices/types.js'
 // credential or token is ever returned. Page loads read the cached snapshot; only POST /sync (and the
 // background refresh below) touch Intune / Endpoint Central.
 
-const READ_ROLES = ['Global Admin', 'IT Admin', 'Helpdesk']
-// Exports carry usernames and email addresses, so they are narrower than viewing.
-const EXPORT_ROLES = ['Global Admin', 'IT Admin']
+// Permission keys: staleDevices.read / staleDevices.export (see server/src/services/rolePermissions.ts).
+// Exports carry usernames and email addresses, so export is narrower than read.
 const SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000
 
 const oneOf = <T extends string>(v: unknown, list: readonly T[]): T | undefined =>
@@ -39,7 +38,7 @@ function parseFilters(req: Request): StaleFilters {
 
 export function createStaleDevicesRouter(getService: () => StaleDevicesService = getStaleDevicesService): Router {
   const router = Router()
-  router.use(requireAppRole(READ_ROLES))
+  router.use(requireCapability('staleDevices.read'))
 
   const ensureFresh = (svc: StaleDevicesService): void => {
     if (svc.getState().state !== 'syncing' && svc.isStaleSnapshot(SNAPSHOT_MAX_AGE_MS)) void svc.startSync()
@@ -72,7 +71,7 @@ export function createStaleDevicesRouter(getService: () => StaleDevicesService =
     res.json({ success: true, data: { ...meta(getService()), device } })
   }))
 
-  router.get('/export', requireAppRole(EXPORT_ROLES), asyncHandler(async (req, res) => {
+  router.get('/export', requireCapability('staleDevices.export'), asyncHandler(async (req, res) => {
     const svc = getService()
     const filters = parseFilters(req)
     const rows = sortDevices(filterDevices(svc.devices(), filters), filters.sortKey, filters.sortDir)

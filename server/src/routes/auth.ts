@@ -17,6 +17,7 @@ import rateLimit from 'express-rate-limit'
 import { getEntraConfig } from '../store/integrationStore.js'
 import { SESSION_SECRET, allowedEmails, authEnforced, authenticate, emailSignInEnabled, passwordRequired, signSession, verifySession } from '../services/session.js'
 import { bearerToken } from '../middleware/requireSession.js'
+import { resolveUserRole, permissionsForRole } from '../services/roleResolution.js'
 
 const router = Router()
 
@@ -221,20 +222,21 @@ router.get('/callback', async (req, res) => {
     const displayName = me.displayName ?? email
     const userId      = me.id
 
-    // 3. Determine role
-    let role: string | null = null
-
+    // 3. Determine role. Order: email allowlist (unconditional bootstrap) →
+    // per-user role assignment (Settings → Roles & Permissions, custom RBAC)
+    // → legacy AAD group membership (unchanged) → denied. See roleResolution.ts.
+    let legacyRole: 'IT Admin' | 'Helpdesk' | null = null
     let groupLookupFailed = false
     const allowed = allowedEmails()
-    if (allowed.includes(email) || allowed.includes((me.mail ?? '').toLowerCase())) {
-      role = 'Global Admin'
-    } else {
+    const isAllowlisted = allowed.includes(email) || allowed.includes((me.mail ?? '').toLowerCase())
+
+    if (!isAllowlisted) {
       const appToken = await getAppToken()
       if (appToken) {
         const groups = await listUserGroups(appToken, userId)
         if (!groups) groupLookupFailed = true
-        else if (inGroup(groups, itAdminGroup(), process.env.AUTH_IT_ADMIN_GROUP_ID)) role = 'IT Admin'
-        else if (inGroup(groups, helpdeskGroup(), process.env.AUTH_HELPDESK_GROUP_ID)) role = 'Helpdesk'
+        else if (inGroup(groups, itAdminGroup(), process.env.AUTH_IT_ADMIN_GROUP_ID)) legacyRole = 'IT Admin'
+        else if (inGroup(groups, helpdeskGroup(), process.env.AUTH_HELPDESK_GROUP_ID)) legacyRole = 'Helpdesk'
         else {
           // Help diagnose "I am in the group but was refused": log what Graph returned (group names only).
           const close = groups.map(g => g.name).filter(g => /endpoint|portal|desktop|ito/i.test(g)).slice(0, 10)
@@ -245,14 +247,16 @@ router.get('/callback', async (req, res) => {
       }
     }
 
-    if (!role) {
+    const resolution = await resolveUserRole(email, isAllowlisted, { role: legacyRole, lookupFailed: groupLookupFailed })
+    if ('denied' in resolution) {
       // A failed lookup is a server/permission problem, not proof the user lacks access: say so.
-      const msg = encodeURIComponent(groupLookupFailed
+      const msg = encodeURIComponent(resolution.groupLookupFailed
         ? `Signed in as ${email}, but group membership could not be checked. Ask an administrator to grant the app the GroupMember.Read.All permission.`
-        : `Access denied. ${email} is not a member of '${itAdminGroup()}' or '${helpdeskGroup()}'.`)
+        : `Access denied. ${email} is not assigned a role and is not a member of '${itAdminGroup()}' or '${helpdeskGroup()}'.`)
       res.redirect(`${frontendOrigin}/?auth_error=${msg}`)
       return
     }
+    const role = resolution.role
 
     // 4. Issue a short-lived JWT and send to frontend via URL param
     const sessionToken = jwt.sign(
@@ -304,12 +308,17 @@ router.post('/session', signInLimiter, (req, res) => {
   res.json({ success: true, data: { token: signSession(result.claims), user: result.claims } })
 })
 
-// GET /api/auth/me — the signed-in user for a Bearer token (used on page load)
-router.get('/me', (req, res) => {
+// GET /api/auth/me — the signed-in user for a Bearer token (used on page load).
+// Permissions are resolved fresh from the role's current permission set on
+// every call (not baked into the JWT), so an admin's edit in Settings →
+// Roles & Permissions takes effect on the next page load, not just next sign-in.
+router.get('/me', (req, res, next) => {
   const token = bearerToken(req)
   const claims = token ? verifySession(token) : null
   if (!claims) { res.status(401).json({ success: false, error: 'Not signed in.' }); return }
-  res.json({ success: true, data: claims })
+  permissionsForRole(claims.role)
+    .then(permissions => res.json({ success: true, data: { ...claims, permissions } }))
+    .catch(next)
 })
 
 export default router

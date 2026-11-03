@@ -465,3 +465,42 @@ CREATE INDEX IF NOT EXISTS idx_copilot_pending_actions_status       ON copilot_p
 -- intune_audit_app_trail above (recordAppTrail() no-ops gracefully when
 -- DATABASE_URL is unset, same as every other caller of that function), which
 -- is otherwise unaffected by this removal.
+
+-- ─── Custom RBAC ─────────────────────────────────────────────────────────────
+-- Global Admin / IT Admin / Helpdesk are seeded as is_builtin=true rows (see
+-- server/src/services/rolePermissions.ts for their default permission sets)
+-- and can never be deleted. Global Admin's effective permissions are always
+-- all-true in code regardless of what's stored here — see isGlobalAdmin() —
+-- so a bad edit to its row can never lock every admin out.
+CREATE TABLE IF NOT EXISTS custom_roles (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name        TEXT NOT NULL UNIQUE,
+  is_builtin  BOOLEAN NOT NULL DEFAULT false,
+  permissions JSONB NOT NULL DEFAULT '{}',
+  created_by  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Per-user role assignment, by email — the primary new mapping mechanism
+-- (resolved before the legacy AAD-group lookup; see roleResolution.ts).
+CREATE TABLE IF NOT EXISTS user_role_assignments (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_email  TEXT NOT NULL UNIQUE,
+  role_id     UUID NOT NULL REFERENCES custom_roles(id) ON DELETE RESTRICT,
+  assigned_by TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_role_assignments_role ON user_role_assignments(role_id);
+
+CREATE TABLE IF NOT EXISTS rbac_audit_log (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_email  TEXT NOT NULL,
+  action      TEXT NOT NULL,   -- role_created | role_updated | role_deleted | user_assigned | user_unassigned
+  resource_id TEXT NOT NULL,
+  old_value   JSONB,
+  new_value   JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rbac_audit_created ON rbac_audit_log(created_at DESC);

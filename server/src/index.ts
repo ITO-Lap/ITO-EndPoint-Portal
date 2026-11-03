@@ -29,6 +29,8 @@ import appIntelRouter from './routes/appIntel.js'
 import { createStaleDevicesRouter } from './routes/staleDevices.js'
 import notificationSchedulesRouter from './routes/notificationSchedules.js'
 import dashboardRouter from './routes/dashboard.js'
+import rolesRouter from './routes/roles.js'
+import { macAdminIngestRouter, macAdminReadRouter } from './routes/macAdminAccess.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 import { startScheduledReportRunner, stopScheduledReportRunner, runScheduledReportNow } from './services/scheduledReportRunner.js'
 import { startAutomationScheduler, stopAutomationScheduler } from './services/automationScheduler.js'
@@ -82,6 +84,9 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() })
 })
 
+// Macs report local-admin status here with a shared secret instead of a user session (see services/macAdminAccess.ts).
+app.use('/api/mac-admin-access', macAdminIngestRouter)
+
 // Everything under /api needs a signed-in session, except sign-in itself.
 app.use('/api', requireSessionExceptAuth)
 if (authEnforced() && emailSignInEnabled() && !passwordRequired()) {
@@ -114,6 +119,8 @@ app.use('/api/app-intel',          apiLimiter, appIntelRouter)
 app.use('/api/stale-devices',      apiLimiter, createStaleDevicesRouter())
 app.use('/api/notification-schedules', apiLimiter, notificationSchedulesRouter)
 app.use('/api/dashboard',              apiLimiter, dashboardRouter)
+app.use('/api/roles',                  apiLimiter, rolesRouter)
+app.use('/api/mac-admin-access',       apiLimiter, macAdminReadRouter)
 
 // ── Serve the built frontend (single-process deployment) ───────────────────────
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,

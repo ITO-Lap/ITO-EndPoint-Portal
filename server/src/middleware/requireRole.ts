@@ -1,25 +1,15 @@
-// Server-side role enforcement for the Intune Audit Logs module.
+// Server-side role enforcement.
 //
-// The rest of this application has NO server-side authorization today — the
-// frontend hardcodes viewerRole="Global Admin" (see src/App.tsx) and every
-// other route trusts the client entirely. That's a known, accepted gap for a
-// single-fixed-identity internal tool, but this module handles export/email
-// creation (data-exfiltration-relevant) and schedule administration, so it
-// enforces role checks for real: every request must carry the role via the
-// `x-user-role` header (sent by the frontend, which already knows the
-// caller's role from the same viewerRole prop every other page reads).
-//
-// This is a meaningful improvement over the rest of the app (nothing here
-// silently trusts the client for authorization decisions in isolation from
-// the same identity model already in place), but it is NOT the same as real
-// per-user authentication — a header is not a verified credential. True
-// tenant/user-level enforcement requires re-enabling the existing (currently
-// unused) OAuth session flow in server/src/routes/auth.ts and switching this
-// middleware to read the verified JWT instead of a client-supplied header.
-// That is called out explicitly in docs as a known limitation, not silently
-// papered over.
+// Microsoft/AAD sign-in (server/src/routes/auth.ts) is live, and
+// requireSession.ts verifies the session JWT on every /api request and
+// overwrites x-user-role / x-user-email with the verified claims before any
+// check below runs — so, whenever AUTH_ENFORCED is on, these are no longer a
+// spoofable client-supplied header, they're backed by a real verified
+// credential. (The header-trust caveat below only still applies when
+// AUTH_ENFORCED=false, a deliberately open local-dev mode.)
 
 import type { Request, Response, NextFunction } from 'express'
+import { permissionsForRole } from '../services/roleResolution.js'
 
 export type AuditRole = 'Audit Reader' | 'Audit Exporter' | 'Audit Administrator'
 
@@ -84,5 +74,25 @@ export function requireAppRole(allowedRoles: string[]) {
       return
     }
     next()
+  }
+}
+
+/** Custom-RBAC gate: checks the caller's role against a dynamic permission
+ *  key (see rolePermissions.ts) instead of a hardcoded role-name array, so a
+ *  Global Admin can grant/revoke this capability to a custom role without a
+ *  code change. Supersedes requireAppRole() for every caller that has been
+ *  migrated to a permission key. */
+export function requireCapability(key: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const appRole = req.header('x-user-role') ?? 'End User'
+    permissionsForRole(appRole)
+      .then(perms => {
+        if (perms[key] !== true) {
+          res.status(403).json({ success: false, error: `This action requires the "${key}" permission.` })
+          return
+        }
+        next()
+      })
+      .catch(next)
   }
 }

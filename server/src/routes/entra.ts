@@ -5,6 +5,7 @@ import {
   getEntraOverview, getEntraDevices, getEntraUsers, getEntraGroups,
   getEntraSecurity, syncDevice, diagnoseDevice,
   getEntraGroupMemberReport, searchEntraGroups, getMacVersionCheck,
+  isEntraIntelligenceConfigured,
 } from '../services/entraIntelligence.js'
 import { getManageEngineDevices, isManageEngineConfigured } from '../services/manageEngine.js'
 import { exportToCSV, exportToExcel } from '../services/reportExporter.js'
@@ -17,6 +18,13 @@ const router = Router()
 router.get('/overview', asyncHandler(async (_req, res) => {
   const data = await getEntraOverview()
   res.json({ success: true, data })
+}))
+
+// GET /api/entra/status — pure credential check, doesn't depend on any Graph
+// call succeeding, so the frontend can tell "not configured" apart from
+// "configured but this fetch hit a permission error."
+router.get('/status', asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: { configured: isEntraIntelligenceConfigured() } })
 }))
 
 // GET /api/entra/devices?compliance=&os=&limit=

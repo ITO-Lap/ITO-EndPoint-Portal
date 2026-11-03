@@ -6,13 +6,13 @@ import {
 } from '../services/endpointCentralPatch.js'
 import { getPatchOperationsDashboard, scanPatchDevices, deployPatches } from '../services/patchOperations.js'
 import { createPatchRemediationAction, getPatchRemediationAction, completePatchRemediationAction } from '../services/patchRemediationStore.js'
-import { requireAppRole } from '../middleware/requireRole.js'
+import { requireCapability } from '../middleware/requireRole.js'
 import { z } from 'zod'
 
 const router = Router()
 const VIEWS: MissingPatchView[] = ['critical', 'all', 'os', 'app']
-// Critical patching (scan / deploy, each behind a confirmation step) is open to the Desktop team (Helpdesk) too.
-const ADMIN_ROLES = ['Global Admin', 'IT Admin', 'Helpdesk']
+// Permission key: patchOps.scanRemediate (see server/src/services/rolePermissions.ts) — critical
+// patching (scan / deploy, each behind a confirmation step) is open to the Desktop team (Helpdesk) too.
 const idList = z.array(z.string().regex(/^\d{1,30}$/)).min(1).max(100)
 const remediationPreviewSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('scan'), resourceIds: idList }),
@@ -31,7 +31,7 @@ router.get('/operations', asyncHandler(async (req, res) => {
 
 // POST /api/endpoint-central/remediation/preview — creates a 10-minute,
 // auditable pending request. Confirmation is deliberately a separate request.
-router.post('/remediation/preview', requireAppRole(ADMIN_ROLES), asyncHandler(async (req, res) => {
+router.post('/remediation/preview', requireCapability('patchOps.scanRemediate'), asyncHandler(async (req, res) => {
   const input = remediationPreviewSchema.parse(req.body)
   const dashboard = await getPatchOperationsDashboard(true)
   if (!dashboard.connector.healthy) {
@@ -68,7 +68,7 @@ router.post('/remediation/preview', requireAppRole(ADMIN_ROLES), asyncHandler(as
 
 // POST /api/endpoint-central/remediation/:id/confirm — the only route that
 // calls Endpoint Central PatchMgmt.UPDATE. Rechecks role and action ownership.
-router.post('/remediation/:id/confirm', requireAppRole(ADMIN_ROLES), asyncHandler(async (req, res) => {
+router.post('/remediation/:id/confirm', requireCapability('patchOps.scanRemediate'), asyncHandler(async (req, res) => {
   const action = getPatchRemediationAction(String(req.params.id ?? ''))
   if (!action) { res.status(404).json({ success: false, error: 'Remediation request not found.' }); return }
   if (action.status !== 'pending') { res.status(409).json({ success: false, error: `This remediation request is ${action.status}.` }); return }

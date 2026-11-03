@@ -16,7 +16,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { identifyAuditActor, requireAppRole } from '../middleware/requireRole.js'
+import { identifyAuditActor, requireCapability } from '../middleware/requireRole.js'
 import { getIntuneConfig } from '../store/integrationStore.js'
 import {
   listAllItems, getItemDetail, isItemAssigned, resourceTypeDef, RESOURCE_TYPES,
@@ -30,7 +30,7 @@ import { pLimit } from '../services/intuneScriptsConfigExport.js'
 const router = Router()
 router.use(identifyAuditActor)
 
-const ALLOWED_ROLES = ['Global Admin', 'IT Admin']
+// Permission key: intuneScriptsConfig.access (see server/src/services/rolePermissions.ts).
 const LIST_ASSIGNMENT_CONCURRENCY = 8
 const RESOURCE_TYPE_VALUES = RESOURCE_TYPES.map(r => r.type) as [ResourceType, ...ResourceType[]]
 
@@ -82,7 +82,7 @@ function matchesPlatform(item: InventoryItem, platform: string): boolean {
   return false
 }
 
-router.get('/items', requireAppRole(ALLOWED_ROLES), asyncHandler(async (req, res) => {
+router.get('/items', requireCapability('intuneScriptsConfig.access'), asyncHandler(async (req, res) => {
   const q = listQuerySchema.parse(req.query)
   const creds = tenantCreds()
   if (!creds) {
@@ -151,7 +151,7 @@ router.get('/items', requireAppRole(ALLOWED_ROLES), asyncHandler(async (req, res
 }))
 
 // ─── GET /items/:compositeId ────────────────────────────────────────────────
-router.get('/items/:compositeId', requireAppRole(ALLOWED_ROLES), asyncHandler(async (req, res) => {
+router.get('/items/:compositeId', requireCapability('intuneScriptsConfig.access'), asyncHandler(async (req, res) => {
   const { type, id } = splitCompositeId(String(req.params.compositeId ?? ''))
   const creds = tenantCreds()
   if (!creds) throw Object.assign(new Error('Intune is not configured'), { status: 503 })
@@ -176,7 +176,7 @@ router.get('/items/:compositeId', requireAppRole(ALLOWED_ROLES), asyncHandler(as
 }))
 
 // ─── GET /items/:compositeId/download — single-item download ───────────────
-router.get('/items/:compositeId/download', requireAppRole(ALLOWED_ROLES), asyncHandler(async (req, res) => {
+router.get('/items/:compositeId/download', requireCapability('intuneScriptsConfig.access'), asyncHandler(async (req, res) => {
   const { type, id } = splitCompositeId(String(req.params.compositeId ?? ''))
   const creds = tenantCreds()
   if (!creds) throw Object.assign(new Error('Intune is not configured'), { status: 503 })
@@ -213,7 +213,7 @@ const exportBodySchema = z.object({
 
 const EXPORT_CONCURRENCY = 5
 
-router.post('/export', requireAppRole(ALLOWED_ROLES), asyncHandler(async (req, res) => {
+router.post('/export', requireCapability('intuneScriptsConfig.access'), asyncHandler(async (req, res) => {
   const body = exportBodySchema.parse(req.body)
   const creds = tenantCreds()
   if (!creds) throw Object.assign(new Error('Intune is not configured'), { status: 503 })

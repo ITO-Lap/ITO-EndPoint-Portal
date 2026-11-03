@@ -113,7 +113,7 @@ describe('Microsoft sign-in', () => {
   it('denies a Zinnia user who is in neither group, without issuing a token', async () => {
     memberOf = { status: 200, body: { value: [{ displayName: 'Marketing' }] } }
     const { location } = await callback()
-    expect(location.searchParams.get('auth_error')).toContain('Access denied. pat@zinnia.com is not a member')
+    expect(location.searchParams.get('auth_error')).toContain('Access denied. pat@zinnia.com is not assigned a role and is not a member')
     expect(tokenFrom(location)).toBeNull()
   })
 

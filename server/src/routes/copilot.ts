@@ -7,11 +7,15 @@
 // confirms via POST /actions/:id/confirm. See services/copilotEngine.ts
 // (the tool-calling loop) and services/copilotTools.ts (the tool registry).
 //
-// Same header-trust caveat as the rest of this app's requireAppRole() usage
-// (server/src/middleware/requireRole.ts): the caller's role/email come from
-// client-supplied x-user-role / x-user-email headers, not a verified
-// credential.
+// Route-level access is requireCapability('copilot.read'/'copilot.write')
+// (server/src/middleware/requireRole.ts) — a dynamic custom-RBAC permission
+// lookup, not a hardcoded role list. Which TOOLS are exposed inside an
+// already-authorized chat turn still uses copilotTools.ts's own
+// READ_ROLES/WRITE_ROLES role-literal check (a narrower, in-process nuance,
+// not the security perimeter) — a known, deliberately scoped-out gap: a
+// custom role doesn't yet get custom tool-exposure, only the 3 built-ins do.
 //
+
 // Persistence is optional (DATABASE_URL): without it, chat still works
 // one-shot with an ephemeral conversationId and no cross-request history;
 // pending actions live in an in-process Map for the life of the server so
@@ -22,10 +26,10 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { identifyAuditActor, requireAppRole } from '../middleware/requireRole.js'
+import { identifyAuditActor, requireCapability } from '../middleware/requireRole.js'
 import { isDbAvailable, query } from '../db/index.js'
 import { runCopilotChat, type CopilotMessage, type CopilotRequestContext } from '../services/copilotEngine.js'
-import { getToolByName, scrubSecrets, READ_ROLES, WRITE_ROLES, type CopilotCitation } from '../services/copilotTools.js'
+import { getToolByName, scrubSecrets, type CopilotCitation } from '../services/copilotTools.js'
 
 const router = Router()
 router.use(identifyAuditActor)
@@ -151,7 +155,7 @@ function sanitizePageContext(raw: unknown): CopilotRequestContext | undefined {
 
 // ─── POST /chat ───────────────────────────────────────────────────────────
 
-router.post('/chat', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.post('/chat', requireCapability('copilot.read'), asyncHandler(async (req, res) => {
   const { conversationId: requestedId, message, context } = req.body as {
     conversationId?: string; message?: string; context?: CopilotRequestContext
   }
@@ -245,7 +249,7 @@ async function findPendingAction(id: string): Promise<MemoryPendingAction | null
 
 // ─── POST /actions/:id/confirm ──────────────────────────────────────────────
 
-router.post('/actions/:id/confirm', requireAppRole(WRITE_ROLES), asyncHandler(async (req, res) => {
+router.post('/actions/:id/confirm', requireCapability('copilot.write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string
   const entry = await findPendingAction(id)
   if (!entry) { res.status(404).json({ success: false, error: 'Pending action not found' }); return }
@@ -299,7 +303,7 @@ router.post('/actions/:id/confirm', requireAppRole(WRITE_ROLES), asyncHandler(as
 
 // ─── POST /actions/:id/reject ────────────────────────────────────────────────
 
-router.post('/actions/:id/reject', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.post('/actions/:id/reject', requireCapability('copilot.read'), asyncHandler(async (req, res) => {
   const id = req.params.id as string
   const entry = await findPendingAction(id)
   if (!entry) { res.status(404).json({ success: false, error: 'Pending action not found' }); return }
@@ -319,7 +323,7 @@ router.post('/actions/:id/reject', requireAppRole(READ_ROLES), asyncHandler(asyn
 
 // ─── GET /conversations ───────────────────────────────────────────────────
 
-router.get('/conversations', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.get('/conversations', requireCapability('copilot.read'), asyncHandler(async (req, res) => {
   if (!isDbAvailable()) { res.json({ conversations: [] }); return }
   const actor = actorOf(req)
   const result = await query<{ id: string; title: string; updated_at: string }>(
@@ -331,7 +335,7 @@ router.get('/conversations', requireAppRole(READ_ROLES), asyncHandler(async (req
 
 // ─── GET /conversations/:id ───────────────────────────────────────────────
 
-router.get('/conversations/:id', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.get('/conversations/:id', requireCapability('copilot.read'), asyncHandler(async (req, res) => {
   const id = req.params.id as string
   if (!isDbAvailable()) {
     res.status(404).json({ success: false, error: 'Conversation not found — no database configured' })

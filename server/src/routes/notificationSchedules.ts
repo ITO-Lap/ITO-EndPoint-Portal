@@ -19,7 +19,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { identifyAuditActor, requireAppRole } from '../middleware/requireRole.js'
+import { identifyAuditActor, requireCapability } from '../middleware/requireRole.js'
 import { isConfigured } from '../store/integrationStore.js'
 import * as store from '../store/scheduledReportsStore.js'
 import type { NotificationScheduleRecord, NotificationFrequency } from '../store/scheduledReportsStore.js'
@@ -30,7 +30,7 @@ import { recordAuditLog } from '../services/auditLog.js'
 const router = Router()
 router.use(identifyAuditActor)
 
-const EDIT_ROLES = ['Global Admin', 'IT Admin']
+// Permission key: notificationSchedules.edit (see server/src/services/rolePermissions.ts).
 
 interface SeedSchedule { frequency: NotificationFrequency; weekdays: number[]; execution_time: string; timezone: string }
 
@@ -121,7 +121,7 @@ const updateScheduleSchema = z.object({
 })
 
 // PATCH /api/notification-schedules/:module/:sourceId — Global Admin and IT Admin
-router.patch('/:module/:sourceId', requireAppRole(EDIT_ROLES), asyncHandler(async (req, res) => {
+router.patch('/:module/:sourceId', requireCapability('notificationSchedules.edit'), asyncHandler(async (req, res) => {
   const { module, sourceId } = req.params as { module: string; sourceId: string }
   const input = updateScheduleSchema.parse(req.body)
   const actorEmail = req.auditActor?.email ?? 'unknown@zinnia.com'

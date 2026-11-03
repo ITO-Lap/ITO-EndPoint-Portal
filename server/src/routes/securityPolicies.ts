@@ -23,7 +23,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { identifyAuditActor, requireAppRole } from '../middleware/requireRole.js'
+import { identifyAuditActor, requireCapability } from '../middleware/requireRole.js'
 import { isDbAvailable } from '../db/index.js'
 import { getIntuneConfig, getEntraConfig } from '../store/integrationStore.js'
 import type { TenantCredentials } from '../services/graphApi.js'
@@ -37,8 +37,7 @@ import { INTUNE_CATEGORIES, ENTRA_CATEGORIES } from '../services/securityPolicie
 const router = Router()
 router.use(identifyAuditActor)
 
-const READ_ROLES = ['Global Admin', 'IT Admin', 'Helpdesk']
-const SYNC_ROLES = ['Global Admin', 'IT Admin']
+// Permission keys: securityPolicies.read / securityPolicies.sync (see server/src/services/rolePermissions.ts).
 
 const ALL_CATEGORY_VALUES = [...INTUNE_CATEGORIES, ...ENTRA_CATEGORIES] as [SecurityPolicyCategory, ...SecurityPolicyCategory[]]
 
@@ -71,7 +70,7 @@ const listQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
 })
 
-router.get('/policies', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.get('/policies', requireCapability('securityPolicies.read'), asyncHandler(async (req, res) => {
   const q = listQuerySchema.parse(req.query)
   if (!isDbAvailable() || !configured()) {
     res.json({ success: true, data: [], pagination: { page: q.page, pageSize: q.pageSize, total: 0 }, configured: configured(), latestSyncRunId: null })
@@ -86,7 +85,7 @@ router.get('/policies', requireAppRole(READ_ROLES), asyncHandler(async (req, res
 }))
 
 // ─── GET /policies/:source/:category/:policyId ──────────────────────────────
-router.get('/policies/:source/:category/:policyId', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.get('/policies/:source/:category/:policyId', requireCapability('securityPolicies.read'), asyncHandler(async (req, res) => {
   const source = req.params.source as SecurityPolicySource
   const category = req.params.category as SecurityPolicyCategory
   if (!['intune', 'entra'].includes(source) || !ALL_CATEGORY_VALUES.includes(category)) {
@@ -100,13 +99,13 @@ router.get('/policies/:source/:category/:policyId', requireAppRole(READ_ROLES), 
 }))
 
 // ─── GET /sync/status ─────────────────────────────────────────────────────────
-router.get('/sync/status', requireAppRole(READ_ROLES), asyncHandler(async (_req, res) => {
+router.get('/sync/status', requireCapability('securityPolicies.read'), asyncHandler(async (_req, res) => {
   const latest = await getLatestSyncRun()
   res.json({ success: true, data: latest, configured: configured(), dbAvailable: isDbAvailable() })
 }))
 
 // ─── POST /sync — manual sync ────────────────────────────────────────────────
-router.post('/sync', requireAppRole(SYNC_ROLES), asyncHandler(async (req, res) => {
+router.post('/sync', requireCapability('securityPolicies.sync'), asyncHandler(async (req, res) => {
   const creds = tenantCreds()
   if (!creds) throw Object.assign(new Error('Neither Intune nor Entra ID is configured'), { status: 503 })
   if (!isDbAvailable()) throw Object.assign(new Error('Security Policies requires a PostgreSQL database (DATABASE_URL) for snapshot storage.'), { status: 503 })
@@ -122,7 +121,7 @@ const changesQuerySchema = z.object({
   limit:     z.coerce.number().int().min(1).max(500).default(100),
 })
 
-router.get('/changes', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.get('/changes', requireCapability('securityPolicies.read'), asyncHandler(async (req, res) => {
   const q = changesQuerySchema.parse(req.query)
   if (!isDbAvailable()) {
     res.json({ success: true, data: [], configured: configured() })
@@ -144,7 +143,7 @@ const exportQuerySchema = listQuerySchema.omit({ page: true, pageSize: true }).e
   format: z.enum(['json', 'csv']).default('json'),
 })
 
-router.get('/export', requireAppRole(READ_ROLES), asyncHandler(async (req, res) => {
+router.get('/export', requireCapability('securityPolicies.read'), asyncHandler(async (req, res) => {
   const q = exportQuerySchema.parse(req.query)
   if (!isDbAvailable() || !configured()) throw Object.assign(new Error('Security Policies is not configured'), { status: 503 })
 

@@ -7,7 +7,7 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const SESSION_KEY = 'ito.session'
 
-export interface SessionUser { email: string; displayName: string; role: string }
+export interface SessionUser { email: string; displayName: string; role: string; permissions: Record<string, boolean> }
 interface StoredSession { token: string; user: SessionUser }
 
 export function getSession(): StoredSession | null {
