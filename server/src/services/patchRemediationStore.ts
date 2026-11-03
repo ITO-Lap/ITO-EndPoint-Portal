@@ -17,7 +17,7 @@ export type PatchRemediationAction = {
 }
 
 const file = dataFile('patch-remediation-actions.json', [legacyServerFile('.patch-remediation-actions.json')])
-let actions: PatchRemediationAction[] = load()
+const actions: PatchRemediationAction[] = load()
 
 function load(): PatchRemediationAction[] {
   return readJsonFile<PatchRemediationAction[]>(file) ?? []

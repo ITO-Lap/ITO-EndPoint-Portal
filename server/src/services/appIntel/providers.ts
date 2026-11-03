@@ -1,6 +1,7 @@
-import { getGroupDisplayNames, graphGetAllV, graphGetV, GRAPH, type TenantCredentials } from '../graphApi.js'
+import { getGroupDisplayNames, graphGetAllV, graphGetAllResumable, graphGetV, GRAPH, TransientGraphError, type PagedProgress, type TenantCredentials } from '../graphApi.js'
 import { getIntuneConfig, getManageEngineConfig } from '../../store/integrationStore.js'
 import { getManageEngineAppInventoryWithCoverage, type ManageEngineAppCoverage } from '../manageEngine.js'
+import { dataFile, readJsonFile, writeJsonAtomic } from '../../store/dataDir.js'
 import type { IntuneDetectedRow, MdmAppEntry, MobileAppRaw } from './normalize.js'
 
 // Read-only provider access. Microsoft Graph v1.0 only — every field used here (detectedApps,
@@ -14,6 +15,8 @@ export interface AppIntelProviders {
   intuneConfigured(): boolean
   manageEngineConfigured(): boolean
   fetchIntuneDetected(): Promise<IntuneDetectedRow[]>
+  /** The last successful detected-apps read, used when Graph is throttled so the page keeps showing known data. */
+  lastGoodDetected?(): { savedAt: string; rows: IntuneDetectedRow[] } | null
   fetchIntuneMobileApps(): Promise<MobileAppRaw[]>
   fetchManageEngineApps(): Promise<MdmAppEntry[]>
   /** Device coverage of the most recent fetchManageEngineApps call (null before the first one). */
@@ -48,14 +51,40 @@ async function probe(path: string): Promise<ProbeResult> {
 
 let lastMeCoverage: ManageEngineAppCoverage | null = null
 
+const detectedCacheFile = () => dataFile('cache/intune-detected-apps.v1.json')
+
 export const liveProviders: AppIntelProviders = {
   intuneConfigured: () => !!getIntuneConfig(),
   manageEngineConfigured: () => !!getManageEngineConfig(),
 
   async fetchIntuneDetected() {
-    return graphGetAllV<IntuneDetectedRow>(creds(), GRAPH, '/deviceManagement/detectedApps', {
-      '$top': '1000', '$select': 'id,displayName,version,publisher,deviceCount,platform',
-    })
+    // detectedApps is large and Graph throttles it hard. Pages are spaced out, a throttled page is
+    // retried with Retry-After, and if retries run out the pages already read are kept: the next round
+    // (after a cool-down) continues from the failed page instead of starting the whole read again.
+    const progress: PagedProgress<IntuneDetectedRow> = { rows: [], nextUrl: null }
+    let rows: IntuneDetectedRow[] = []
+    for (let round = 0; ; round++) {
+      try {
+        rows = await graphGetAllResumable<IntuneDetectedRow>(creds(), GRAPH, '/deviceManagement/detectedApps', {
+          '$top': '500', '$select': 'id,displayName,version,publisher,deviceCount,platform',
+        }, progress, { maxRetries: 6, pageDelayMs: process.env.NODE_ENV === 'test' ? 0 : 400 })
+        break
+      } catch (e) {
+        if (!(e instanceof TransientGraphError) || round >= 3 || process.env.NODE_ENV === 'test') throw e
+        console.warn(`[app-intel] detectedApps throttled after ${progress.rows.length} rows; cooling down before resuming (round ${round + 1}/3)`)
+        await new Promise(r => setTimeout(r, 60_000 * (round + 1)))
+      }
+    }
+    if (rows.length && process.env.NODE_ENV !== 'test') {
+      try { writeJsonAtomic(detectedCacheFile(), { savedAt: new Date().toISOString(), rows }) }
+      catch (e) { console.warn('[app-intel] could not save detected-apps cache:', e instanceof Error ? e.message : e) }
+    }
+    return rows
+  },
+
+  lastGoodDetected() {
+    const saved = readJsonFile<{ savedAt: string; rows: IntuneDetectedRow[] }>(detectedCacheFile())
+    return saved && Array.isArray(saved.rows) && saved.rows.length ? saved : null
   },
 
   async fetchIntuneMobileApps() {

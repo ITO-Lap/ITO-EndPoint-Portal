@@ -16,5 +16,13 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    // This config file lives at the repo root, so Vite's watcher otherwise
+    // covers the whole repo, including server/ — a backend-only directory
+    // with no frontend module ever imports from. Without this, writes to its
+    // runtime-persisted state files (server/.rbac.json, .notifications.json,
+    // etc. — see server/.gitignore) make Vite emit a full-reload over HMR,
+    // bouncing the SPA back to its default page on every such write even
+    // though nothing frontend-relevant changed.
+    watch: { ignored: ['**/server/**'] },
   },
 })

@@ -10,6 +10,8 @@ import type {
 import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
+import { hasPermission } from '../lib/permissions'
+import { usePermissions } from '../context/PermissionsContext'
 
 const PAGE_SIZE = 25
 const POLL_MS = 4000
@@ -17,7 +19,6 @@ const TZ_KEY = 'ito.staleDevices.timezone'
 const TIMEZONES: Array<[string, string]> = [
   ['Asia/Kolkata', 'India (IST, UTC+5:30)'], ['UTC', 'UTC'], ['America/Los_Angeles', 'US Pacific'], ['America/New_York', 'US Eastern'], ['Europe/London', 'UK'],
 ]
-const EXPORT_ROLES = ['Global Admin', 'IT Admin']
 
 const TABS: Array<{ id: StaleView; label: string }> = [
   { id: 'stale', label: 'All stale devices' }, { id: 'windows', label: 'Windows' }, { id: 'macos', label: 'macOS' },
@@ -158,6 +159,7 @@ function DeviceDrawer({ device, tz, onClose }: { device: StaleDevice; tz: string
 
 export function StaleDevicesPage({ onBack, viewerRole = 'IT Admin', userEmail }: { onBack: () => void; viewerRole?: string; userEmail?: string }) {
   setStaleDevicesActor(viewerRole, userEmail)
+  const permissions = usePermissions()
   const [view, setView] = useState<StaleView>('stale')
   const [platform, setPlatform] = useState<StalePlatform | ''>('')
   const [managedBy, setManagedBy] = useState<ManagedBy | ''>('')
@@ -308,7 +310,7 @@ export function StaleDevicesPage({ onBack, viewerRole = 'IT Admin', userEmail }:
               </select>
             </label>
           )}
-          {EXPORT_ROLES.includes(viewerRole) && (
+          {hasPermission(viewerRole, permissions, 'staleDevices.export') && (
             <button type="button" onClick={() => void doExport()} disabled={exporting || !data || data.total === 0}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300">
               <Download className="h-3.5 w-3.5" />{exporting ? 'Exporting…' : 'Export CSV'}

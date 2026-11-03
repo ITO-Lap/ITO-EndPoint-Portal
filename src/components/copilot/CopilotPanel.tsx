@@ -14,6 +14,8 @@ import { CopilotConversationList } from './CopilotConversationList'
 import { useLocalStorage } from '../../hooks/useLocalStorage'
 import { useCopilotContextValue } from '../../context/CopilotContextProvider'
 import type { UserToolRole } from '../../types'
+import { hasPermission } from '../../lib/permissions'
+import { usePermissions } from '../../context/PermissionsContext'
 
 interface DisplayMessage {
   id: string
@@ -100,6 +102,8 @@ function buildQuickActions(context: ReturnType<typeof useCopilotContextValue>['c
 }
 
 export function CopilotPanel({ viewerRole, userEmail }: Props) {
+  const permissions = usePermissions()
+  const canAccessCopilot = hasPermission(viewerRole, permissions, 'copilot.access')
   const { context } = useCopilotContextValue()
 
   const [panelOpen, setPanelOpen]         = useLocalStorage('copilot-panel-open', false)
@@ -138,11 +142,11 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
   }, [viewerRole, userEmail])
 
   useEffect(() => {
-    if (viewerRole === 'End User' || !panelOpen || minimized) return
+    if (!canAccessCopilot || !panelOpen || minimized) return
     // Defer to a microtask so the state updates inside loadConversations()
     // don't fire synchronously during the effect's commit phase.
     void Promise.resolve().then(loadConversations)
-  }, [panelOpen, minimized, loadConversations, viewerRole])
+  }, [panelOpen, minimized, loadConversations, canAccessCopilot])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -170,7 +174,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
     window.addEventListener('pointerup', onUp)
   }
 
-  if (viewerRole === 'End User') return null
+  if (!canAccessCopilot) return null
 
   const resetPendingAction = () => {
     setPendingAction(null)

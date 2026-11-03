@@ -57,6 +57,8 @@ const TRIGGER_LABELS: Record<AutomationTriggerType, string> = {
   app_deploy_failed:    'App Deployment Failed',
   cert_expiring:        'Certificate Expiring',
   stale_device:         'Stale / Inactive Device',
+  agent_missing:        'Agent Missing',
+  agent_stale:          'Agent Stale',
 }
 
 const ACTION_ICONS: Record<AutomationActionType, React.ElementType> = {

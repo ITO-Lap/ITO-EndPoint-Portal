@@ -181,7 +181,7 @@ async function fetchWithRetry(url: string, token: string, opts: RetryOptions = {
 
       if (res.status === 429) {
         const retryAfterHeader = res.headers.get('Retry-After')
-        const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : backoffWithJitter(attempt)
+        const retryAfterMs = retryAfterHeader ? Math.min(Number(retryAfterHeader) * 1000, 120_000) : backoffWithJitter(attempt)
         if (attempt >= maxRetries) throw new TransientGraphError('Graph API rate-limited (429) and retries exhausted')
         await sleep(Number.isFinite(retryAfterMs) ? retryAfterMs : backoffWithJitter(attempt))
         continue
@@ -256,6 +256,37 @@ export async function graphGetAllV<T>(
   }
 
   return results
+}
+
+/** Progress of a paged read that can be continued after a throttling failure. */
+export interface PagedProgress<T> { rows: T[]; nextUrl: string | null }
+
+/** Like graphGetAllV, but keeps the pages already read in `progress` so a 429 on page 20 of 25 costs the
+ *  next attempt only the remaining pages instead of the whole read. `pageDelayMs` spaces the requests
+ *  out, which keeps heavily throttled endpoints (detectedApps) under the limit in the first place. */
+export async function graphGetAllResumable<T>(
+  creds: TenantCredentials,
+  base: GraphBase,
+  path: string,
+  params: Record<string, string> | undefined,
+  progress: PagedProgress<T>,
+  opts: RetryOptions & { pageDelayMs?: number } = {},
+): Promise<T[]> {
+  const token = await getToken(creds)
+  const sleep = opts.sleepImpl ?? defaultSleep
+  if (!progress.nextUrl && !progress.rows.length) {
+    const u = new URL(`${base}${path}`)
+    if (params) Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v))
+    progress.nextUrl = u.toString()
+  }
+  while (progress.nextUrl) {
+    const res = await fetchWithRetry(progress.nextUrl, token, opts)
+    const data = await res.json() as { value: T[]; '@odata.nextLink'?: string }
+    progress.rows.push(...data.value)
+    progress.nextUrl = data['@odata.nextLink'] ?? null
+    if (progress.nextUrl && opts.pageDelayMs) await sleep(opts.pageDelayMs)
+  }
+  return progress.rows
 }
 
 // ─── Groups (resolve assignment target group ids to display names) ──────────

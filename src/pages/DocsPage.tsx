@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   BookMarked, ShieldCheck, Zap, Users, Laptop2, Settings,
-  CheckCircle2, XCircle, MinusCircle, ChevronRight, BookOpen,
+  CheckCircle2, XCircle, MinusCircle, ChevronRight,
   HelpCircle, AlertTriangle, Lock, Globe, LifeBuoy, FileText,
   Terminal, BarChart2, Wrench, Play, Bell, MessageSquare, Ticket,
   Clock, Package, Activity, Waves,

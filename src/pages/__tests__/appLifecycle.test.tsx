@@ -10,6 +10,7 @@ vi.mock('../../api/appIntel', async importOriginal => {
 
 import { appIntelApi, RequestFailure } from '../../api/appIntel'
 import { AppIntelligencePage } from '../AppIntelligencePage'
+import { PermissionsProvider } from '../../context/PermissionsContext'
 
 const api = vi.mocked(appIntelApi)
 const SYNCED = '2026-10-20T06:00:00.000Z'
@@ -75,7 +76,11 @@ beforeEach(() => {
   api.previewRequest.mockResolvedValue(preview())
 })
 
-const open = async (role = 'IT Admin') => { render(<AppIntelligencePage viewerRole={role} />); await screen.findByText('VLC media player') }
+// appIntel.write mirrors the real built-in role defaults (see server/src/services/rolePermissions.ts).
+const open = async (role = 'IT Admin') => {
+  render(<PermissionsProvider permissions={{ 'appIntel.write': role !== 'Helpdesk' }}><AppIntelligencePage viewerRole={role} /></PermissionsProvider>)
+  await screen.findByText('VLC media player')
+}
 
 describe('lifecycle columns', () => {
   it('shows owner, ring, CVEs and estimated impact, and never invents what is unknown', async () => {

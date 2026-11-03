@@ -16,11 +16,11 @@
 // `run()` for a write tool from the separate POST /actions/:id/confirm route
 // (server/src/routes/copilot.ts), after RBAC is re-checked there.
 //
-// Same header-trust caveat as server/src/middleware/requireRole.ts: ctx.role
-// comes from the client-supplied x-user-role header, not a verified
-// credential. This module trusts the caller (routes/copilot.ts) to have
-// already run requireAppRole() — ctx.role here is only used for defensive
-// double-checks inside write-tool preview logic, not as the primary gate.
+// ctx.role comes from the verified session (see requireSession.ts) by the
+// time it reaches here. This module trusts the caller (routes/copilot.ts) to
+// have already run requireCapability() — ctx.role here is only used for
+// defensive double-checks inside write-tool preview logic, not as the
+// primary gate.
 
 import { isDbAvailable, query } from '../db/index.js'
 import * as scheduledReportsStore from '../store/scheduledReportsStore.js'
@@ -592,10 +592,13 @@ export function getToolByName(name: string): ToolDefinition | undefined {
 export const READ_TOOL_NAMES = COPILOT_TOOLS.filter(t => t.rbac === 'read').map(t => t.name)
 export const WRITE_TOOL_NAMES = COPILOT_TOOLS.filter(t => t.rbac === 'write').map(t => t.name)
 
-// App-role gates — same values used by server/src/middleware/requireRole.ts
-// callers throughout the app. Kept here (not re-exported from
-// requireRole.ts, which only exposes the generic requireAppRole() factory)
-// so copilotEngine.ts and routes/copilot.ts share one definition.
+// In-process tool-exposure gate for the 3 built-in roles only — the real
+// security perimeter (routes/copilot.ts) now uses requireCapability() /
+// custom RBAC; this stays role-literal because toolsAllowedForRole() is
+// called synchronously inside the Gemini tool-calling loop, and the custom-
+// RBAC permission lookup is async (store-backed). A custom role therefore
+// gets the same page/route access as today but not a bespoke tool-exposure
+// split — a deliberately scoped-out gap, not an oversight.
 export const READ_ROLES = ['Global Admin', 'IT Admin', 'Helpdesk']
 export const WRITE_ROLES = ['Global Admin', 'IT Admin']
 

@@ -95,6 +95,12 @@ export interface MEDevice {
   managed_status?: string
   is_removed?: string | boolean
   last_contact_time?: string | number
+  // Enrollment time — field name varies by Zoho MDM API version; epoch ms or date string.
+  enrolled_time?: string | number
+  enrollment_time?: string | number
+  registered_time?: string | number
+  enrolled_date?: string | number
+  enrollment_date?: string | number
   device_capacity?: string
   available_device_capacity?: string
   user?: MEUser
@@ -192,10 +198,38 @@ function mapComplianceState(detail: MEDeviceDetail | null): Device['complianceSt
   return 'Compliant'
 }
 
+let enrollmentFieldWarned = false
+
+// Matched on normalized key (lowercase, letters only) so EnrolledTime / enrolled_time / EndrolledTime all hit.
+const ENROLLMENT_KEYS = new Set(['enrolledtime', 'endrolledtime', 'enrollmenttime', 'registeredtime', 'enrolleddate', 'enrollmentdate'])
+
+function findEnrollmentValue(obj: Record<string, unknown>): string | number | undefined {
+  for (const [key, value] of Object.entries(obj)) {
+    if (ENROLLMENT_KEYS.has(key.toLowerCase().replace(/[^a-z]/g, '')) && (typeof value === 'string' || typeof value === 'number') && value !== '') return value
+  }
+  return undefined
+}
+
+/** Normalize ManageEngine's enrollment timestamp (epoch ms/seconds or date string) to ISO; undefined if absent/invalid. */
+function enrollmentIso(d: MEDevice, detail: MEDeviceDetail | null): string | undefined {
+  for (const src of [detail, d]) {
+    const raw = src ? findEnrollmentValue(src as unknown as Record<string, unknown>) : undefined
+    if (raw === undefined || raw === null || raw === '') continue
+    const n = Number(raw)
+    const ms = Number.isFinite(n) ? (n < 1e11 ? n * 1000 : n) : Date.parse(String(raw))
+    if (Number.isFinite(ms) && ms > 0) return new Date(ms).toISOString()
+  }
+  if (!enrollmentFieldWarned) {
+    enrollmentFieldWarned = true
+    console.warn(`[manageEngine] No enrollment time found on device payload; keys seen: ${Object.keys({ ...d, ...(detail ?? {}) }).join(', ')}`)
+  }
+  return undefined
+}
+
 function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
   const lastContactRaw = d.last_contact_time
   const lastCheckIn = lastContactRaw
-    ? new Date(typeof lastContactRaw === 'number' ? lastContactRaw : Number(lastContactRaw)).toLocaleString()
+    ? new Date(typeof lastContactRaw === 'number' ? lastContactRaw : Number(lastContactRaw)).toLocaleString('en-US')
     : 'Unknown'
 
   const encrypted = detail?.security?.storage_encryption
@@ -210,6 +244,7 @@ function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
   const model = d.model ?? d.product_name
   const platform = mapPlatform(d)
   const manufacturer = mapManufacturer(platform)
+  const enrolledAt = enrollmentIso(d, detail)
 
   return {
     id:               String(d.device_id),
@@ -236,6 +271,7 @@ function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
     secureBoot:       'Not Applicable',
     tpmVersion:       'Not Applicable',
     ...(manufacturer ? { manufacturer } : {}),
+    ...(enrolledAt ? { enrollmentDate: enrolledAt } : {}),
     ...(model ? { model } : {}),
     ...(d.device_capacity ? { totalStorage: `${d.device_capacity} GB` } : {}),
     ...(d.available_device_capacity ? { freeStorage: `${d.available_device_capacity} GB` } : {}),

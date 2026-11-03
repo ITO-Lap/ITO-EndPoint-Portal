@@ -5,19 +5,23 @@ import {
   Download, Trash2, Plus, Link2, Copy, Check,
   Eye, EyeOff, WifiOff, Hash, LifeBuoy, FileText,
   ShieldAlert, RotateCcw, Info, Users, CheckCircle2, XCircle,
-  MinusCircle, UserPlus, BookOpen,
+  UserPlus, BookOpen,
   ChevronDown, ChevronRight, X, Key, Wifi, Edit2, Upload,
   LayoutDashboard,
 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
+import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/ToastProvider'
 import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import { useIntegrationStatus } from '../../hooks/useIntegrationStatus'
-import { useNavVisibility, ALWAYS_VISIBLE_IDS } from '../../context/NavVisibilityContext'
+import { useNavVisibility } from '../../context/NavVisibilityContext'
 import { navItems, NAV_GROUP_ORDER } from '../../data/dashboardData'
-import { canAccess } from '../../lib/permissions'
+import { canAccess, hasPermission } from '../../lib/permissions'
+import { usePermissions } from '../../context/PermissionsContext'
+import { rolesApi, setRolesActor } from '../../api/roles'
+import type { CustomRole, PermissionGroup, PermissionMap, UserRoleAssignment } from '../../api/roles'
 import type { UserToolRole } from '../../types'
 
 // ─── Nav sections ─────────────────────────────────────────────────────────────
@@ -2186,225 +2190,274 @@ function DangerSection() {
 
 // ─── Section: Roles & Permissions ────────────────────────────────────────────
 
-const ROLES_DEF = [
-  {
-    key: 'global',
-    name: 'Global Admin',
-    badge: 'bg-orange-100 text-orange-700 border-orange-200',
-    icon: Lock,
-    who: 'IT Operations leads, platform owners',
-    summary: 'Unrestricted access to all features, settings, integrations, and user management.',
-    capabilities: ['Full dashboard access', 'Run & configure automations', 'Manage integrations & API keys', 'Manage users & assign roles', 'Access all Settings sections', 'Danger Zone actions'],
-  },
-  {
-    key: 'admin',
-    name: 'IT Admin',
-    badge: 'bg-lime-100 text-lime-700 border-lime-200',
-    icon: ShieldCheck,
-    who: 'Endpoint engineers, senior IT staff',
-    summary: 'Same access as Global Admin: every page, setting, integration and user-management action.',
-    capabilities: ['Full dashboard access', 'Run & configure automations', 'Manage integrations & API keys', 'Manage users & assign roles', 'Access all Settings sections', 'Danger Zone actions'],
-  },
-  {
-    key: 'helpdesk',
-    name: 'Helpdesk',
-    badge: 'bg-slate-100 text-slate-700 border-slate-200',
-    icon: Users,
-    who: 'Front-line support, service desk agents',
-    summary: 'Read-only + device sync, plus critical patching (scan and remediate). Other runbooks go to an IT Admin.',
-    capabilities: ['View dashboard & device details', 'Search devices', 'Trigger device sync (safe)', 'Critical patching (scan & remediate)', 'View runbook steps (read-only)', 'View activity log (read-only)', 'Own notification preferences'],
-  },
-]
+const ROLE_BADGE_FALLBACK = 'bg-sky-100 text-sky-700 border-sky-200'
+const BUILTIN_BADGE: Record<string, string> = {
+  'Global Admin': 'bg-orange-100 text-orange-700 border-orange-200',
+  'IT Admin':     'bg-lime-100 text-lime-700 border-lime-200',
+  'Helpdesk':     'bg-slate-100 text-slate-700 border-slate-200',
+}
+const badgeFor = (name: string) => BUILTIN_BADGE[name] ?? ROLE_BADGE_FALLBACK
 
-type PermLevel = 'allow' | 'deny' | 'limit'
+function RoleEditorModal({ open, role, groups, onClose, onSave }: {
+  open: boolean
+  role: CustomRole | null // null = creating a new role
+  groups: PermissionGroup[]
+  onClose: () => void
+  onSave: (input: { name: string; permissions: PermissionMap }) => Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [perms, setPerms] = useState<PermissionMap>({})
+  const [saving, setSaving] = useState(false)
+  const isGlobalAdmin = role?.name === 'Global Admin'
 
-const PERM_GROUPS: { group: string; rows: { label: string; global: PermLevel; admin: PermLevel; helpdesk: PermLevel }[] }[] = [
-  { group: 'Dashboard & Devices', rows: [
-    { label: 'View compliance dashboard',       global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Search & view device details',    global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Trigger device sync',             global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Critical patching (scan & remediate)', global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Copy serial / user email',        global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-  ]},
-  { group: 'Runbooks & Automation', rows: [
-    { label: 'View runbook steps',              global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Execute a runbook',               global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Start automation',                global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Create / edit runbooks',          global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-    { label: 'Configure auto-remediation',      global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-  ]},
-  { group: 'Integrations', rows: [
-    { label: 'View integration status',         global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Trigger integration sync',        global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'View API keys',                   global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-    { label: 'Modify / disconnect integration', global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-  ]},
-  { group: 'Reports & Exports', rows: [
-    { label: 'View reports & analytics',        global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Export device / compliance data', global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Export audit log',                global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'View activity log',               global: 'allow', admin: 'allow', helpdesk: 'limit' },
-  ]},
-  { group: 'Settings', rows: [
-    { label: 'General / Compliance / Automation', global: 'allow', admin: 'allow',  helpdesk: 'deny' },
-    { label: 'Security settings',               global: 'allow', admin: 'allow', helpdesk: 'deny'  },
-    { label: 'Notifications (org-wide)',        global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-    { label: 'Notifications (own profile)',     global: 'allow', admin: 'allow', helpdesk: 'allow' },
-    { label: 'Data & Privacy / Danger Zone',    global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-  ]},
-  { group: 'User Management', rows: [
-    { label: 'View / manage users',             global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-    { label: 'Assign / change roles',           global: 'allow', admin: 'allow',  helpdesk: 'deny'  },
-    { label: 'Edit own profile',                global: 'allow', admin: 'allow', helpdesk: 'allow' },
-  ]},
-]
+  useEffect(() => {
+    if (!open) return
+    setName(role?.name ?? '')
+    setPerms(role?.permissions ?? {})
+  }, [open, role])
 
-function PermCell({ level }: { level: PermLevel }) {
-  if (level === 'allow') return <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" />
-  if (level === 'deny')  return <XCircle      className="h-4 w-4 text-red-400    mx-auto" />
+  const toggle = (key: string) => setPerms(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    try { await onSave({ name: name.trim(), permissions: perms }) }
+    finally { setSaving(false) }
+  }
+
   return (
-    <span className="flex flex-col items-center gap-0.5">
-      <MinusCircle className="h-4 w-4 text-amber-400 mx-auto" />
-      <span className="text-[0.5rem] text-amber-500 font-bold leading-none">View</span>
-    </span>
+    <Modal open={open} title={role ? `Edit "${role.name}"` : 'Create a new role'} onClose={onClose} size="lg">
+      <div className="space-y-4 px-5 py-4 overflow-y-auto">
+        <div>
+          <label className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400">Role name</label>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            disabled={!!role?.is_builtin}
+            placeholder="e.g. Report Viewer"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
+          />
+          {role?.is_builtin && <p className="mt-1 text-[0.62rem] text-slate-400">Built-in role names cannot be changed.</p>}
+        </div>
+
+        {isGlobalAdmin && (
+          <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-[0.72rem] text-orange-700">
+            Global Admin always has every permission, regardless of what's checked below — this can't be reduced, so nobody can lock every admin out.
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {groups.map(group => (
+            <div key={group.key} className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-50 px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-slate-500">{group.label}</div>
+              <div className="divide-y divide-slate-100">
+                {group.keys.map(k => (
+                  <label key={k.key} className="flex items-center justify-between gap-3 px-4 py-2 text-xs text-slate-700 cursor-pointer hover:bg-slate-50/60">
+                    <span>{k.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={isGlobalAdmin ? true : !!perms[k.key]}
+                      disabled={isGlobalAdmin}
+                      onChange={() => toggle(k.key)}
+                      className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400 disabled:opacity-50"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSave} disabled={saving || !name.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+      </div>
+    </Modal>
   )
 }
 
-function RolesSection() {
+function RolesSection({ viewerRole, userEmail }: { viewerRole: UserToolRole; userEmail?: string }) {
   const { notify } = useToast()
-  const [userRoles, setUserRoles] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
+  const permissions = usePermissions()
+  const canManage = hasPermission(viewerRole, permissions, 'roles.manage')
 
-  const handleRoleChange = (email: string, role: string) => {
-    setUserRoles(prev => ({ ...prev, [email]: role }))
-    notify('info', 'Role Changed', `Role updated — click Save to apply`)
+  const [roles, setRoles] = useState<CustomRole[]>([])
+  const [groups, setGroups] = useState<PermissionGroup[]>([])
+  const [assignments, setAssignments] = useState<UserRoleAssignment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editingRole, setEditingRole] = useState<CustomRole | null>(null) // null while editorOpen = creating
+  const [newEmail, setNewEmail] = useState('')
+  const [newRoleId, setNewRoleId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
+  useEffect(() => { setRolesActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
+
+  const load = useCallback(() => {
+    setLoading(true)
+    Promise.all([rolesApi.listRoles(), rolesApi.permissionKeys(), rolesApi.listAssignments()])
+      .then(([r, g, a]) => { setRoles(r.data); setGroups(g.data); setAssignments(a.data) })
+      .catch(e => notify('error', 'Failed to load roles', e instanceof Error ? e.message : 'Unknown error'))
+      .finally(() => setLoading(false))
+  }, [notify])
+
+  useEffect(() => { if (canManage) load() }, [canManage, load])
+
+  const openCreate = () => { setEditingRole(null); setEditorOpen(true) }
+  const openEdit = (role: CustomRole) => { setEditingRole(role); setEditorOpen(true) }
+
+  const handleSaveRole = async (input: { name: string; permissions: PermissionMap }) => {
+    try {
+      if (editingRole) {
+        await rolesApi.updateRole(editingRole.id, input)
+        notify('success', 'Role updated', `"${input.name}" has been saved`)
+      } else {
+        await rolesApi.createRole(input)
+        notify('success', 'Role created', `"${input.name}" is ready to assign`)
+      }
+      setEditorOpen(false)
+      load()
+    } catch (e) {
+      notify('error', 'Save failed', e instanceof Error ? e.message : 'Unknown error')
+    }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 800))
-    setSaving(false)
-    notify('success', 'Roles Saved', 'Role assignments have been updated')
+  const handleDeleteRole = async (role: CustomRole) => {
+    try {
+      await rolesApi.deleteRole(role.id)
+      notify('success', 'Role deleted', `"${role.name}" has been removed`)
+      load()
+    } catch (e) {
+      notify('error', 'Could not delete role', e instanceof Error ? e.message : 'Unknown error')
+    }
   }
 
+  const handleAssign = async () => {
+    if (!newEmail.trim() || !newRoleId) return
+    setAssigning(true)
+    try {
+      await rolesApi.assignUser(newEmail.trim(), newRoleId)
+      notify('success', 'User assigned', `${newEmail.trim()} is now on this role`)
+      setNewEmail(''); setNewRoleId('')
+      load()
+    } catch (e) {
+      notify('error', 'Assignment failed', e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setAssigning(false)
+    }
+  }
 
-  const roleLabel: Record<string, { label: string; badge: string }> = {
-    global:   { label: 'Global Admin', badge: 'bg-orange-100 text-orange-700' },
-    admin:    { label: 'IT Admin',     badge: 'bg-lime-100 text-lime-700' },
-    helpdesk: { label: 'Helpdesk',     badge: 'bg-slate-100 text-slate-600' },
+  const handleUnassign = async (email: string) => {
+    try { await rolesApi.removeAssignment(email); notify('info', 'User unassigned', `${email} now falls back to AAD group / allowlist resolution`); load() }
+    catch (e) { notify('error', 'Could not unassign', e instanceof Error ? e.message : 'Unknown error') }
+  }
+
+  const roleName = (id: string) => roles.find(r => r.id === id)?.name ?? 'Unknown role'
+
+  if (!canManage) {
+    return (
+      <SectionWrap title="Roles & Permissions" description="Custom roles govern what each team member can see and do in ITO Endpoint">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex gap-3">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">You don't have permission to manage roles. Ask a Global Admin to grant "Manage custom roles & user assignments".</p>
+        </div>
+      </SectionWrap>
+    )
   }
 
   return (
-    <SectionWrap title="Roles & Permissions" description="Three roles govern what each team member can see and do in ITO Endpoint">
+    <SectionWrap title="Roles & Permissions" description="Create custom roles with their own permission set, and assign them to users by email — on top of the 3 built-in roles, which can't be deleted.">
 
-      {/* Role definition cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {ROLES_DEF.map(role => {
-          const Icon = role.icon
+      {/* Role cards */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-700">{loading ? 'Loading roles…' : `${roles.length} role${roles.length !== 1 ? 's' : ''}`}</p>
+        <Button onClick={openCreate}><Plus className="h-3.5 w-3.5" />Create Role</Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {roles.map(role => {
+          const trueCount = Object.values(role.permissions).filter(Boolean).length
           return (
-            <div key={role.key} className={`rounded-[18px] border bg-white shadow-sm shadow-slate-900/5 overflow-hidden`}>
-              <div className={`flex items-center gap-2.5 border-b px-4 py-3 ${role.badge}`}>
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                <p className="text-xs font-bold">{role.name}</p>
+            <div key={role.id} className="rounded-[18px] border bg-white shadow-sm shadow-slate-900/5 overflow-hidden">
+              <div className={`flex items-center justify-between gap-2.5 border-b px-4 py-3 ${badgeFor(role.name)}`}>
+                <p className="text-xs font-bold truncate">{role.name}</p>
+                {role.is_builtin && <Lock className="h-3.5 w-3.5 flex-shrink-0" />}
               </div>
-              <div className="px-4 py-3 space-y-2.5">
-                <p className="text-[0.65rem] text-slate-500 leading-relaxed">{role.summary}</p>
-                <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-slate-400">Who it's for</p>
-                <p className="text-[0.65rem] text-slate-700">{role.who}</p>
-                <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-slate-400 mt-1">Capabilities</p>
-                <ul className="space-y-1">
-                  {role.capabilities.map(c => (
-                    <li key={c} className="flex items-center gap-1.5 text-[0.65rem] text-slate-700">
-                      <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500" />
-                      {c}
-                    </li>
-                  ))}
-                </ul>
+              <div className="px-4 py-3 space-y-2">
+                <p className="text-[0.65rem] text-slate-500">
+                  {role.name === 'Global Admin' ? 'Every permission, always' : `${trueCount} permission${trueCount !== 1 ? 's' : ''} granted`}
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button type="button" onClick={() => openEdit(role)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 hover:bg-slate-50">
+                    <Edit2 className="h-3 w-3" />Edit
+                  </button>
+                  {!role.is_builtin && (
+                    <button type="button" onClick={() => handleDeleteRole(role)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-[0.68rem] font-semibold text-red-600 hover:bg-red-50">
+                      <Trash2 className="h-3 w-3" />Delete
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-[0.68rem] text-slate-500">
-        <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Full access</span>
-        <span className="flex items-center gap-1.5"><MinusCircle  className="h-3.5 w-3.5 text-amber-400"  /> View only</span>
-        <span className="flex items-center gap-1.5"><XCircle      className="h-3.5 w-3.5 text-red-400"    /> No access</span>
-      </div>
-
-      {/* Permissions matrix */}
+      {/* User Assignments */}
       <div className="rounded-[18px] border border-slate-200 bg-white shadow-sm shadow-slate-900/5 overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-3.5">
-          <p className="text-xs font-semibold text-slate-900">Permissions Matrix</p>
-          <p className="text-[0.65rem] text-slate-500 mt-0.5">Full breakdown of what each role can see and do</p>
+          <p className="text-xs font-semibold text-slate-900">User Assignments</p>
+          <p className="text-[0.65rem] text-slate-500 mt-0.5">
+            Assign any role to a user by email. Unassigned users fall back to the email allowlist, then AAD group membership.
+          </p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="py-2.5 px-5 text-left text-[0.65rem] font-semibold text-slate-500">Action</th>
-                {ROLES_DEF.map(r => (
-                  <th key={r.key} className="py-2.5 px-4 text-center text-[0.65rem] font-semibold whitespace-nowrap min-w-[96px]">
-                    <span className={`inline-block rounded-full border px-2 py-0.5 ${r.badge}`}>{r.name}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {PERM_GROUPS.map(group => (
-                <>
-                  <tr key={group.group} className="bg-slate-50">
-                    <td colSpan={4} className="px-5 py-1.5 text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">
-                      {group.group}
-                    </td>
-                  </tr>
-                  {group.rows.map(row => (
-                    <tr key={row.label} className="border-b border-slate-100/80 hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2 px-5 text-[0.72rem] text-slate-700">{row.label}</td>
-                      <td className="py-2 px-4"><PermCell level={row.global} /></td>
-                      <td className="py-2 px-4"><PermCell level={row.admin} /></td>
-                      <td className="py-2 px-4"><PermCell level={row.helpdesk} /></td>
-                    </tr>
-                  ))}
-                </>
-              ))}
-            </tbody>
-          </table>
+
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/50">
+          <input
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+            placeholder="user@zinnia.com"
+            type="email"
+            className="flex-1 min-w-[200px] rounded-lg border border-slate-200 px-3 py-1.5 text-xs"
+          />
+          <select value={newRoleId} onChange={e => setNewRoleId(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs">
+            <option value="">Select a role…</option>
+            {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          <Button onClick={handleAssign} disabled={assigning || !newEmail.trim() || !newRoleId}>
+            <UserPlus className="h-3.5 w-3.5" />Assign
+          </Button>
         </div>
+
+        {assignments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-5 py-8 text-center">
+            <UserPlus className="h-5 w-5 text-slate-300" />
+            <p className="text-[0.72rem] text-slate-500">No per-user assignments yet — everyone resolves via the email allowlist or AAD group membership.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {assignments.map(a => (
+              <div key={a.id} className="flex items-center justify-between px-5 py-2.5">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">{a.user_email}</p>
+                  <p className="text-[0.62rem] text-slate-400">assigned to <span className={`inline-block rounded-full border px-1.5 ${badgeFor(roleName(a.role_id))}`}>{roleName(a.role_id)}</span></p>
+                </div>
+                <button type="button" onClick={() => handleUnassign(a.user_email)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-[0.68rem] font-semibold text-slate-500 hover:bg-slate-50">
+                  Unassign
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* User Assignments — populated from live directory integration */}
-      <div className="rounded-[18px] border border-slate-200 bg-white shadow-sm shadow-slate-900/5 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-          <div>
-            <p className="text-xs font-semibold text-slate-900">User Assignments</p>
-            <p className="text-[0.65rem] text-slate-500 mt-0.5">Change a user's role — only Global Admins and IT Admins can do this</p>
-          </div>
-          <a
-            href="#"
-            onClick={e => { e.preventDefault(); notify('info', 'Manage Users', 'Go to the Users page to invite and manage user accounts') }}
-            className="inline-flex items-center gap-1.5 h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Manage in Users page
-          </a>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-3 px-5 py-10 text-center">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
-            <UserPlus className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-700">No users synced yet</p>
-            <p className="text-[0.72rem] text-slate-500 mt-1 max-w-xs leading-relaxed">
-              Connect a directory service (Microsoft Entra ID, Okta) in{' '}
-              <span className="font-semibold text-slate-700">Settings → Integrations</span>{' '}
-              to sync users and assign roles here.
-            </p>
-          </div>
-        </div>
-      </div>
-
+      <RoleEditorModal
+        open={editorOpen}
+        role={editingRole}
+        groups={groups}
+        onClose={() => setEditorOpen(false)}
+        onSave={handleSaveRole}
+      />
     </SectionWrap>
   )
 }
@@ -2435,8 +2488,9 @@ function ToggleSwitch({ checked, onChange, disabled }: {
 }
 
 function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
+  const permissions = usePermissions()
   const { prefs, setVisible, resetToDefaults, isAlwaysVisible } = useNavVisibility()
-  const { showToast } = useToast()
+  const { notify } = useToast()
   const [confirmReset, setConfirmReset] = useState(false)
 
   const hiddenCount = navItems.filter(item =>
@@ -2447,7 +2501,7 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
     if (!confirmReset) { setConfirmReset(true); return }
     resetToDefaults()
     setConfirmReset(false)
-    showToast('Navigation restored to defaults — all items are now visible', 'success')
+    notify('success', 'Navigation reset', 'Navigation restored to defaults — all items are now visible')
   }
 
   const grouped = NAV_GROUP_ORDER.map(group => ({
@@ -2455,7 +2509,7 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
     items: navItems.filter(i => i.group === group),
   })).filter(g => g.items.length > 0)
 
-  const canEdit = viewerRole === 'Global Admin' || viewerRole === 'IT Admin'
+  const canEdit = hasPermission(viewerRole, permissions, 'settings.navigationEdit')
 
   return (
     <SectionWrap
@@ -2519,7 +2573,7 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
               {items.map(item => {
                 const Icon = item.icon
                 const alwaysOn = isAlwaysVisible(item.id)
-                const roleBlocked = !canAccess(viewerRole, item.title)
+                const roleBlocked = !canAccess(viewerRole, permissions, item.title)
                 const isOn = !roleBlocked && (alwaysOn || prefs[item.id] !== false)
                 const canToggle = canEdit && !alwaysOn && !roleBlocked
 
@@ -2576,9 +2630,10 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
                         checked={isOn}
                         onChange={v => {
                           setVisible(item.id, v)
-                          showToast(
-                            `${item.title} ${v ? 'shown in' : 'hidden from'} sidebar`,
+                          notify(
                             v ? 'success' : 'info',
+                            'Navigation updated',
+                            `${item.title} ${v ? 'shown in' : 'hidden from'} sidebar`,
                           )
                         }}
                         disabled={!canToggle}
@@ -2592,12 +2647,12 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
         ))}
       </div>
 
-      {/* Helpdesk note */}
-      {viewerRole === 'Helpdesk' && (
+      {/* Read-only note for any role without edit permission */}
+      {!canEdit && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex gap-3">
           <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700">
-            <span className="font-semibold">Helpdesk role:</span> Navigation visibility is read-only for your role. Contact an IT Admin or Global Admin to adjust sidebar menu items.
+            <span className="font-semibold">{viewerRole} role:</span> Navigation visibility is read-only for your role. Contact an IT Admin or Global Admin to adjust sidebar menu items.
           </p>
         </div>
       )}
@@ -2607,14 +2662,14 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function SettingsPage({ viewerRole = 'Global Admin' }: { viewerRole?: UserToolRole }) {
+export function SettingsPage({ viewerRole = 'Global Admin', userEmail }: { viewerRole?: UserToolRole; userEmail?: string }) {
   const [active, setActive] = useState<SectionKey>('general')
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     general:       <GeneralSection />,
     navigation:    <NavigationSection viewerRole={viewerRole} />,
     integrations:  <IntegrationsSection />,
-    roles:         <RolesSection />,
+    roles:         <RolesSection viewerRole={viewerRole} userEmail={userEmail} />,
     compliance:    <ComplianceSection />,
     automation:    <AutomationSection />,
     security:      <SecuritySection />,

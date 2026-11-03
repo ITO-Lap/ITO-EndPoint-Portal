@@ -122,7 +122,7 @@ function mapGraphDevice(d: GraphDevice): Device {
     platform,
     osVersion:        d.osVersion,
     managementSource: 'Microsoft Intune',
-    lastCheckIn:      new Date(d.lastSyncDateTime).toLocaleString(),
+    lastCheckIn:      new Date(d.lastSyncDateTime).toLocaleString('en-US'),
     complianceState:  compliance,
     encryptionStatus: d.isEncrypted
       ? (platform === 'macOS' ? 'FileVault On' : 'BitLocker On')
@@ -132,7 +132,7 @@ function mapGraphDevice(d: GraphDevice): Device {
     severity:      compliance === 'Non-Compliant' ? 'High' : compliance === 'Warning' ? 'Medium' : 'Low',
     confidence:    '85%',
     firstDetected: 'N/A',
-    lastDetected:  new Date(d.lastSyncDateTime).toLocaleString(),
+    lastDetected:  new Date(d.lastSyncDateTime).toLocaleString('en-US'),
     issueSource:   'Microsoft Intune',
 
     // Hardware
@@ -160,7 +160,7 @@ function mapGraphDevice(d: GraphDevice): Device {
     ...(d.osBuildNumber ? { osBuildNumber: d.osBuildNumber } : {}),
 
     // Compliance
-    lastComplianceCheck: new Date(d.lastSyncDateTime).toLocaleString(),
+    lastComplianceCheck: new Date(d.lastSyncDateTime).toLocaleString('en-US'),
     appliedPolicies: [],
   }
 }
@@ -432,7 +432,7 @@ export async function getIntuneUserSummaries(cfg?: RuntimeIntuneConfig): Promise
         deviceName:       d.deviceName,
         platform,
         complianceState:  COMPLIANCE_MAP[d.complianceState] ?? 'Warning' as 'Compliant' | 'Warning' | 'Non-Compliant',
-        lastCheckIn:      new Date(d.lastSyncDateTime).toLocaleString(),
+        lastCheckIn:      new Date(d.lastSyncDateTime).toLocaleString('en-US'),
         encryptionStatus: d.isEncrypted
           ? (platform === 'macOS' ? 'FileVault On' : 'BitLocker On')
           : (platform === 'macOS' ? 'FileVault Off' : 'BitLocker Off'),
@@ -578,7 +578,7 @@ export async function getIntuneSelfServiceAppDevices(appId: string, cfg?: Runtim
   return perVersion.flat().map(({ version, dev }) => ({
     deviceId: dev.id, deviceName: dev.deviceName ?? 'Unknown', version,
     status: version === 'Unknown' ? 'Unknown' : compareVersions(version, known.latestVersion) < 0 ? 'Update Available' : 'Installed',
-    lastSeen: dev.lastSyncDateTime ? new Date(dev.lastSyncDateTime).toLocaleString() : 'Unknown',
+    lastSeen: dev.lastSyncDateTime ? new Date(dev.lastSyncDateTime).toLocaleString('en-US') : 'Unknown',
     errorDetails: null,
   }))
 }

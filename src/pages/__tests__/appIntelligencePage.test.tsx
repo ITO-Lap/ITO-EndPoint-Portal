@@ -14,6 +14,14 @@ import { registerPackager } from '../../lib/packagingHandoff'
 import apiSource from '../../api/appIntel.ts?raw'
 import drawerSource from '../../components/appIntel/AppDetailDrawer.tsx?raw'
 import pageSource from '../AppIntelligencePage.tsx?raw'
+import type { ComponentProps } from 'react'
+import { PermissionsProvider } from '../../context/PermissionsContext'
+
+// Every test here renders as IT Admin, which has appIntel.write in production (see
+// server/src/services/rolePermissions.ts) — this fixture mirrors that for the write-gated UI.
+function AppIntel(props: ComponentProps<typeof AppIntelligencePage>) {
+  return <PermissionsProvider permissions={{ 'appIntel.write': true }}><AppIntelligencePage {...props} /></PermissionsProvider>
+}
 
 const api = vi.mocked(appIntelApi)
 const SYNCED = '2026-10-12T10:00:00.000Z'
@@ -79,7 +87,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 const lastList = () => api.list.mock.calls.at(-1)![0]
-const renderPage = async () => { render(<AppIntelligencePage viewerRole="IT Admin" />); await screen.findByText('Notepad++') }
+const renderPage = async () => { render(<AppIntel viewerRole="IT Admin" />); await screen.findByText('Notepad++') }
 
 describe('summary cards, platform and table', () => {
   it('shows the four summary cards with live counts', async () => {
@@ -87,7 +95,7 @@ describe('summary cards, platform and table', () => {
     expect(screen.getByRole('button', { name: /Apps discovered: 120/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Update available: 4/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Package required: 3/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Review required: 7/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Packaged — ready to deploy: 1/ })).toBeInTheDocument()
     expect(screen.getByText('Plus 2 needing a repackage')).toBeInTheDocument()
   })
 
@@ -135,8 +143,8 @@ describe('summary cards, platform and table', () => {
     await renderPage()
     await userEvent.click(screen.getByRole('checkbox', { name: 'Only apps with an update available' }))
     await waitFor(() => expect(lastList().updateAvailable).toBe('1'))
-    await userEvent.click(screen.getByRole('button', { name: /Review required: 7/ }))
-    await waitFor(() => expect(lastList()).toMatchObject({ status: 'Review required', updateAvailable: '' }))
+    await userEvent.click(screen.getByRole('button', { name: /Packaged — ready to deploy: 1/ }))
+    await waitFor(() => expect(lastList()).toMatchObject({ status: 'Update available — existing package', updateAvailable: '' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Only apps with an update available' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
     await waitFor(() => expect(lastList().updateAvailable).toBe(''))
@@ -163,8 +171,8 @@ describe('summary cards, platform and table', () => {
 
   it('a summary card filters the table by that status', async () => {
     await renderPage()
-    await userEvent.click(screen.getByRole('button', { name: /Review required: 7/ }))
-    await waitFor(() => expect(lastList()).toMatchObject({ status: 'Review required', page: 1 }))
+    await userEvent.click(screen.getByRole('button', { name: /Packaged — ready to deploy: 1/ }))
+    await waitFor(() => expect(lastList()).toMatchObject({ status: 'Update available — existing package', page: 1 }))
     await userEvent.click(screen.getByRole('button', { name: 'Show 2 app(s) that need a repackage' }))
     await waitFor(() => expect(lastList().status).toBe('Repackage required'))
   })
@@ -239,7 +247,7 @@ describe('filters, search, sort, paging', () => {
 
   it('shows the empty-filter state', async () => {
     api.list.mockResolvedValue(list([]))
-    render(<AppIntelligencePage viewerRole="IT Admin" />)
+    render(<AppIntel viewerRole="IT Admin" />)
     expect(await screen.findByText('No apps match these filters.')).toBeInTheDocument()
   })
 })
@@ -255,7 +263,7 @@ describe('sync, errors and capabilities', () => {
   it('explains an in-progress first sync and a never-synced state (no sample rows)', async () => {
     const syncing = okSync({ state: 'syncing', syncedAt: null })
     api.list.mockResolvedValue(list([], { state: syncing })); api.status.mockResolvedValue({ ...syncing, capabilities: caps }); api.summary.mockResolvedValue({ state: syncing, summary: null })
-    render(<AppIntelligencePage viewerRole="IT Admin" />)
+    render(<AppIntel viewerRole="IT Admin" />)
     expect(await screen.findByText(/First sync in progress/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sync now' })).toBeDisabled()
   })
@@ -263,14 +271,14 @@ describe('sync, errors and capabilities', () => {
   it('shows no data and a prompt when nothing has synced yet', async () => {
     const idle = okSync({ state: 'idle', syncedAt: null })
     api.list.mockResolvedValue(list([], { state: idle })); api.status.mockResolvedValue({ ...idle, capabilities: caps }); api.summary.mockResolvedValue({ state: idle, summary: null })
-    render(<AppIntelligencePage viewerRole="IT Admin" />)
+    render(<AppIntel viewerRole="IT Admin" />)
     expect(await screen.findByText(/No inventory has been synced yet/)).toBeInTheDocument()
   })
 
   it('a failed sync is reported and never replaced with data', async () => {
     const failed = okSync({ state: 'error', syncedAt: null, lastError: 'All inventory providers failed: Graph 503' })
     api.list.mockResolvedValue(list([], { state: failed })); api.status.mockResolvedValue({ ...failed, capabilities: caps }); api.summary.mockResolvedValue({ state: failed, summary: null })
-    render(<AppIntelligencePage viewerRole="IT Admin" />)
+    render(<AppIntel viewerRole="IT Admin" />)
     expect((await screen.findByText(/The last sync failed:/)).closest('p')).toHaveTextContent('Graph 503')
     expect(screen.getByText(/nothing falls back to sample data/)).toBeInTheDocument()
   })
@@ -284,7 +292,7 @@ describe('sync, errors and capabilities', () => {
 
   it('a request failure shows Retry', async () => {
     api.list.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(list())
-    render(<AppIntelligencePage viewerRole="IT Admin" />)
+    render(<AppIntel viewerRole="IT Admin" />)
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('network down')
     await userEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
@@ -404,7 +412,7 @@ describe('read-only and no credential exposure', () => {
     expect(apiSource).toMatch(/method: 'GET' \| 'POST'/)
   })
   it('embedded mode drops the page title but keeps sync controls and the table', async () => {
-    render(<AppIntelligencePage viewerRole="IT Admin" embedded />)
+    render(<AppIntel viewerRole="IT Admin" embedded />)
     await screen.findByText('Notepad++')
     expect(screen.queryByRole('heading', { name: 'App Intelligence' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Sync now/ })).toBeInTheDocument()

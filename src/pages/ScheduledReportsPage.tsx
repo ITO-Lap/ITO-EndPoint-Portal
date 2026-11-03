@@ -5,6 +5,7 @@ import type { ScheduledReport, CreateScheduleInput } from '../api/intelligence'
 import { setNotificationScheduleActor } from '../api/notificationSchedule'
 import { canEditSlackSchedules } from '../lib/permissions'
 import { SlackScheduleSection } from '../components/notifications/SlackScheduleSection'
+import { usePermissions } from '../context/PermissionsContext'
 
 const REPORT_TYPES = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices']
 const FORMATS      = ['pdf', 'excel', 'csv', 'pptx']
@@ -20,6 +21,7 @@ const CRON_PRESETS = [
 ]
 
 export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', userEmail }: { onBack: () => void; viewerRole?: string; userEmail?: string }) {
+  const permissions = usePermissions()
   useEffect(() => { setNotificationScheduleActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
 
   const [schedules, setSchedules] = useState<ScheduledReport[]>([])
@@ -147,7 +149,7 @@ export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', user
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Report Type *</label>
               <select value={form.report_type} onChange={e => setForm(p => ({ ...p, report_type: e.target.value }))} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:outline-none">
-                {REPORT_TYPES.map(t => <option key={t} value={t}>{t === 'app-updates' ? 'verified app updates' : t === 'fleet-digest' ? 'fleet health digest (Slack only)' : t === 'entra-duplicate-devices' ? 'duplicate Entra device objects (Slack only)' : t.replace('-', ' ')}</option>)}
+                {REPORT_TYPES.map(t => <option key={t} value={t}>{t === 'app-updates' ? 'Managed App Report' : t === 'fleet-digest' ? 'fleet health digest (Slack only)' : t === 'entra-duplicate-devices' ? 'duplicate Entra device objects (Slack only)' : t.replace('-', ' ')}</option>)}
               </select>
             </div>
             <div>
@@ -234,7 +236,7 @@ export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', user
                     <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700 capitalize">{s.format.toUpperCase()}</span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    {s.report_type} · <code className="font-mono text-slate-600">{s.schedule_cron}</code>
+                    {s.report_type === 'app-updates' ? 'Managed App Report' : s.report_type} · <code className="font-mono text-slate-600">{s.schedule_cron}</code>
                     {s.recipients?.length > 0 && ` · ${s.recipients.length} recipient${s.recipients.length !== 1 ? 's' : ''}`}
                     {s.filters?.slackChannelId && <> · <span className="inline-flex items-center gap-1 text-[#4A154B]"><MessageSquare className="h-3 w-3" />Slack</span></>}
                   </p>
@@ -258,7 +260,7 @@ export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', user
               </div>
               {!!s.filters?.slackChannelId && (
                 <div className="mt-3 border-t border-slate-100 pt-3">
-                  <SlackScheduleSection module="scheduled_report" sourceId={s.id} canEdit={canEditSlackSchedules(viewerRole)} />
+                  <SlackScheduleSection module="scheduled_report" sourceId={s.id} canEdit={canEditSlackSchedules(viewerRole, permissions)} />
                 </div>
               )}
             </div>

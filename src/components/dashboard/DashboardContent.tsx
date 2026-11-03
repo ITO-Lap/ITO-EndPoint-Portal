@@ -23,6 +23,7 @@ import { SecurityWatchRow } from './SecurityWatchRow'
 import { OperationalQueueTable } from './OperationalQueueTable'
 import { setNotificationScheduleActor } from '../../api/notificationSchedule'
 import { canEditSlackSchedules } from '../../lib/permissions'
+import { usePermissions } from '../../context/PermissionsContext'
 
 function NoDeviceCard() {
   return (
@@ -70,6 +71,7 @@ export function DashboardContent({
   userEmail,
 }: DashboardContentProps) {
   const { notify } = useToast()
+  const permissions = usePermissions()
 
   useEffect(() => { setNotificationScheduleActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
   const [syncLoading, setSyncLoading] = useState(false)
@@ -161,9 +163,9 @@ export function DashboardContent({
         <ActionCenter onNavigate={onNavigate} />
 
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-3 w-full">
-          <QuickSlackSchedules canEdit={canEditSlackSchedules(viewerRole)} onViewAll={() => onNavigate?.('Scheduled Reports')} />
+          <QuickSlackSchedules canEdit={canEditSlackSchedules(viewerRole, permissions)} onViewAll={() => onNavigate?.('Scheduled Reports')} />
           <PatchPriorityPanel onViewAll={() => onNavigate?.('Patch Operations')} />
-          <ApplicationUpdatesPanel onViewAll={() => onNavigate?.('App Guardian')} />
+          <ApplicationUpdatesPanel onViewAll={() => onNavigate?.('ManageEngine App Inventory')} />
         </div>
 
         <SecurityWatchRow onNavigate={onNavigate} />

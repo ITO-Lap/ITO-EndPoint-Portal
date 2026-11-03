@@ -197,7 +197,7 @@ export function KpiModal({
     rows = [...rows].sort((a, b) => {
       const col = config.columns.find(c => c.key === sortKey)
       const av  = col?.render ? col.render(a) : String((a as unknown as Record<string, unknown>)[sortKey] ?? '')
-      const bv  = col?.render ? col.render(b) : String((b as Record<string, unknown>)[sortKey] ?? '')
+      const bv  = col?.render ? col.render(b) : String((b as unknown as Record<string, unknown>)[sortKey] ?? '')
       const cmp = av.localeCompare(bv, undefined, { numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })

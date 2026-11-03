@@ -38,6 +38,7 @@ import type { StatCardData, UserToolRole } from './types'
 import { canAccess } from './lib/permissions'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import { CopilotContextProvider } from './context/CopilotContextProvider'
+import { PermissionsProvider, usePermissions } from './context/PermissionsContext'
 
 function OfflineBanner({ onRetry }: { onRetry: () => void }) {
   return (
@@ -108,6 +109,7 @@ const PAGE_META: Record<string, { description: string }> = {
 }
 
 function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerRole: string; displayName?: string; userEmail?: string; onSignOut?: () => void }) {
+  const permissions = usePermissions()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   // Always open on the Dashboard (on page load and after sign-in), not on the last page visited.
   const [activePage, setActivePage] = useState('Dashboard')
@@ -256,7 +258,7 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
             />
             <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
               <div className="mx-auto w-full max-w-[1600px]">
-                {!canAccess(viewerRole as UserToolRole, activePage) ? (
+                {!canAccess(viewerRole as UserToolRole, permissions, activePage) ? (
                   <AccessDenied page={activePage} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Dashboard' ? (
                   <DashboardContent
@@ -287,17 +289,17 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                     }}
                   />
                 ) : activePage === 'ManageEngine App Inventory' ? (
-                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} onNavigate={setActivePage} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
+                  <ManageEngineAppInventoryPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
+                ) : activePage === 'App Guardian' ? (
+                  <AppGuardianPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Stale Devices' ? (
                   <StaleDevicesPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
-                ) : activePage === 'App Guardian' ? (
-                  <AppGuardianPage onBack={() => setActivePage('Dashboard')} onNavigate={setActivePage} />
                 ) : activePage === 'Mac Fleet Reports' ? (
                   <MacFleetReportsPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Entra Intelligence' ? (
                   <EntraIntelligenceDashboard />
                 ) : activePage === 'Settings' ? (
-                  <SettingsPage viewerRole={viewerRole as import('./types').UserToolRole} />
+                  <SettingsPage viewerRole={viewerRole as import('./types').UserToolRole} userEmail={userEmail} />
                 ) : activePage === 'Documentation' ? (
                   <DocsPage />
                 ) : activePage === 'Reports & Analytics' ? (
@@ -355,7 +357,11 @@ function App() {
     <ToastProvider>
       <NavVisibilityProvider>
         <AuthGate>
-          {({ user, signOut }) => <AppContent viewerRole={user.role} displayName={user.displayName} userEmail={user.email} onSignOut={signOut} />}
+          {({ user, signOut }) => (
+            <PermissionsProvider permissions={user.permissions}>
+              <AppContent viewerRole={user.role} displayName={user.displayName} userEmail={user.email} onSignOut={signOut} />
+            </PermissionsProvider>
+          )}
         </AuthGate>
       </NavVisibilityProvider>
     </ToastProvider>

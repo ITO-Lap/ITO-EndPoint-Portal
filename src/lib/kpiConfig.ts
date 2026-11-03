@@ -1,7 +1,7 @@
 /**
  * KPI Configuration Engine
  *
- * Defines all 18 KPI cards for the Mac Fleet Reports dashboard.
+ * Defines the KPI cards for the Mac Fleet Reports dashboard.
  * Each KPI has:
  *   - id, title, description, group
  *   - filterFn: which devices belong to this KPI
@@ -22,6 +22,9 @@ export type KpiId =
   | 'compliance-score'
   | 'fleet-risk-score'
   | 'device-security-posture'
+  | 'filevault-coverage'
+  | 'passcode-missing'
+  | 'new-enrollments-month'
   // Patch Health (4)
   | 'fully-patched'
   | 'missing-critical-patches'
@@ -31,12 +34,10 @@ export type KpiId =
   | 'active-devices'
   | 'stale-devices'
   | 'inactive-devices'
-  | 'eol-devices'
-  | 'near-eol-devices'
   // OS Health (4)
-  | 'on-current-version'
-  | 'one-version-behind'
-  | 'two-plus-versions-behind'
+  | 'macos-current'
+  | 'macos-outdated'
+  | 'macos-unsupported'
   | 'latest-macos-version'
 
 export type KpiGroup =
@@ -62,8 +63,12 @@ export interface KpiConfig {
   isInfoCard?: boolean
   /** Short qualifier shown under the card value (e.g. to mark a project-calculated metric). */
   caption?: string
+  /** Omit the card from the dashboard (rather than show N/A) when its data source is not reporting. */
+  hideWhenUnavailable?: boolean
   unavailableReason?: string
   getUnavailableReason?: (devices: ApiDevice[]) => string | undefined
+  /** Per-period figures shown on the card instead of the single headline value (empty = fall back to the value). */
+  getBreakdown?: (devices: ApiDevice[]) => { label: string; count: number }[]
   getCountSize?: (devices: ApiDevice[]) => number
   getPopulationSize?: (devices: ApiDevice[]) => number
   filterFn: (devices: ApiDevice[], opts?: KpiFilterOpts) => ApiDevice[]
@@ -124,6 +129,40 @@ function complianceUnavailableReason(devices: ApiDevice[]): string | undefined {
     ? undefined
     : 'No devices with native compliance data are in this fleet. ManageEngine Endpoint Central does not expose an overall device-compliance verdict through the documented API.'
 }
+
+// ── Security / lifecycle helpers ──────────────────────────────────────────────
+
+type FileVaultState = 'On' | 'Off' | 'Pending' | 'Unknown'
+function fileVaultState(d: ApiDevice): FileVaultState {
+  const status = d.encryptionStatus?.trim().toLowerCase() ?? ''
+  if (!status || /^(—|unknown|not reported|not applicable|n\/a|none)$/.test(status)) return 'Unknown'
+  if (/\bpending\b/.test(status)) return 'Pending'
+  if (/\b(not encrypted|off|disabled|false)\b/.test(status)) return 'Off'
+  if (/\b(encrypted|enabled|on|true|yes)\b/.test(status)) return 'On'
+  return 'Unknown'
+}
+const fileVaultAssessed = (d: ApiDevice): boolean => fileVaultState(d) !== 'Unknown'
+const passcodeAssessed  = (d: ApiDevice): boolean => d.passcodeStatus === 'Present' || d.passcodeStatus === 'Missing'
+
+/** Oldest macOS major still treated as current — keep in step with CURRENT_MACOS_MAJOR in MacDevicesPage. */
+const CURRENT_MACOS_MAJOR = 26
+/** Majors below this no longer receive Apple security updates. */
+const OLDEST_SUPPORTED_MACOS_MAJOR = 14
+const macMajor = (d: ApiDevice): number => (hasReportedOsVersion(d) ? parseInt(d.osVersion.split('.')[0]!, 10) : NaN)
+const macosCurrent     = (d: ApiDevice): boolean => macMajor(d) >= CURRENT_MACOS_MAJOR
+const macosOutdated    = (d: ApiDevice): boolean => macMajor(d) >= OLDEST_SUPPORTED_MACOS_MAJOR && macMajor(d) < CURRENT_MACOS_MAJOR
+const macosUnsupported = (d: ApiDevice): boolean => macMajor(d) < OLDEST_SUPPORTED_MACOS_MAJOR
+
+const enrolledAt = (d: ApiDevice): number => Date.parse(d.enrollmentDate ?? '')
+const hasEnrollmentDate = (d: ApiDevice): boolean => Number.isFinite(enrolledAt(d))
+/** UTC calendar month `offset` months back from now (0 = current). */
+const utcMonth = (offset: number): Date => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - offset, 1)) }
+const enrolledInMonth = (d: ApiDevice, offset: number): boolean => {
+  if (!hasEnrollmentDate(d)) return false
+  const e = new Date(enrolledAt(d)), m = utcMonth(offset)
+  return e.getUTCFullYear() === m.getUTCFullYear() && e.getUTCMonth() === m.getUTCMonth()
+}
+const monthLabel = (offset: number): string => utcMonth(offset).toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 // ── Compliance / Health Helpers ───────────────────────────────────────────────
 
@@ -261,6 +300,26 @@ const POSTURE_COLS: KpiColumn[] = [
   { key: 'encryptionStatus',label: 'FileVault',       visible: false, sortable: true },
 ]
 
+const SECURITY_COLS: KpiColumn[] = [
+  ...BASE_COLS,
+  { key: 'encryptionStatus',label: 'FileVault',       visible: true,  sortable: true },
+  { key: 'passcodeStatus',  label: 'Passcode',        visible: true,  sortable: true },
+  { key: 'osVersion',       label: 'macOS Version',   visible: true,  sortable: true },
+  { key: 'lastCheckIn',     label: 'Last Check-In',   visible: true,  sortable: true,
+    render: d => fmtDaysAgo(d.lastCheckIn) },
+  { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
+]
+
+const ENROLLMENT_COLS: KpiColumn[] = [
+  ...BASE_COLS,
+  { key: 'enrollmentDate',  label: 'Enrolled On',     visible: true,  sortable: true,
+    render: d => (hasEnrollmentDate(d) ? new Date(enrolledAt(d)).toLocaleDateString() : 'Unknown') },
+  { key: 'osVersion',       label: 'macOS Version',   visible: true,  sortable: true },
+  { key: 'lastCheckIn',     label: 'Last Check-In',   visible: true,  sortable: true,
+    render: d => fmtDaysAgo(d.lastCheckIn) },
+  { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
+]
+
 const FLEET_COLS: KpiColumn[] = [
   ...BASE_COLS,
   { key: 'osVersion',       label: 'macOS Version',   visible: true,  sortable: true },
@@ -277,7 +336,7 @@ const FLEET_COLS: KpiColumn[] = [
   { key: 'action',          label: 'Recommended Action', visible: true, sortable: false },
 ]
 
-// ── The 18 KPI Configurations ─────────────────────────────────────────────────
+// ── KPI Configurations ─────────────────────────────────────────────────
 
 export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
@@ -297,6 +356,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
   'healthy-devices': {
     id: 'healthy-devices', group: 'Fleet Overview',
+    hideWhenUnavailable: true,
     title: 'Healthy Devices',
     description: 'Intune-managed devices with native Compliant status and a check-in within the last 7 days.',
     accentColor: '#10B981',
@@ -312,6 +372,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
   'requiring-action': {
     id: 'requiring-action', group: 'Fleet Overview',
+    hideWhenUnavailable: true,
     title: 'Requiring Action',
     description: 'Intune-managed devices with a native compliance status other than Compliant.',
     accentColor: '#EF4444',
@@ -327,6 +388,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
 
   'compliance-score': {
     id: 'compliance-score', group: 'Fleet Overview',
+    hideWhenUnavailable: true,
     title: 'Compliance Score',
     description: 'Native compliance rate from Intune-managed devices only. ManageEngine overall compliance is not available through its documented API.',
     accentColor: '#7C5CFC',
@@ -386,6 +448,57 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
       return weakest ? `Improve: ${weakest.label} — ${weakest.detail}` : 'No action — all assessed signals are healthy'
     },
     getRiskLevel: d => (d.posture?.band === 'At risk' ? 'High' : d.posture?.band === 'Fair' ? 'Medium' : 'Low'),
+  },
+
+  'filevault-coverage': {
+    id: 'filevault-coverage', group: 'Fleet Overview',
+    title: 'FileVault Coverage',
+    description: 'Share of Macs reporting FileVault disk encryption as On. The device list shows Macs where it is Off or Pending. Macs that do not report an encryption status are excluded.',
+    accentColor: '#0EA5E9',
+    getUnavailableReason: devices => devices.some(fileVaultAssessed) ? undefined : 'No Mac in this fleet reports a FileVault encryption status.',
+    filterFn: devices => devices.filter(d => fileVaultAssessed(d) && fileVaultState(d) !== 'On'),
+    getCountSize: devices => devices.filter(d => fileVaultState(d) === 'On').length,
+    getPopulationSize: devices => devices.filter(fileVaultAssessed).length,
+    getValue: devices => {
+      const assessed = devices.filter(fileVaultAssessed)
+      return assessed.length ? `${Math.round((assessed.filter(d => fileVaultState(d) === 'On').length / assessed.length) * 100)}%` : 'N/A'
+    },
+    columns: SECURITY_COLS,
+    getRecommendedAction: d => (fileVaultState(d) === 'Pending' ? 'Ask the user to finish FileVault enablement (restart / log in)' : 'Push a FileVault enforcement profile and escrow the recovery key'),
+    getRiskLevel: d => (fileVaultState(d) === 'Off' ? 'Critical' : 'High'),
+  },
+
+  'passcode-missing': {
+    id: 'passcode-missing', group: 'Fleet Overview',
+    title: 'Macs Without Passcode',
+    description: 'Macs where the MDM reports no device passcode set. Macs that do not report passcode status are excluded.',
+    accentColor: '#EF4444',
+    getUnavailableReason: devices => devices.some(passcodeAssessed) ? undefined : 'No Mac in this fleet reports passcode status.',
+    filterFn: devices => devices.filter(d => d.passcodeStatus === 'Missing'),
+    getCountSize: devices => devices.filter(d => d.passcodeStatus === 'Missing').length,
+    getPopulationSize: devices => devices.filter(passcodeAssessed).length,
+    getValue: devices => (devices.some(passcodeAssessed) ? devices.filter(d => d.passcodeStatus === 'Missing').length : 'N/A'),
+    columns: SECURITY_COLS,
+    getRecommendedAction: () => 'Deploy a passcode requirement profile',
+    getRiskLevel: () => 'High',
+  },
+
+  'new-enrollments-month': {
+    id: 'new-enrollments-month', group: 'Fleet Overview',
+    title: 'New Enrollments',
+    description: 'Macs enrolled in the MDM during the current and previous calendar month (UTC). The card value is the current month. Macs without a reported enrollment date are excluded.',
+    accentColor: '#6366F1',
+    isInfoCard: true,
+    getUnavailableReason: devices => devices.some(hasEnrollmentDate) ? undefined : 'The MDM did not return enrollment dates for these Macs.',
+    filterFn: devices => devices.filter(d => enrolledInMonth(d, 0) || enrolledInMonth(d, 1)),
+    getValue: devices => (devices.some(hasEnrollmentDate) ? devices.filter(d => enrolledInMonth(d, 0)).length : 'N/A'),
+    getBreakdown: devices => (devices.some(hasEnrollmentDate)
+      ? [{ label: `This month · ${monthLabel(0)}`, count: devices.filter(d => enrolledInMonth(d, 0)).length },
+         { label: `Last month · ${monthLabel(1)}`, count: devices.filter(d => enrolledInMonth(d, 1)).length }]
+      : []),
+    columns: ENROLLMENT_COLS,
+    getRecommendedAction: () => 'Confirm the Mac received baseline profiles and security agents',
+    getRiskLevel: () => 'Low',
   },
 
   // ── Patch Health ─────────────────────────────────────────────────────────────
@@ -509,81 +622,48 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     getRiskLevel: () => 'High',
   },
 
-  'eol-devices': {
-    id: 'eol-devices', group: 'Device Lifecycle',
-    title: 'EOL Devices',
-    description: 'Not available: Endpoint Central device inventory does not state Apple support or hardware upgrade eligibility.',
-    accentColor: '#DC2626',
-    unavailableReason: 'The connected API returns the installed macOS version, but not Apple lifecycle support or the hardware model compatibility decision needed to classify a device as EOL.',
-    filterFn: () => [],
-    getValue: () => 'N/A',
-    columns: [
-      ...BASE_COLS,
-      { key: 'osVersion',      label: 'macOS Version',   visible: true, sortable: true },
-      { key: 'lastCheckIn',    label: 'Last Check-In',   visible: true, sortable: true, render: d => fmtDaysAgo(d.lastCheckIn) },
-      { key: 'encryptionStatus',label: 'Encryption Status',visible: true, sortable: true },
-      { key: 'action',         label: 'Recommended Action', visible: true, sortable: false },
-    ],
-    getRecommendedAction: () => 'Not available from connected API',
-    getRiskLevel: () => 'Critical',
-  },
-
-  'near-eol-devices': {
-    id: 'near-eol-devices', group: 'Device Lifecycle',
-    title: 'Near EOL Devices',
-    description: 'Not available: Endpoint Central does not return Apple lifecycle or replacement dates.',
-    accentColor: '#F97316',
-    unavailableReason: 'The API does not expose device-specific Apple end-of-support dates, so no devices can be safely classified as near EOL.',
-    filterFn: () => [],
-    getValue: () => 'N/A',
-    columns: [
-      ...BASE_COLS,
-      { key: 'osVersion',      label: 'macOS Version',   visible: true, sortable: true },
-      { key: 'lastCheckIn',    label: 'Last Check-In',   visible: true, sortable: true, render: d => fmtDaysAgo(d.lastCheckIn) },
-      { key: 'encryptionStatus',label: 'Encryption Status',visible: true, sortable: true },
-      { key: 'action',         label: 'Recommended Action', visible: true, sortable: false },
-    ],
-    getRecommendedAction: () => 'Not available from connected API',
-    getRiskLevel: () => 'High',
-  },
-
   // ── OS Health ────────────────────────────────────────────────────────────────
 
-  'on-current-version': {
-    id: 'on-current-version', group: 'OS Health',
-    title: 'Devices with OS Version',
-    description: 'Devices reporting a numeric macOS version in the connected MDM inventory.',
+  'macos-current': {
+    id: 'macos-current', group: 'OS Health',
+    title: `On macOS ${CURRENT_MACOS_MAJOR} or Later`,
+    description: `Macs running macOS ${CURRENT_MACOS_MAJOR} or later — the current release line.`,
     accentColor: '#10B981',
-    filterFn: devices => devices.filter(hasReportedOsVersion),
-    getValue: devices => devices.filter(hasReportedOsVersion).length,
+    filterFn: devices => devices.filter(macosCurrent),
+    getCountSize: devices => devices.filter(macosCurrent).length,
+    getPopulationSize: devices => devices.filter(hasReportedOsVersion).length,
+    getValue: devices => devices.filter(macosCurrent).length,
     columns: OS_COLS,
-    getRecommendedAction: () => 'Maintain current OS — no upgrade needed',
-    getRiskLevel: d => d.severity,
+    getRecommendedAction: () => 'No action required',
+    getRiskLevel: () => 'Low',
   },
 
-  'one-version-behind': {
-    id: 'one-version-behind', group: 'OS Health',
-    title: 'OS Version Not Reported',
-    description: 'Devices whose MDM inventory has no valid numeric macOS version.',
+  'macos-outdated': {
+    id: 'macos-outdated', group: 'OS Health',
+    title: 'Outdated macOS',
+    description: `Macs on macOS ${OLDEST_SUPPORTED_MACOS_MAJOR}–${CURRENT_MACOS_MAJOR - 1}: still supported by Apple but behind the current release.`,
     accentColor: '#F59E0B',
-    filterFn: devices => devices.filter(d => !hasReportedOsVersion(d)),
-    getValue: devices => devices.filter(d => !hasReportedOsVersion(d)).length,
+    filterFn: devices => devices.filter(macosOutdated),
+    getCountSize: devices => devices.filter(macosOutdated).length,
+    getPopulationSize: devices => devices.filter(hasReportedOsVersion).length,
+    getValue: devices => devices.filter(macosOutdated).length,
     columns: OS_COLS,
-    getRecommendedAction: () => 'Refresh device inventory or check the device MDM connection',
+    getRecommendedAction: () => 'Schedule an OS upgrade (check hardware eligibility first)',
     getRiskLevel: () => 'Medium',
   },
 
-  'two-plus-versions-behind': {
-    id: 'two-plus-versions-behind', group: 'OS Health',
-    title: 'Distinct OS Versions',
-    description: 'Number of different macOS version strings reported in the current device inventory.',
-    accentColor: '#EF4444',
-    isInfoCard: true,
-    filterFn: devices => devices.filter(hasReportedOsVersion),
-    getValue: devices => new Set(devices.filter(hasReportedOsVersion).map(d => d.osVersion)).size,
+  'macos-unsupported': {
+    id: 'macos-unsupported', group: 'OS Health',
+    title: 'Unsupported macOS',
+    description: `Macs on macOS earlier than ${OLDEST_SUPPORTED_MACOS_MAJOR}, which no longer receive Apple security updates. Classified by macOS version only; hardware upgrade eligibility is not available from the API.`,
+    accentColor: '#DC2626',
+    filterFn: devices => devices.filter(macosUnsupported),
+    getCountSize: devices => devices.filter(macosUnsupported).length,
+    getPopulationSize: devices => devices.filter(hasReportedOsVersion).length,
+    getValue: devices => devices.filter(macosUnsupported).length,
     columns: OS_COLS,
-    getRecommendedAction: () => 'Compare the reported versions against your approved OS baseline',
-    getRiskLevel: () => 'High',
+    getRecommendedAction: () => 'Upgrade if the hardware allows, otherwise plan replacement',
+    getRiskLevel: () => 'Critical',
   },
 
   'latest-macos-version': {
@@ -619,8 +699,9 @@ export const KPI_GROUPS: KpiGroup[] = [
 
 export const KPI_IDS_BY_GROUP: Record<KpiGroup, KpiId[]> = {
   'Fleet Overview': [
-    'total-devices', 'healthy-devices', 'requiring-action',
-    'compliance-score', 'fleet-risk-score', 'device-security-posture',
+    'total-devices', 'device-security-posture', 'filevault-coverage', 'passcode-missing',
+    'new-enrollments-month', 'fleet-risk-score',
+    'healthy-devices', 'requiring-action', 'compliance-score',
   ],
   'Patch Health': [
     'fully-patched', 'missing-critical-patches',
@@ -628,12 +709,18 @@ export const KPI_IDS_BY_GROUP: Record<KpiGroup, KpiId[]> = {
   ],
   'Device Lifecycle': [
     'active-devices', 'stale-devices', 'inactive-devices',
-    'eol-devices', 'near-eol-devices',
   ],
   'OS Health': [
-    'on-current-version', 'one-version-behind',
-    'two-plus-versions-behind', 'latest-macos-version',
+    'macos-current', 'macos-outdated', 'macos-unsupported', 'latest-macos-version',
   ],
+}
+
+/** KPI ids to render for a fleet — cards flagged hideWhenUnavailable drop out when their data source is silent. */
+export function visibleKpiIds(group: KpiGroup, devices: ApiDevice[]): KpiId[] {
+  return KPI_IDS_BY_GROUP[group].filter(id => {
+    const c = KPI_CONFIGS[id]
+    return !(c.hideWhenUnavailable && (c.getUnavailableReason?.(devices) ?? c.unavailableReason))
+  })
 }
 
 export { daysSinceCheckIn, fmtDaysAgo, fmtLifecycleStatus, isHealthy, isActive }

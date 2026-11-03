@@ -8,6 +8,7 @@ import type { IntegrationStatusItem } from '../../api'
 import type { ConnectedSource, BadgeVariant, UserToolRole } from '../../types'
 import { canAccess } from '../../lib/permissions'
 import { useNavVisibility } from '../../context/NavVisibilityContext'
+import { usePermissions } from '../../context/PermissionsContext'
 
 interface SidebarProps {
   isOpen?: boolean
@@ -51,7 +52,7 @@ function GroupHeader({ label, collapsed, onToggle, isAutomation }: {
 }
 
 function NavButton({ item, isActive, isAutomation, onClick }: {
-  item: { title: string; icon: React.ElementType; badge?: string }
+  item: { title: string; label?: string; icon: React.ElementType; badge?: string }
   isActive: boolean
   isAutomation: boolean
   onClick: () => void
@@ -92,7 +93,7 @@ function NavButton({ item, isActive, isAutomation, onClick }: {
         <Icon className="h-3.5 w-3.5" />
       </span>
 
-      <span className="flex-1 truncate">{item.title}</span>
+      <span className="flex-1 truncate">{item.label ?? item.title}</span>
 
       {item.badge && (
         <span
@@ -135,7 +136,8 @@ export function Sidebar({
   }
 
   const { hiddenNavIds } = useNavVisibility()
-  const accessible = navItems.filter(i => canAccess(viewerRole, i.title) && !hiddenNavIds.has(i.id))
+  const permissions = usePermissions()
+  const accessible = navItems.filter(i => canAccess(viewerRole, permissions, i.title) && !hiddenNavIds.has(i.id))
   const grouped    = NAV_GROUP_ORDER.map(g => ({
     group: g,
     items: accessible.filter(i => i.group === g),

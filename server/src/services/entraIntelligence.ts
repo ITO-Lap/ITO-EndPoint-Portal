@@ -27,6 +27,11 @@ import { getEntraData }    from './entra.js'
 
 const isConfigured = () => !!getEntraConfig()
 
+// Pure credential check, independent of any Graph call — lets the frontend
+// tell "not configured" apart from "configured but this particular fetch
+// failed" (e.g. a missing permission scope on just one endpoint).
+export const isEntraIntelligenceConfigured = isConfigured
+
 // ── Graph helpers (thin wrappers, token acquired via existing entra.ts) ────────
 
 async function gGet<T>(token: string, path: string): Promise<T> {

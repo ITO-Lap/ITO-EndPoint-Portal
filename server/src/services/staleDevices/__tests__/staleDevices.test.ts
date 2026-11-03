@@ -85,6 +85,11 @@ describe('scope', () => {
     expect(run(rows, [])).toHaveLength(0)
   })
 
+  it('Endpoint Central recognises an iMac even when platform_type is not macOS', () => {
+    const snap = build([], [mac({ device_id: 'im', platform_type: 'iOS', model: 'iMac21,1', serial_number: 'IMAC0001' })])
+    expect(snap.endpointCentral.map(r => r.platform)).toEqual(['macOS'])
+  })
+
   it('Endpoint Central keeps Windows clients and Macs only', () => {
     const snap = build([], [ec(), mac(), mac({ device_id: 'a', platform_type: 'Android', model: 'Pixel' }), mac({ device_id: 'p', platform_type: 'iOS', model: 'iPhone 15' }), mac({ device_id: 'u', platform_type: undefined, model: undefined })])
     expect(snap.endpointCentral.map(r => r.platform).sort()).toEqual(['Windows', 'macOS'])

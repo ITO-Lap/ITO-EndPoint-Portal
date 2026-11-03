@@ -274,7 +274,7 @@ export interface ApiDevice {
   deviceName: string
   user: string
   serialNumber: string
-  platform: 'Windows' | 'macOS' | 'Linux'
+  platform: 'Windows' | 'macOS' | 'Linux' | 'Android' | 'iOS'
   osVersion: string
   managementSource: 'Microsoft Intune' | 'ManageEngine'
   lastCheckIn: string
@@ -356,6 +356,21 @@ export interface ManageEngineFleetProfileResultsResponse {
   results: ManageEngineFleetProfileResult[]
   deviceCount: number
   unavailableCount: number
+}
+
+export interface MacAdminAccessRow {
+  serialNumber: string
+  hostname: string
+  loggedOnUser: string
+  isAdmin: boolean
+  reportedAt: string
+}
+
+export interface MacAdminAccessResponse {
+  reportingEnabled: boolean
+  admins: MacAdminAccessRow[]
+  reporting: number
+  stale: number
 }
 
 export interface ApiNotification {
@@ -645,6 +660,7 @@ export type AutomationTriggerType =
   | 'new_enrollment' | 'scheduled' | 'risky_signin' | 'drift_detected'
   | 'encryption_off' | 'script_failure'
   | 'enrollment_failed' | 'sync_failure' | 'app_deploy_failed' | 'cert_expiring' | 'stale_device'
+  | 'agent_missing' | 'agent_stale'
 
 export type AutomationActionType =
   | 'slack_notify' | 'create_jira' | 'execute_runbook'
@@ -660,7 +676,6 @@ export interface AutomationRule {
     type: AutomationTriggerType
     config: Record<string, string | number | boolean>
   }
-  | 'agent_missing' | 'agent_stale'
   conditions: {
     platform: 'Windows' | 'macOS' | 'Linux' | 'all'
     source: 'intune' | 'manageengine' | 'all'
@@ -816,6 +831,9 @@ export const api = {
   fetchManageEngineFleetProfileResults: () =>
     get<ManageEngineFleetProfileResultsResponse>('/api/devices/manageengine/profile-results'),
 
+  fetchMacAdminAccess: () =>
+    get<MacAdminAccessResponse>('/api/mac-admin-access'),
+
   fetchManageEngineAppsInventory: (refresh = false, includeSystem = false) =>
     get<{ windows: ManageEngineAppEntry[]; macos: ManageEngineAppEntry[]; coverage: { devices: number; withInventory: number; failed: number; windows: { devices: number; scanned: number }; macos: { devices: number; scanned: number } }; progress: { status: 'idle' | 'running'; scanned: number; total: number; startedAt: string | null; finishedAt: string | null }; hiddenSystemApps: number }>(`/api/integrations/manageengine/apps?${new URLSearchParams({ ...(refresh ? { refresh: '1' } : {}), ...(includeSystem ? { includeSystem: '1' } : {}) })}`),
   fetchIntuneSelfServiceAppDevices: (appId: string) =>
@@ -907,6 +925,9 @@ export const api = {
 
   fetchEntraOverview: () =>
     get<EntraOverview>('/api/entra/overview'),
+
+  fetchEntraStatus: () =>
+    get<{ configured: boolean }>('/api/entra/status'),
 
   fetchEntraDevices: (params?: { compliance?: string; os?: string; limit?: number }) => {
     const qs = new URLSearchParams()

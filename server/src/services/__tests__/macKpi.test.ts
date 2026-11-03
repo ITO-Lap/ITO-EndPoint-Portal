@@ -66,9 +66,9 @@ describe('Mac Fleet KPI source data', () => {
       makeDevice({ id: 'mac-4', osVersion: 'Unknown' }),
     ]
 
-    expect(KPI_CONFIGS['on-current-version'].getValue(devices)).toBe(3)
-    expect(KPI_CONFIGS['one-version-behind'].getValue(devices)).toBe(1)
-    expect(KPI_CONFIGS['two-plus-versions-behind'].getValue(devices)).toBe(2)
+    expect(KPI_CONFIGS['macos-current'].getValue(devices)).toBe(0)
+    expect(KPI_CONFIGS['macos-outdated'].getValue(devices)).toBe(3)
+    expect(KPI_CONFIGS['macos-unsupported'].getValue(devices)).toBe(0)
     expect(KPI_CONFIGS['latest-macos-version'].getValue(devices)).toBe('15.5')
     expect(KPI_CONFIGS['latest-macos-version'].filterFn(devices).map(device => device.id)).toEqual(['mac-1', 'mac-2'])
     expect(KPI_CONFIGS['latest-macos-version'].title).toBe('Most Common OS Version')

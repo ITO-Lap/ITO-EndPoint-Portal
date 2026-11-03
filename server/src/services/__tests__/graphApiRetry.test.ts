@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
-  graphGetV, graphGetAllV, getGroupDisplayNames, FatalGraphError, TransientGraphError,
+  graphGetV, graphGetAllV, graphGetAllResumable, getGroupDisplayNames, FatalGraphError, TransientGraphError,
   GRAPH, GRAPH_BETA, type TenantCredentials,
 } from '../graphApi.js'
 
@@ -217,5 +217,31 @@ describe('getGroupDisplayNames', () => {
     // 1 token call + 2 chunk calls (15 + 5)
     expect(fetchImpl).toHaveBeenCalledTimes(3)
     vi.unstubAllGlobals()
+  })
+})
+
+describe('graphGetAllResumable', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('keeps the pages already read when throttling exhausts retries, and resumes from the failed page', async () => {
+    const creds = freshCreds()
+    const next = 'https://graph.microsoft.com/v1.0/page2'
+    const throttled = () => new Response('', { status: 429, headers: { 'Retry-After': '0' } })
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: [{ id: '1' }], '@odata.nextLink': next }), { status: 200 }))
+      .mockResolvedValueOnce(throttled()).mockResolvedValueOnce(throttled()) // page 2: first attempt (maxRetries 1) exhausted
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: [{ id: '2' }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchImpl)
+    const progress = { rows: [] as { id: string }[], nextUrl: null as string | null }
+    const opts = { maxRetries: 1, sleepImpl: async () => {} }
+
+    await expect(graphGetAllResumable(creds, GRAPH, '/x', undefined, progress, opts)).rejects.toBeInstanceOf(TransientGraphError)
+    expect(progress.rows.map(r => r.id)).toEqual(['1'])
+    expect(progress.nextUrl).toBe(next)
+
+    const rows = await graphGetAllResumable(creds, GRAPH, '/x', undefined, progress, opts)
+    expect(rows.map(r => r.id)).toEqual(['1', '2'])
+    expect(fetchImpl.mock.calls[4]![0]).toBe(next) // resumed at page 2, page 1 was not read again
   })
 })

@@ -22,6 +22,8 @@ import { SortableHeader } from '../components/ui/SortableHeader'
 import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { IntuneScriptsConfigTab } from './IntuneScriptsConfigPage'
 import { CopyText } from '../components/ui/CopyText'
+import { hasPermission, type PermissionMap } from '../lib/permissions'
+import { usePermissions } from '../context/PermissionsContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,13 +35,13 @@ type Tab = 'devices' | 'compliance' | 'security' | 'reports' | 'entra' | 'entra_
 // Helpdesk. Checked both when building the visible tab list and again
 // before rendering tab content, so a stale `tab` value (e.g. from a prior
 // session as a different role) can't render restricted content either.
-const RESTRICTED_TABS: Partial<Record<Tab, UserToolRole[]>> = {
-  scripts_config: ['Global Admin', 'IT Admin'],
+const RESTRICTED_TABS: Partial<Record<Tab, string>> = {
+  scripts_config: 'intuneScriptsConfig.access',
 }
 
-function canSeeTab(tab: Tab, viewerRole: UserToolRole): boolean {
-  const allowed = RESTRICTED_TABS[tab]
-  return !allowed || allowed.includes(viewerRole)
+function canSeeTab(tab: Tab, viewerRole: UserToolRole, permissions: PermissionMap): boolean {
+  const requiredKey = RESTRICTED_TABS[tab]
+  return !requiredKey || hasPermission(viewerRole, permissions, requiredKey)
 }
 
 // ── KPI Card (static or clickable) ───────────────────────────────────────────
@@ -980,25 +982,26 @@ function EntraIDTab() {
     setLoading(true)
     setLoadError(null)
     Promise.allSettled([
+      api.fetchEntraStatus(),
       api.fetchEntraOverview(),
       api.fetchEntraUsers(),
       api.fetchEntraDevices({ limit: 300 }),
       api.fetchEntraGroups(),
-    ]).then(([ov, us, dv, gr]) => {
-      if (ov.status === 'fulfilled') {
-        const o = ov.value as unknown as EOvr
-        setOverview(o)
-        setIsLive(o.configured === true)
-      }
+    ]).then(([st, ov, us, dv, gr]) => {
+      // Credential presence comes from a dedicated, call-independent check —
+      // so a permission error on one Graph endpoint (overview, users, …)
+      // can't make a genuinely-configured tenant show as "not configured."
+      setIsLive(st.status === 'fulfilled' && st.value.configured === true)
+      if (ov.status === 'fulfilled') setOverview(ov.value as unknown as EOvr)
       if (us.status === 'fulfilled') setUsers((us.value as EUser[]) ?? [])
       if (dv.status === 'fulfilled') setDevices((dv.value as EDev[]) ?? [])
       if (gr.status === 'fulfilled') setGroups((gr.value as EGroup[]) ?? [])
-      const rej = [ov, us, dv, gr].find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
+      const rej = [st, ov, us, dv, gr].find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
       if (rej) setLoadError(rej.reason instanceof Error ? rej.reason.message : 'Some Entra data unavailable')
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [])  
 
   const filteredUsers   = useMemo(() => { const q = uSearch.toLowerCase(); return q ? users.filter(u => u.displayName.toLowerCase().includes(q) || u.upn.toLowerCase().includes(q) || (u.department ?? '').toLowerCase().includes(q)) : users }, [users, uSearch])
   const filteredDevices = useMemo(() => { const q = dSearch.toLowerCase(); return q ? devices.filter(d => d.deviceName.toLowerCase().includes(q) || d.primaryUser.toLowerCase().includes(q)) : devices }, [devices, dSearch])
@@ -1495,8 +1498,9 @@ function EntraGroupsReportTab() {
         </div>
       )}
 
-      {/* Results */}
-      {data && !loading && (
+      {/* Results — hidden while the suggestions dropdown is open so a stale
+          result from the previous search can't show through its glass blur */}
+      {data && !loading && !showSuggestions && (
         <>
           <div className="glass rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap">
             <div>
@@ -1584,8 +1588,8 @@ function EntraGroupsReportTab() {
         </>
       )}
 
-      {/* Idle state */}
-      {!data && !loading && !error && (
+      {/* Idle state — hidden while the suggestions dropdown is open, same reason as Results above */}
+      {!data && !loading && !error && !showSuggestions && (
         <div className="glass rounded-2xl p-10 text-center">
           <FileSpreadsheet className="mx-auto h-8 w-8 text-slate-300 mb-3" />
           <p className="text-sm text-slate-400">Enter a group name above to generate its member export</p>
@@ -1616,6 +1620,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: Props) {
+  const permissions = usePermissions()
   const [tab, setTab]         = useState<Tab>('devices')
   const [devices, setDevices] = useState<ApiDevice[]>([])
   const [loading, setLoading] = useState(true)
@@ -1772,7 +1777,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
 
       {/* Tab bar */}
       <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
-        {TABS.filter(t => canSeeTab(t.id, viewerRole)).map(t => (
+        {TABS.filter(t => canSeeTab(t.id, viewerRole, permissions)).map(t => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
               tab === t.id ? 'is-selected' : 'text-slate-500 hover:text-slate-700'
@@ -1799,7 +1804,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
       {tab === 'reports'    && <ReportsTab    devices={devices} />}
       {tab === 'entra'      && <EntraIDTab />}
       {tab === 'entra_groups' && <EntraGroupsReportTab />}
-      {tab === 'scripts_config' && canSeeTab('scripts_config', viewerRole) && (
+      {tab === 'scripts_config' && canSeeTab('scripts_config', viewerRole, permissions) && (
         <IntuneScriptsConfigTab viewerRole={viewerRole} userEmail={userEmail} />
       )}
 

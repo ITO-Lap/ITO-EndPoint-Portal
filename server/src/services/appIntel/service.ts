@@ -69,7 +69,14 @@ export function createAppIntelService(deps: AppIntelDeps) {
       errors[label] = r.reason instanceof Error ? r.reason.message.slice(0, 300) : 'Request failed'
       return null
     }
-    const detectedRows = val(detected, 'intune-detected-apps')
+    let detectedRows = val(detected, 'intune-detected-apps')
+    if (detectedRows === null && detected.status === 'rejected') {
+      const saved = p.lastGoodDetected?.()
+      if (saved) {
+        detectedRows = saved.rows
+        errors['intune-detected-apps'] = `${errors['intune-detected-apps'] ?? 'Intune read failed'} Showing the last good Intune data from ${saved.savedAt.slice(0, 16).replace('T', ' ')} UTC; it refreshes on the next successful sync.`
+      }
+    }
     const mobileRaw = val(mobile, 'intune-app-catalog')
     const mdmEntries: MdmAppEntry[] | null = val(mdm, 'manageengine-mdm')
     const meCoverage = mdmEntries ? p.manageEngineCoverage?.() ?? null : null

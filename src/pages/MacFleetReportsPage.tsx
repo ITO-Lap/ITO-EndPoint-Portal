@@ -8,8 +8,8 @@ import type { ApiDevice } from '../api'
 import { KpiModal } from '../components/reports/KpiModal'
 import type { KpiId, KpiFilterOpts } from '../lib/kpiConfig'
 import {
-  KPI_CONFIGS, KPI_GROUPS, KPI_IDS_BY_GROUP,
-  isActive, daysSinceCheckIn, attachPatchStatus,
+  KPI_CONFIGS, KPI_GROUPS, visibleKpiIds,
+  daysSinceCheckIn, attachPatchStatus,
 } from '../lib/kpiConfig'
 import { attachPosture } from '../lib/macPostureScore'
 import { generateKpiExcel } from '../lib/kpiExport'
@@ -94,11 +94,26 @@ function KpiCard({ kpiId, devices, opts, onClick, loading }: {
         {/* Title */}
         <p className="text-[0.72rem] font-bold text-slate-700 leading-snug mb-2">{config.title}</p>
 
-        {/* Value */}
-        <p className="text-2xl font-black mono-num leading-none"
-          style={{ color: loading ? '#CBD5E1' : config.accentColor }}>
-          {loading ? '—' : String(kpiValue)}
-        </p>
+        {/* Value — or a per-period breakdown when the card defines one */}
+        {(() => {
+          const breakdown = loading ? [] : config.getBreakdown?.(devices) ?? []
+          return breakdown.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {breakdown.map((b, i) => (
+                <div key={b.label} className="rounded-xl border px-2.5 py-2"
+                  style={{ borderColor: `${config.accentColor}${i === 0 ? '66' : '33'}`, background: `${config.accentColor}${i === 0 ? '14' : '0A'}` }}>
+                  <p className="text-2xl font-black mono-num leading-none" style={{ color: config.accentColor }}>{b.count.toLocaleString()}</p>
+                  <p className="text-[0.58rem] font-semibold text-slate-500 leading-tight mt-1">{b.label}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-2xl font-black mono-num leading-none"
+              style={{ color: loading ? '#CBD5E1' : config.accentColor }}>
+              {loading ? '—' : String(kpiValue)}
+            </p>
+          )
+        })()}
 
         {config.caption && (
           <p className="text-[0.58rem] font-semibold uppercase tracking-wide text-sky-600 mt-1">{config.caption}</p>
@@ -285,9 +300,66 @@ function AiInsightsButton({ devices, opts }: { devices: ApiDevice[]; opts: KpiFi
   )
 }
 
+// ── New Enrollments by Month ──────────────────────────────────────────────────
+
+function EnrollmentsByMonth({ devices, loading }: { devices: ApiDevice[]; loading: boolean }) {
+  const months = useMemo(() => {
+    const now = new Date()
+    return [0, 1].map(offset => {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1))
+      const label = d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+      const count = devices.filter(dev => {
+        const t = Date.parse(dev.enrollmentDate ?? '')
+        if (!Number.isFinite(t)) return false
+        const e = new Date(t)
+        return e.getUTCFullYear() === d.getUTCFullYear() && e.getUTCMonth() === d.getUTCMonth()
+      }).length
+      return { label, count }
+    })
+  }, [devices])
+  const hasDates = devices.some(d => Number.isFinite(Date.parse(d.enrollmentDate ?? '')))
+  const previous = months[1]!
+
+  return (
+    <div className="glass rounded-2xl px-5 py-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-bold text-slate-700">New Enrollments by Month</p>
+        <span className="text-[0.68rem] text-slate-400">Current &amp; previous month</span>
+      </div>
+      {loading ? (
+        <p className="text-xs text-slate-400">Loading…</p>
+      ) : !hasDates ? (
+        <p className="text-xs text-slate-400">ManageEngine did not return enrollment dates for these Macs, so monthly enrollments cannot be calculated.</p>
+      ) : (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-[0.6rem] font-black uppercase tracking-widest text-slate-400">
+              <th className="py-1.5">Month</th><th className="py-1.5 text-right">Devices Enrolled</th><th className="py-1.5 pl-8">Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {months.map((m, i) => {
+              const diff = m.count - previous.count
+              return (
+                <tr key={m.label} className="border-t border-slate-100">
+                  <td className="py-2.5 font-semibold text-slate-700">{m.label}</td>
+                  <td className="py-2.5 text-right text-lg font-black text-blue-500 tabular-nums">{m.count}</td>
+                  <td className={`py-2.5 pl-8 font-semibold ${i === 1 || diff === 0 ? 'text-slate-400' : diff > 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                    {i === 1 ? '—' : diff === 0 ? 'No change' : `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff)} vs ${previous.label}`}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export function MacFleetReportsPage({ onBack }: Props) {
+export function MacFleetReportsPage(_props: Props) {
   const { notify } = useToast()
 
   const [devices,      setDevices]      = useState<ApiDevice[]>([])
@@ -416,7 +488,7 @@ export function MacFleetReportsPage({ onBack }: Props) {
 
       {/* ── KPI Groups ── */}
       {KPI_GROUPS.map(group => {
-        const ids       = KPI_IDS_BY_GROUP[group]
+        const ids       = visibleKpiIds(group, devices)
         const isOpen    = !collapsedGroups.has(group)
         return (
           <div key={group} className="space-y-3">
@@ -444,6 +516,9 @@ export function MacFleetReportsPage({ onBack }: Props) {
           </div>
         )
       })}
+
+      {/* ── New Enrollments by Month ── */}
+      {(loading || devices.length > 0) && <EnrollmentsByMonth devices={devices} loading={loading} />}
 
       {/* ── Empty state ── */}
       {!loading && devices.length === 0 && (

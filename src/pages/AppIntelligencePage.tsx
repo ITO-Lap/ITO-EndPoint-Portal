@@ -157,7 +157,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
       hint: summary ? `${summary.platform === 'macOS' ? 'macOS' : 'Windows'} · ${updateHint(summary)}` : `${platform === 'macOS' ? 'macOS' : 'Windows'} results loading…` },
     { id: 'package', label: 'Package required', value: summary?.packageRequiredBreakdown.newPackage ?? null,
       hint: summary && summary.packageRequiredBreakdown.repackage ? `Plus ${summary.packageRequiredBreakdown.repackage} needing a repackage` : 'Newer version confirmed, no package exists', status: 'Package required', tone: 'text-red-700' },
-    { id: 'review', label: 'Review required', value: summary?.reviewRequired ?? null, hint: 'Uncertain match or version — never guessed', status: 'Review required', tone: 'text-amber-700' },
+    { id: 'packaged', label: 'Packaged — ready to deploy', value: summary?.updateBreakdown.existingPackage ?? null, hint: 'Newer version confirmed and a package already exists', status: 'Update available — existing package', tone: 'text-emerald-700' },
   ]
   const syncing = sync?.state === 'syncing'
   const noData = !!sync && !sync.syncedAt && !syncing

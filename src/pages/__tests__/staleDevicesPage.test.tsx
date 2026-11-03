@@ -10,6 +10,14 @@ vi.mock('../../api/staleDevices', async importOriginal => {
 
 import { staleDevicesApi } from '../../api/staleDevices'
 import { StaleDevicesPage } from '../StaleDevicesPage'
+import { PermissionsProvider } from '../../context/PermissionsContext'
+import type { ComponentProps } from 'react'
+
+// staleDevices.export mirrors the real built-in role defaults (see server/src/services/rolePermissions.ts).
+function renderStale(props: ComponentProps<typeof StaleDevicesPage>) {
+  const role = props.viewerRole ?? 'IT Admin'
+  return render(<PermissionsProvider permissions={{ 'staleDevices.export': role !== 'Helpdesk' }}><StaleDevicesPage {...props} /></PermissionsProvider>)
+}
 import pageSource from '../StaleDevicesPage.tsx?raw'
 
 const api = vi.mocked(staleDevicesApi)
@@ -42,7 +50,7 @@ beforeEach(() => {
 
 describe('StaleDevicesPage', () => {
   it('shows the summary counts, live status and required columns', async () => {
-    render(<StaleDevicesPage onBack={() => {}} viewerRole="IT Admin" />)
+    renderStale({ onBack: () => {}, viewerRole: 'IT Admin' })
     await screen.findByText('WIN-OLD')
     expect(screen.getByText('Live data')).toBeInTheDocument()
     for (const h of ['Device name', 'Username', 'Email ID', 'Last check-in', 'Inactive for', 'OS platform', 'OS version', 'Managed by', 'Serial number']) expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeInTheDocument()
@@ -52,13 +60,13 @@ describe('StaleDevicesPage', () => {
   })
 
   it('formats timestamps in the Asia/Kolkata zone by default', async () => {
-    render(<StaleDevicesPage onBack={() => {}} />)
+    renderStale({ onBack: () => {} })
     await screen.findByText('WIN-OLD')
     expect(screen.getAllByText(/20 Sep\w* 2026.*11:30/).length).toBeGreaterThan(0) // 06:00 UTC = 11:30 IST
   })
 
   it('switches tab and queries the server with that view, search and page', async () => {
-    render(<StaleDevicesPage onBack={() => {}} />)
+    renderStale({ onBack: () => {} })
     await screen.findByText('WIN-OLD')
     await userEvent.click(screen.getByRole('tab', { name: 'Source drift' }))
     await waitFor(() => expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'drift', page: 1 })))
@@ -67,7 +75,7 @@ describe('StaleDevicesPage', () => {
   })
 
   it('opens a drawer with the stale explanation, per-source timestamps and both device IDs', async () => {
-    render(<StaleDevicesPage onBack={() => {}} />)
+    renderStale({ onBack: () => {} })
     await userEvent.click(await screen.findByRole('button', { name: 'View details for WIN-OLD' }))
     const dlg = screen.getByRole('dialog', { name: /Device details — WIN-OLD/ })
     expect(within(dlg).getByText(/Stale because the latest verified check-in was 30 days ago from Endpoint Central/)).toBeInTheDocument()
@@ -78,7 +86,7 @@ describe('StaleDevicesPage', () => {
 
   it('surfaces a failed source and warns in the drawer instead of implying data is complete', async () => {
     api.list.mockResolvedValue(result({ sources: { intune: ok(), 'endpoint-central': { ...ok(0), state: 'error', error: 'MDM 503' } }, rows: [device({ staleStatus: 'needs_review', sourceDataStatus: { intune: 'ok', 'endpoint-central': 'error' } })] }))
-    render(<StaleDevicesPage onBack={() => {}} />)
+    renderStale({ onBack: () => {} })
     expect(await screen.findByText('Live — partial (source error)')).toBeInTheDocument()
     expect(screen.getByText(/Last refresh failed/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'View details for WIN-OLD' }))
@@ -88,17 +96,17 @@ describe('StaleDevicesPage', () => {
   it('says nothing is simulated when no source is configured', async () => {
     const off: SourceMeta = { state: 'not_configured', lastAttemptAt: null, lastSuccessAt: null, error: null, inScope: 0 }
     api.list.mockResolvedValue(result({ sources: { intune: off, 'endpoint-central': off }, rows: [], total: 0, syncedAt: null }))
-    render(<StaleDevicesPage onBack={() => {}} />)
+    renderStale({ onBack: () => {} })
     expect(await screen.findByText(/Nothing is simulated/)).toBeInTheDocument()
     expect(screen.getAllByText('Not configured').length).toBeGreaterThan(0)
   })
 
   it('offers CSV export to admins only, and exports the current filters', async () => {
-    const { unmount } = render(<StaleDevicesPage onBack={() => {}} viewerRole="Helpdesk" />)
+    const { unmount } = renderStale({ onBack: () => {}, viewerRole: 'Helpdesk' })
     await screen.findByText('WIN-OLD')
     expect(screen.queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument()
     unmount()
-    render(<StaleDevicesPage onBack={() => {}} viewerRole="IT Admin" />)
+    renderStale({ onBack: () => {}, viewerRole: 'IT Admin' })
     await screen.findByText('WIN-OLD')
     await userEvent.click(screen.getByRole('tab', { name: 'macOS' }))
     await userEvent.click(screen.getByRole('button', { name: /Export CSV/ }))

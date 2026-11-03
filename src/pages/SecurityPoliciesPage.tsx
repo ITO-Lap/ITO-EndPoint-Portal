@@ -17,9 +17,10 @@ import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { useToast } from '../components/ui/ToastProvider'
+import { hasPermission } from '../lib/permissions'
+import { usePermissions } from '../context/PermissionsContext'
 
 const PAGE_SIZE = 25
-const SYNC_ROLES: UserToolRole[] = ['Global Admin', 'IT Admin']
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '—'
@@ -151,7 +152,8 @@ interface Props {
 
 export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
   useEffect(() => { setSecurityPoliciesActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
-  const canSync = SYNC_ROLES.includes(viewerRole)
+  const permissions = usePermissions()
+  const canSync = hasPermission(viewerRole, permissions, 'securityPolicies.sync')
   const { notify } = useToast()
 
   const [tab, setTab] = useState<PolicySource>('intune')

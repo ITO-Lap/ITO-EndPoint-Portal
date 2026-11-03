@@ -135,7 +135,7 @@ export function classifyEcDevice(raw: RawEcDevice): ClassifyResult {
   const hint = `${str(raw.model)} ${str(raw.product_name)}`
   const osVersion = str(raw.os_version)
   // Existing convention (manageEngine.ts mapPlatform): a "mac" model/product name wins over platform_type.
-  const isMac = /\bmac/i.test(hint) || platformType === 'macos' || platformType === 'mac'
+  const isMac = /\b(?:i?mac)/i.test(hint) || platformType === 'macos' || platformType === 'mac'
   let platform: StalePlatform
   if (isMac) platform = 'macOS'
   else if (platformType === 'windows') platform = 'Windows'

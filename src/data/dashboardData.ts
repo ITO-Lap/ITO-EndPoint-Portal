@@ -12,7 +12,6 @@ import {
   GitBranch,
   Layers,
   MonitorOff,
-  FileText,
   CalendarClock,
   Activity,
   Wrench,

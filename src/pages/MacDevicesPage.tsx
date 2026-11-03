@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Apple, ArrowLeft, RefreshCw, Shield, Lock, ShieldCheck, ShieldAlert,
   AlertTriangle, CheckCircle, XCircle, Search, X,
-  ClipboardList, Info,
+  Info,
   BarChart2,
   Clock, Download, FileText, Filter,
 } from 'lucide-react'
@@ -16,6 +16,7 @@ import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { MacFleetReportsPage }       from './MacFleetReportsPage'
+import { downloadTableExcel } from '../lib/kpiExport'
 import { CopyText } from '../components/ui/CopyText'
 
 const PAGE_SIZE  = 50
@@ -164,7 +165,7 @@ function metricBar(label: string, value: number, assessed: number, total: number
 }
 // ─── Report engine helpers ────────────────────────────────────────────────────
 
-type ReportType = 'macos_versions' | 'stale_devices' | 'policy_compliance' | 'fleet_kpi_cards'
+type ReportType = 'macos_versions' | 'stale_devices' | 'fleet_kpi_cards'
 
 interface ReportDef {
   id: ReportType
@@ -178,7 +179,6 @@ interface ReportDef {
 const REPORT_DEFS: ReportDef[] = [
   { id: 'macos_versions',     label: 'macOS Updates',      description: 'Version distribution & upgrade eligibility',   icon: <Apple         className="h-4 w-4" />, accent: 'orange',  group: 'analytical' },
   { id: 'stale_devices',      label: 'Stale Devices',      description: 'Devices that haven\'t checked in recently',    icon: <Clock         className="h-4 w-4" />, accent: 'amber',   group: 'analytical' },
-  { id: 'policy_compliance',  label: 'Policy Compliance',  description: 'Compliance rates by applied policy / profile', icon: <ClipboardList className="h-4 w-4" />, accent: 'purple',  group: 'analytical' },
   { id: 'fleet_kpi_cards',    label: 'Fleet KPI Cards',    description: 'Fleet health KPI dashboard',                   icon: <BarChart2     className="h-4 w-4" />, accent: 'orange',  group: 'full' },
 ]
 
@@ -304,6 +304,32 @@ function DevicesTab({
     setSortKey(key)
   }
 
+  // Exports every row matching the current filters/search (not just the visible page), in table order.
+  function handleExportExcel() {
+    downloadTableExcel({
+      fileName: 'Mac_Devices_Report',
+      title: 'Mac Devices Report',
+      generatedBy: 'Mac Devices',
+      filters: [
+        ['Model', activeModel ?? 'All'],
+        ['macOS Version', activeOS ?? 'All'],
+        ['Search', search.trim() || 'None'],
+        ['Devices in fleet', String(devices.length)],
+      ],
+      headers: ['Device', 'User', 'Serial Number', 'Model', 'macOS', 'Last Check-in', 'Enrolled', 'FileVault', 'MDM Status / Profiles', 'Profile Details', 'Applied Policy'],
+      rows: sortedDevices.map(d => {
+        const profile = d.managementSource === 'ManageEngine'
+          ? profileResultsLabel(profileResults[d.id], profileResultsLoading, profileResultsError)
+          : { text: d.complianceState, title: '' }
+        return [
+          d.deviceName, d.user, d.serialNumber ?? '', d.model ? extractModelBase(d.model) : '', d.osVersion ?? '',
+          d.lastCheckIn, d.enrollmentDate ? new Date(d.enrollmentDate).toLocaleDateString() : '',
+          filevaultState(d), profile.text, profile.title.replace(/\n/g, '; '), d.appliedPolicies?.join(', ') ?? '',
+        ]
+      }),
+    })
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center py-24 text-slate-400 gap-2">
       <RefreshCw className="h-4 w-4 animate-spin" /><span className="text-sm">Loading devices…</span>
@@ -348,12 +374,18 @@ function DevicesTab({
         )}
       </div>
 
-      <div className="relative max-w-xs">
+      <div className="flex items-center gap-3 flex-wrap">
+      <div className="relative w-full max-w-xs">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search devices, users…"
           className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400" />
         {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="h-3 w-3" /></button>}
+      </div>
+        <button type="button" onClick={handleExportExcel} disabled={filtered.length === 0}
+          className="ml-auto flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition shadow-sm disabled:opacity-50">
+          <Download className="h-3.5 w-3.5" />Export Excel ({filtered.length.toLocaleString()})
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -461,10 +493,15 @@ function DevicesTab({
 const RPT_MACOS_COLS = [
   { key: 'device',   label: 'Device',          min: 100, default: 150 },
   { key: 'user',     label: 'User',            min:  80, default: 110 },
+  { key: 'serial',   label: 'Serial Number',   min:  90, default: 130 },
   { key: 'model',    label: 'Model',           min:  70, default: 100 },
   { key: 'version',  label: 'macOS Version',   min:  80, default: 100 },
-  { key: 'checkin',  label: 'Last Check-in',   min: 100, default: 140 },
   { key: 'category', label: 'Category',        min:  80, default: 110 },
+  { key: 'checkin',  label: 'Last Check-in',   min: 100, default: 140 },
+  { key: 'days',     label: 'Days Since Check-in', min: 80, default: 120 },
+  { key: 'enrolled', label: 'Enrolled',        min:  80, default: 100 },
+  { key: 'filevault',label: 'FileVault',       min:  70, default:  90 },
+  { key: 'passcode', label: 'Passcode',        min:  70, default:  90 },
   { key: 'action',   label: 'Action Required', min: 100, default: 150 },
 ] as const
 type MRColKey = typeof RPT_MACOS_COLS[number]['key']
@@ -478,15 +515,6 @@ const RPT_STALE_COLS = [
   { key: 'action',  label: 'Action',         min:  80, default: 110 },
 ] as const
 type STColKey = typeof RPT_STALE_COLS[number]['key']
-
-const RPT_BP_COLS = [
-  { key: 'blueprint', label: 'Applied Policy / Profile', min: 120, default: 220 },
-  { key: 'devices',   label: 'Devices',            min:  60, default:  80 },
-  { key: 'compliant', label: 'Compliant',          min:  70, default:  90 },
-  { key: 'noncomp',   label: 'Non-Compliant',      min:  90, default: 110 },
-  { key: 'rate',      label: 'Compliance Rate',    min: 100, default: 140 },
-] as const
-type BRColKey = typeof RPT_BP_COLS[number]['key']
 
 // ─── Reports Tab ───────────────────────────────────────────────────────────────
 
@@ -511,7 +539,6 @@ function ReportsTab({
   devices: ApiDevice[]
 }) {
   const [activeReport, setActiveReport] = useState<ReportType>('macos_versions')
-  const [expandedRow,  setExpandedRow]  = useState<string | null>(null)
   const [staleThresh,  setStaleThresh]  = useState<7 | 14 | 30 | 60>(14)
   const [macFilter,    setMacFilter]    = useState<'all' | MacOSCategory>('all')
   const [checkInFilter,  setCheckInFilter]  = useState<'all' | 'today' | '1-2d' | '3-6d' | '7plus'>('all')
@@ -519,14 +546,11 @@ function ReportsTab({
   const [macSortDirection, setMacSortDirection] = useState<SortDirection>('asc')
   const [staleSortKey, setStaleSortKey] = useState<string | null>(null)
   const [staleSortDirection, setStaleSortDirection] = useState<SortDirection>('desc')
-  const [blueprintSortKey, setBlueprintSortKey] = useState<string | null>(null)
-  const [blueprintSortDirection, setBlueprintSortDirection] = useState<SortDirection>('desc')
 
   // Column resize — one hook call per report table
   const { widths: mrW, startResize: mrR, totalWidth: mrT } = useColumnResize<MRColKey>(RPT_MACOS_COLS, 'rpt-macos')
 
   const { widths: stW, startResize: stR, totalWidth: stT } = useColumnResize<STColKey>(RPT_STALE_COLS, 'rpt-stale')
-  const { widths: brW, startResize: brR, totalWidth: brT } = useColumnResize<BRColKey>(RPT_BP_COLS,    'rpt-bp')
 
   const def = REPORT_DEFS.find(d => d.id === activeReport)!
 
@@ -546,20 +570,6 @@ function ReportsTab({
     device: d, days: stalenessDays(d.lastCheckIn),
   })).filter(r => r.days >= staleThresh), [devices, staleThresh])
 
-  const blueprintRows = useMemo(() => {
-    const map: Record<string, ApiDevice[]> = {}
-    devices.forEach(d => {
-      const bp = d.appliedPolicies?.[0] ?? 'Unassigned'
-      if (!map[bp]) map[bp] = []
-      map[bp].push(d)
-    })
-    return Object.entries(map).map(([bp, devs]) => ({
-      blueprint: bp,
-      total: devs.length,
-      compliant: devs.filter(d => d.complianceState === 'Compliant').length,
-      devices: devs,
-    })).sort((a, b) => b.total - a.total)
-  }, [devices])
 
   // ── Filtered lists + pagination — one hook call per report table (rules of hooks:
   // these must live here, not inside the individual xReport() functions below, since
@@ -581,8 +591,13 @@ function ReportsTab({
       case 'device': return device.deviceName
       case 'user': return device.user
       case 'model': return extractModelBase(device.model)
+      case 'serial': return device.serialNumber
       case 'version': return device.osVersion
       case 'checkin': return Date.parse(device.lastCheckIn) || device.lastCheckIn
+      case 'days': return stalenessDays(device.lastCheckIn)
+      case 'enrolled': return Date.parse(device.enrollmentDate ?? '') || 0
+      case 'filevault': return filevaultState(device)
+      case 'passcode': return device.passcodeStatus
       case 'category': return MACOS_CAT_META[macOSCategory(device.osVersion ?? '')].label
       case 'action': return MACOS_CAT_META[macOSCategory(device.osVersion ?? '')].action
       default: return ''
@@ -603,20 +618,8 @@ function ReportsTab({
   }, staleSortDirection) : [...staleRows].sort((a, b) => b.days - a.days)
   const { page: stalePage, setPage: setStalePage, totalPages: staleTotalPages, paginated: stalePaginated } = usePagination(staleSortedRows, PAGE_SIZE)
 
-  const sortedBlueprintRows = blueprintSortKey ? sortRows(blueprintRows, row => {
-    switch (blueprintSortKey) {
-      case 'blueprint': return row.blueprint
-      case 'devices': return row.total
-      case 'compliant': return row.compliant
-      case 'noncomp': return row.total - row.compliant
-      case 'rate': return Math.round(row.compliant / row.total * 100)
-      default: return ''
-    }
-  }, blueprintSortDirection) : blueprintRows
-  const { page: bpPage, setPage: setBpPage, totalPages: bpTotalPages, paginated: bpPaginated } = usePagination(sortedBlueprintRows, PAGE_SIZE)
   const handleMacSort = (key: string) => { setMacSortDirection(direction => toggleSortDirection(macSortKey, direction, key)); setMacSortKey(key); setMacPage(1) }
   const handleStaleSort = (key: string) => { setStaleSortDirection(direction => toggleSortDirection(staleSortKey, direction, key)); setStaleSortKey(key); setStalePage(1) }
-  const handleBlueprintSort = (key: string) => { setBlueprintSortDirection(direction => toggleSortDirection(blueprintSortKey, direction, key)); setBlueprintSortKey(key); setBpPage(1) }
 
   // ── CSV export ────────────────────────────────────────────────────────────────
 
@@ -624,10 +627,14 @@ function ReportsTab({
     const ts = new Date().toISOString().slice(0, 10)
     if (activeReport === 'macos_versions') {
       downloadCsv(`macos-versions-${ts}.csv`,
-        ['Device', 'User', 'macOS Version', 'Category', 'Action Required'],
-        devices.map(d => {
+        ['Device', 'User', 'Serial Number', 'Model', 'macOS Version', 'Category', 'Last Check-in', 'Days Since Check-in', 'Enrolled', 'FileVault', 'Passcode', 'Action Required'],
+        macSortedRows.map(d => {
           const cat = macOSCategory(d.osVersion ?? '')
-          return [d.deviceName, d.user, d.osVersion, MACOS_CAT_META[cat].label, MACOS_CAT_META[cat].action]
+          return [
+            d.deviceName, d.user, d.serialNumber ?? '', d.model ? extractModelBase(d.model) : '', d.osVersion, MACOS_CAT_META[cat].label,
+            d.lastCheckIn, stalenessDays(d.lastCheckIn), d.enrollmentDate ? new Date(d.enrollmentDate).toLocaleDateString() : '',
+            filevaultState(d), d.passcodeStatus ?? 'Unknown', MACOS_CAT_META[cat].action,
+          ]
         }) as unknown as (string | number)[],
       )
     } else if (activeReport === 'stale_devices') {
@@ -635,27 +642,10 @@ function ReportsTab({
         ['Device', 'User', 'Model', 'Last Check-in', 'Days Inactive'],
         staleRows.map(r => [r.device.deviceName, r.device.user, r.device.model ?? '', r.device.lastCheckIn, r.days]) as unknown as (string | number)[],
       )
-    } else if (activeReport === 'policy_compliance') {
-      downloadCsv(`policy-compliance-${ts}.csv`,
-        ['Policy / Profile', 'Devices', 'Compliant', 'Non-Compliant', 'Compliance %'],
-        blueprintRows.map(r => [r.blueprint, r.total, r.compliant, r.total - r.compliant, Math.round(r.compliant / r.total * 100)]) as unknown as (string | number)[],
-      )
     }
   }
 
   // ── Shared UI helpers ─────────────────────────────────────────────────────────
-
-  function PctBar({ pct, color }: { pct: number; color: string }) {
-    const barCls = color === 'emerald' ? 'bg-emerald-400' : color === 'orange' ? 'bg-orange-400' : color === 'amber' ? 'bg-amber-400' : color === 'red' ? 'bg-red-400' : 'bg-slate-400'
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden min-w-[48px]">
-          <div className={`h-1.5 rounded-full ${barCls}`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className="tabular-nums font-semibold text-slate-700 text-[0.7rem] w-8 text-right">{pct}%</span>
-      </div>
-    )
-  }
 
   // ── Report renderers ──────────────────────────────────────────────────────────
 
@@ -724,20 +714,31 @@ function ReportsTab({
                 {macPaginated.map((d, i) => {
                   const cat  = macOSCategory(d.osVersion ?? '')
                   const meta = MACOS_CAT_META[cat]
+                  const days = stalenessDays(d.lastCheckIn)
+                  const fv   = filevaultState(d)
                   const badgeCls = cat === 'latest' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : cat === 'outdated' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-red-50 border-red-200 text-red-700'
                   return (
                     <tr key={d.id} className={`border-b border-slate-100 last:border-0 ${i%2 ? 'bg-slate-50/40' : ''}`}>
                       <td className="px-4 py-2.5 overflow-hidden"><span className="flex items-center gap-1.5"><Apple className="h-3 w-3 text-slate-400 flex-shrink-0" /><CopyText value={d.deviceName} label="Device name"><span className="font-medium text-slate-700 truncate block">{d.deviceName}</span></CopyText></span></td>
                       <td className="px-4 py-2.5 text-slate-500 overflow-hidden truncate"><CopyText value={d.user} label="User">{d.user}</CopyText></td>
+                      <td className="px-4 py-2.5 font-mono text-slate-500 overflow-hidden"><CopyText value={d.serialNumber ?? ''} label="Serial number"><span className="truncate block">{d.serialNumber || '—'}</span></CopyText></td>
                       <td className="px-4 py-2.5 text-slate-500 overflow-hidden truncate">{d.model ? extractModelBase(d.model) : '—'}</td>
                       <td className="px-4 py-2.5 font-mono font-bold text-slate-700 overflow-hidden truncate">{d.osVersion}</td>
+                      <td className="px-4 py-2.5 overflow-hidden"><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${badgeCls}`}>{meta.label}</span></td>
                       <td className="px-4 py-2.5 overflow-hidden">
                         <span className="flex items-center gap-1.5">
                           <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${checkInDot(d.lastCheckIn)}`} />
                           <span className="truncate text-slate-500">{d.lastCheckIn}</span>
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 overflow-hidden"><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${badgeCls}`}>{meta.label}</span></td>
+                      <td className={`px-4 py-2.5 tabular-nums font-semibold overflow-hidden ${days >= 30 ? 'text-red-600' : days >= 7 ? 'text-amber-600' : 'text-slate-500'}`}>{days === 0 ? 'Today' : `${days}d`}</td>
+                      <td className="px-4 py-2.5 text-slate-500 overflow-hidden truncate">{d.enrollmentDate ? new Date(d.enrollmentDate).toLocaleDateString() : '—'}</td>
+                      <td className="px-4 py-2.5 overflow-hidden">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${fv === 'On' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : fv === 'Off' ? 'bg-red-50 border-red-200 text-red-600' : fv === 'Pending' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{fv === 'Unknown' ? 'Not reported' : fv}</span>
+                      </td>
+                      <td className="px-4 py-2.5 overflow-hidden">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.58rem] font-bold ${d.passcodeStatus === 'Present' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : d.passcodeStatus === 'Missing' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{d.passcodeStatus === 'Present' ? 'Set' : d.passcodeStatus === 'Missing' ? 'Missing' : 'Not reported'}</span>
+                      </td>
                       <td className="px-4 py-2.5 text-slate-500 overflow-hidden truncate">{meta.action}</td>
                     </tr>
                   )
@@ -763,7 +764,7 @@ function ReportsTab({
           <Filter className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
           <span className="text-xs font-semibold text-slate-600">Inactive threshold:</span>
           {([7, 14, 30, 60] as const).map(d => (
-            <button key={d} type="button" onClick={() => setStaleThresh(d)}
+            <button key={d} type="button" onClick={() => { setStaleThresh(d); setStalePage(1) }}
               className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${staleThresh === d ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
               {d}+ days
             </button>
@@ -771,12 +772,18 @@ function ReportsTab({
           <span className="ml-auto text-xs text-slate-400">{staleRows.length} device{staleRows.length !== 1 ? 's' : ''} inactive ≥ {staleThresh} days</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {([7, 14, 30, 60] as const).map(d => (
-            <div key={d} className={`bg-white rounded-2xl border shadow-sm px-4 py-3 ${d >= 30 ? 'border-amber-200' : 'border-slate-200'}`}>
-              <p className={`text-2xl font-black ${d >= 30 ? 'text-amber-600' : 'text-slate-700'}`}>{counts[d]}</p>
-              <p className="text-[0.62rem] text-slate-400 mt-0.5">Inactive ≥ {d} days</p>
-            </div>
-          ))}
+          {([7, 14, 30, 60] as const).map(d => {
+            const selected = staleThresh === d
+            return (
+              <button key={d} type="button" onClick={() => { setStaleThresh(d); setStalePage(1) }} aria-pressed={selected}
+                className={`text-left bg-white rounded-2xl border shadow-sm px-4 py-3 transition hover:shadow-md cursor-pointer ${
+                  selected ? 'border-amber-400 ring-2 ring-amber-300' : d >= 30 ? 'border-amber-200 hover:border-amber-300' : 'border-slate-200 hover:border-slate-300'}`}>
+                <p className={`text-2xl font-black ${d >= 30 ? 'text-amber-600' : 'text-slate-700'}`}>{counts[d]}</p>
+                <p className="text-[0.62rem] text-slate-400 mt-0.5">Inactive ≥ {d} days</p>
+                <p className={`text-[0.58rem] font-semibold mt-1 ${selected ? 'text-amber-600' : 'text-slate-400'}`}>{selected ? 'Showing below ↓' : 'Click to view devices →'}</p>
+              </button>
+            )
+          })}
         </div>
         <TableWrap title={`Devices Inactive ≥ ${staleThresh} days`} count={staleRows.length} footer="Stale devices may need re-enrollment or manual check-in"
           pagination={staleRows.length > 0 && <Pagination page={stalePage} totalPages={staleTotalPages} onPageChange={setStalePage} totalItems={staleRows.length} pageSize={PAGE_SIZE} itemLabel="device" />}>
@@ -831,81 +838,6 @@ function ReportsTab({
     )
   }
 
-  function BlueprintPolicyReport() {
-    return (
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[
-            { label: 'Policy Groups',       value: blueprintRows.length, border: 'border-slate-200',  txt: 'text-slate-800'  },
-            { label: 'Avg Compliance Rate', value: `${Math.round(blueprintRows.reduce((s,r) => s + Math.round(r.compliant/r.total*100), 0) / Math.max(1, blueprintRows.length))}%`, border: 'border-emerald-200', txt: 'text-emerald-600' },
-            { label: 'Unassigned Devices',  value: blueprintRows.find(r => r.blueprint === 'Unassigned')?.total ?? 0, border: 'border-amber-200', txt: 'text-amber-600' },
-          ].map(c => (
-            <div key={c.label} className={`bg-white rounded-2xl border ${c.border} shadow-sm px-4 py-3`}>
-              <p className={`text-2xl font-black ${c.txt}`}>{c.value}</p>
-              <p className="text-[0.62rem] text-slate-400 mt-0.5">{c.label}</p>
-            </div>
-          ))}
-        </div>
-        <TableWrap title="Policy / Profile Breakdown" count={blueprintRows.length} footer="Click a row to see devices under that policy · Drag column edges to resize"
-          pagination={<Pagination page={bpPage} totalPages={bpTotalPages} onPageChange={setBpPage} totalItems={blueprintRows.length} pageSize={PAGE_SIZE} itemLabel="policy" />}>
-          <div className="overflow-x-auto">
-            <table className="text-xs" style={{ tableLayout: 'fixed', width: brT }}>
-              <colgroup>{RPT_BP_COLS.map(c => <col key={c.key} style={{ width: brW[c.key] }} />)}</colgroup>
-              <thead><tr className="border-b border-slate-100 text-left bg-slate-50">
-                {RPT_BP_COLS.map(c => (
-                  <SortableHeader key={c.key} label={c.label} sortKey={c.key} activeSortKey={blueprintSortKey} direction={blueprintSortDirection} onSort={handleBlueprintSort}
-                    className="relative px-4 py-2.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 overflow-hidden">
-                    <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
-                      onMouseDown={e => brR(c.key, e)} onClick={e => e.stopPropagation()} />
-                  </SortableHeader>
-                ))}
-              </tr></thead>
-              <tbody>
-                {bpPaginated.map((r) => {
-                  const pct     = Math.round(r.compliant / r.total * 100)
-                  const isOpen  = expandedRow === r.blueprint
-                  const nonComp = r.total - r.compliant
-                  return (
-                    <Fragment key={r.blueprint}>
-                      <tr onClick={() => setExpandedRow(p => p === r.blueprint ? null : r.blueprint)}
-                        className={`border-b border-slate-100 cursor-pointer transition ${isOpen ? 'bg-orange-50' : 'hover:bg-slate-50'}`}>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <Shield className="h-3 w-3 text-orange-400 flex-shrink-0" />
-                            <span className="font-medium text-slate-700">{r.blueprint}</span>
-                            {r.blueprint === 'Unassigned' && <span className="rounded-full bg-amber-100 border border-amber-200 px-1 py-0.5 text-[0.55rem] font-bold text-amber-600">No policy</span>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5 font-bold text-slate-700">{r.total}</td>
-                        <td className="px-4 py-2.5 font-semibold text-emerald-600">{r.compliant}</td>
-                        <td className="px-4 py-2.5 font-semibold text-red-500">{nonComp}</td>
-                        <td className="px-4 py-2.5 min-w-[120px]"><PctBar pct={pct} color={pct >= 80 ? 'emerald' : pct >= 60 ? 'amber' : 'red'} /></td>
-                      </tr>
-                      {isOpen && (
-                        <tr key={`${r.blueprint}-exp`} className="bg-orange-50/40 border-b border-orange-100">
-                          <td colSpan={5} className="px-5 py-3">
-                            <p className="text-[0.65rem] font-semibold text-slate-500 mb-2">{r.devices.length} device{r.devices.length!==1?'s':''} under this policy</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {r.devices.map(d => (
-                                <span key={d.id} className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[0.62rem] font-medium ${d.complianceState === 'Compliant' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-600'}`}>
-                                  <Apple className="h-2.5 w-2.5" />{d.deviceName}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </TableWrap>
-      </div>
-    )
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────────
 
   const isFullReport = activeReport === 'fleet_kpi_cards'
@@ -915,54 +847,25 @@ function ReportsTab({
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Report selector — two groups ── */}
-      <div className="flex flex-col gap-4 bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4">
-        {/* Analytical reports */}
-        <div>
-          <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Analytical Reports</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
-            {analyticalDefs.map(d => {
-              const isActive = activeReport === d.id
-              return (
-                <button key={d.id} type="button" onClick={() => { setActiveReport(d.id); setExpandedRow(null) }}
-                  className={`flex flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition shadow-sm hover:shadow-md ${
-                    isActive ? 'is-selected' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-                  }`}>
+      {/* ── Report selector — one row ── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {[...analyticalDefs, ...fullDefs].map(d => {
+            const isActive = activeReport === d.id
+            return (
+              <button key={d.id} type="button" onClick={() => setActiveReport(d.id)}
+                className={`flex flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition shadow-sm hover:shadow-md ${
+                  isActive ? 'is-selected' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                }`}>
+                <div className="flex items-center justify-between gap-2">
                   <div className={`rounded-lg p-1.5 w-fit ${isActive ? 'bg-sky-100 text-sky-600' : 'bg-white text-slate-500 border border-slate-200'}`}>{d.icon}</div>
-                  <p className={`text-[0.65rem] font-bold leading-tight ${isActive ? 'text-sky-700' : 'text-slate-700'}`}>{d.label}</p>
-                  <p className="text-[0.58rem] text-slate-400 leading-tight hidden sm:block">{d.description}</p>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-slate-100" />
-
-        {/* Full-page reports */}
-        <div>
-          <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2.5">Full Report Views</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {fullDefs.map(d => {
-              const isActive = activeReport === d.id
-              return (
-                <button key={d.id} type="button" onClick={() => { setActiveReport(d.id); setExpandedRow(null) }}
-                  className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition shadow-sm hover:shadow-md ${
-                    isActive ? 'is-selected' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-                  }`}>
-                  <div className={`rounded-lg p-2 flex-shrink-0 ${isActive ? 'bg-sky-100 text-sky-600' : 'bg-white text-slate-500 border border-slate-200'}`}>{d.icon}</div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className={`text-xs font-bold ${isActive ? 'text-sky-700' : 'text-slate-700'}`}>{d.label}</p>
-                      <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-500 uppercase tracking-wide">Full Page</span>
-                    </div>
-                    <p className="text-[0.62rem] text-slate-400 mt-0.5">{d.description}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+                  {d.group === 'full' && <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-500 uppercase tracking-wide">Full Page</span>}
+                </div>
+                <p className={`text-xs font-bold leading-tight ${isActive ? 'text-sky-700' : 'text-slate-700'}`}>{d.label}</p>
+                <p className="text-[0.62rem] text-slate-400 leading-tight">{d.description}</p>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -984,7 +887,6 @@ function ReportsTab({
       {/* Active analytical report */}
       {activeReport === 'macos_versions'     && MacOSVersionsReport()}
       {activeReport === 'stale_devices'      && StaleDevicesReport()}
-      {activeReport === 'policy_compliance'  && BlueprintPolicyReport()}
 
       {/* Active full-page report */}
       {activeReport === 'fleet_kpi_cards'  && <MacFleetReportsPage />}

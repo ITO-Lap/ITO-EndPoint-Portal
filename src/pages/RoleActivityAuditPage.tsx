@@ -12,6 +12,8 @@ import { AuditEventsTable } from '../components/role-activity/AuditEventsTable'
 import { AuditEventDetailDrawer } from '../components/role-activity/AuditEventDetailDrawer'
 import { detectLocalTimezone } from '../lib/timezone'
 import type { UserToolRole } from '../types'
+import { hasPermission } from '../lib/permissions'
+import { usePermissions } from '../context/PermissionsContext'
 
 // Matches the server's default ROLE_ACTIVITY_LIVE_BROWSE_MAX_DAYS
 // (server/.env.example, server/src/routes/roleActivity.ts) — hardcoded here
@@ -102,11 +104,8 @@ interface Props {
   onBack?: () => void
 }
 
-function canExport(role: UserToolRole): boolean {
-  return role === 'Global Admin' || role === 'IT Admin'
-}
-
 export function RoleActivityAuditPage({ viewerRole, userEmail, onBack }: Props) {
+  const permissions = usePermissions()
   useEffect(() => { setRoleActivityActor(viewerRole, userEmail ?? 'unknown@zinnia.com') }, [viewerRole, userEmail])
 
   const [range, setRange] = useState<DateRangeValue>(() => defaultRange(detectLocalTimezone()))
@@ -162,7 +161,7 @@ export function RoleActivityAuditPage({ viewerRole, userEmail, onBack }: Props) 
   // Reset to page 1 whenever the query itself changes (not just page number).
   useEffect(() => { setPage(1) }, [range, source, filters, pageSize, sortField, sortDirection])
 
-  const roleCanExport = useMemo(() => canExport(viewerRole), [viewerRole])
+  const roleCanExport = useMemo(() => hasPermission(viewerRole, permissions, 'roleActivity.export'), [viewerRole, permissions])
   const failedSourceCount = Object.keys(sourceErrors).length
 
   // Save button: this fetches the FULL currently-filtered range client-side

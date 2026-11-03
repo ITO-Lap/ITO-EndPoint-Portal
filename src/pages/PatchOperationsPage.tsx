@@ -3,6 +3,8 @@ import { Activity, CheckCircle2, ChevronLeft, Download, Loader2, RefreshCw, Shie
 import { api, type EndpointHealthLevel, type EndpointHealthScore, type MissingPatch, type MissingPatchSeverity, type MissingPatchView, type PatchOperationsDashboard, type PatchRemediationAction } from '../api'
 import { Modal } from '../components/ui/Modal'
 import type { UserToolRole } from '../types'
+import { hasPermission } from '../lib/permissions'
+import { usePermissions } from '../context/PermissionsContext'
 
 const levelStyle: Record<EndpointHealthLevel, { label: string; color: string }> = {
   healthy: { label: 'Healthy', color: 'bg-emerald-100 text-emerald-700' },
@@ -85,7 +87,8 @@ export function PatchOperationsPage({ viewerRole, userEmail, onBack }: { viewerR
   useEffect(() => { void load() }, [])
 
   const critical = useMemo(() => data?.devices.filter(d => d.criticalPatchCount > 0) ?? [], [data])
-  const admin = viewerRole === 'Global Admin' || viewerRole === 'IT Admin' || viewerRole === 'Helpdesk'
+  const permissions = usePermissions()
+  const admin = hasPermission(viewerRole, permissions, 'patchOps.scanRemediate')
 
   const previewScan = async (device: EndpointHealthScore) => {
     setWorking(true); setError(null)

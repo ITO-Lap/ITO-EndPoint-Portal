@@ -89,7 +89,7 @@ export function ActionCenter({ onNavigate }: ActionCenterProps) {
     { title: 'Critical actions', value: actionableCount, description: 'Devices need immediate attention (security, compliance or patching).', icon: AlertTriangle, tone: 'red', sources: ['Intune + Endpoint Central'], page: 'Patch Operations' },
     { title: 'Stale devices', value: staleCount, description: 'Not checked in for more than 14 days.', icon: Clock, tone: 'amber', sources: ['Intune'], page: 'Stale Devices' },
     { title: 'Missing critical patches', value: missingCriticalPatches, description: 'Devices missing critical security patches.', icon: ShieldAlert, tone: 'orange', sources: ['Intune', 'Endpoint Central'], page: 'Patch Operations' },
-    { title: 'Application updates available', value: appUpdates, description: 'Devices with pending application updates.', icon: Package, tone: 'blue', sources: ['Intune', 'Endpoint Central'], page: 'App Guardian' },
+    { title: 'Application updates available', value: appUpdates, description: 'Devices with pending application updates.', icon: Package, tone: 'blue', sources: ['Intune', 'Endpoint Central'], page: 'ManageEngine App Inventory' },
   ]
 
   return (

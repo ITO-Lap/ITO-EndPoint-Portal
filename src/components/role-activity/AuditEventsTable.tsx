@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { RefreshCw, ChevronUp, ChevronDown, Columns3, Loader2 } from 'lucide-react'
+import { RefreshCw, Columns3, Loader2 } from 'lucide-react'
 import type { RoleActivityEvent } from '../../api/roleActivity'
 import { Pagination } from '../ui/Pagination'
 import { SortableHeader } from '../ui/SortableHeader'

@@ -126,7 +126,7 @@ export function buildUpdatesOverview(apps: AssessedApp[], meta: Pick<UpdateRepor
   const top = [...updates].sort((a, b) => b.affectedDevices - a.affectedDevices)[0]
   const problems = Object.keys(meta.errors).length
   return {
-    title: 'Verified Application Updates',
+    title: 'Managed App Report',
     fields: [
       { label: 'Apps behind latest version', value: updates.length },
       { label: 'Device-installs to update', value: devicesBehind },
@@ -145,29 +145,37 @@ export function buildUpdatesOverview(apps: AssessedApp[], meta: Pick<UpdateRepor
 }
 
 const columns: ReportColumn[] = [
-  { key: 'app', label: 'Application', width: 32 }, { key: 'platform', label: 'Platform', width: 12 },
-  { key: 'installed', label: 'Installed versions (behind)', width: 34 }, { key: 'latest', label: 'Latest verified', width: 18 },
+  { key: 'app', label: 'Application', width: 32 }, { key: 'publisher', label: 'Publisher', width: 24 }, { key: 'platform', label: 'Platform', width: 12 },
+  { key: 'installed', label: 'Installed versions (devices)', width: 40 }, { key: 'latest', label: 'Latest verified', width: 18 },
   { key: 'behind', label: 'Devices behind', width: 16 }, { key: 'total', label: 'Total devices', width: 16 },
   { key: 'status', label: 'Status', width: 34 }, { key: 'action', label: 'Next step', width: 48 },
-  { key: 'source', label: 'Verified by', width: 44 }, { key: 'checked', label: 'Checked at', width: 24 },
+  { key: 'source', label: 'Verified by', width: 44 }, { key: 'providers', label: 'Data sources', width: 26 }, { key: 'checked', label: 'Checked at', width: 24 },
 ]
 
-/** Excel version of the update report for Scheduled Reports; built from the latest verified sync, never from stale-as-fresh data. */
+const PROVIDER_NAME: Record<string, string> = { intune: 'Intune', 'manageengine-mdm': 'ManageEngine MDM', 'endpoint-central': 'Endpoint Central' }
+
+/** Managed App Report for Scheduled Reports: every managed Windows and macOS app (not only those behind), apps needing
+ * action first. Built from the latest verified sync, never from stale-as-fresh data. A missing latest version is "Unknown". */
 export async function createAppUpdatesReport(): Promise<{ content: Buffer; filename: string; rows: number; overview: ReportOverview }> {
   const svc = getAppIntelService()
   let snap = svc.getSnapshot()
   if (!snap) { await svc.startSync(); snap = svc.getSnapshot() }
   if (!snap) throw new Error(`No verified application inventory is available: ${svc.getState().lastError ?? 'sync has not completed'}`)
-  const rows = snap.apps.filter(hasUpdateAvailable).sort((a, b) => b.affectedDevices - a.affectedDevices).map(a => ({
-    app: a.identity.displayName, platform: PLATFORM_LABEL[a.platform], installed: behindVersions(a), latest: a.latest!.version,
-    behind: a.affectedDevices, total: a.totalDevices, status: a.status, action: a.action, source: a.latest!.versionSource, checked: a.lastCheckedAt ?? '',
-  }))
+  const rows = [...snap.apps]
+    .sort((a, b) => (hasUpdateAvailable(b) ? 1 : 0) - (hasUpdateAvailable(a) ? 1 : 0) || b.affectedDevices - a.affectedDevices || a.identity.displayName.localeCompare(b.identity.displayName))
+    .map(a => ({
+      app: a.identity.displayName, publisher: a.identity.publisher ?? '', platform: PLATFORM_LABEL[a.platform],
+      installed: [...a.installed].sort((x, y) => y.deviceCount - x.deviceCount).map(i => `${i.version} (${i.deviceCount})`).join('; ') || 'Unknown',
+      latest: a.latest?.version ?? 'Unknown', behind: a.latest ? a.affectedDevices : 'Unknown', total: a.totalDevices,
+      status: a.status, action: a.action, source: a.latest?.versionSource ?? '',
+      providers: a.providers.map(p => PROVIDER_NAME[p] ?? p).join(', '), checked: a.lastCheckedAt ?? '',
+    }))
   const caveats = Object.values(snap.errors)
   const dataChecks = buildUpdatesChecks(snap.apps, snap)
   const content = await exportToExcel(rows, columns, {
-    title: 'Verified Application Update Report',
-    subtitle: `Apps behind the latest verified vendor version (winget-pkgs / Homebrew). Inventory synced ${snap.syncedAt}.${caveats.length ? ` Caveats: ${caveats.join(' | ')}` : ''}`,
+    title: 'Managed App Report',
+    subtitle: `All managed Windows and macOS apps with installed vs latest verified vendor version (winget-pkgs / Homebrew). Inventory synced ${snap.syncedAt}.${caveats.length ? ` Caveats: ${caveats.join(' | ')}` : ''}`,
     generatedAt: new Date().toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, dataChecks,
   })
-  return { content, filename: `verified-app-updates-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length, overview: buildUpdatesOverview(snap.apps, snap, dataChecks) }
+  return { content, filename: `managed-app-report-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length, overview: buildUpdatesOverview(snap.apps, snap, dataChecks) }
 }
