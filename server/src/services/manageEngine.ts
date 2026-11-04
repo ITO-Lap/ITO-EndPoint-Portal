@@ -58,6 +58,23 @@ export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<st
   return tokenCache.token
 }
 
+/**
+ * fetch with a Zoho access token. Zoho revokes older access tokens when another
+ * process mints one for the same refresh token (or the token expires early), which
+ * surfaces as 401 INVALID_OAUTHTOKEN on a still-cached token. Drop the cache, mint a
+ * fresh token and retry once; a second 401 is a genuine auth/scope problem.
+ */
+export async function zohoFetch(cfg: RuntimeManageEngineConfig, url: string, init: RequestInit = {}): Promise<Response> {
+  const call = async () => {
+    const token = await getAccessToken(cfg)
+    return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Zoho-oauthtoken ${token}` } })
+  }
+  const res = await call()
+  if (res.status !== 401) return res
+  tokenCache = null
+  return call()
+}
+
 /** Scopes granted to the current ManageEngine OAuth token (empty if none reported). */
 export async function getGrantedScopes(cfg: RuntimeManageEngineConfig): Promise<string[]> {
   await getAccessToken(cfg)
@@ -65,11 +82,8 @@ export async function getGrantedScopes(cfg: RuntimeManageEngineConfig): Promise<
 }
 
 async function meGet<T>(cfg: RuntimeManageEngineConfig, path: string): Promise<T> {
-  const token = await getAccessToken(cfg)
   const base = cfg.apiDomain.replace(/\/$/, '')
-  const res = await fetch(`${base}/api/v1/${path}`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-  })
+  const res = await zohoFetch(cfg, `${base}/api/v1/${path}`)
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(`ManageEngine API ${res.status} on ${path}: ${body.slice(0, 300)}`)

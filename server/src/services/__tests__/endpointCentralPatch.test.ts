@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../store/integrationStore.js', () => ({ getManageEngineConfig: vi.fn(() => ({ clientId: 'c', clientSecret: 's', refreshToken: 'r', apiDomain: 'https://mdm.example' })) }))
-vi.mock('../manageEngine.js', () => ({ getAccessToken: vi.fn(async () => 'SECRET-ACCESS-TOKEN') }))
+vi.mock('../manageEngine.js', () => ({
+  getAccessToken: vi.fn(async () => 'SECRET-ACCESS-TOKEN'),
+  zohoFetch: vi.fn(async (_cfg: unknown, url: string, init: RequestInit = {}) =>
+    fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: 'Zoho-oauthtoken SECRET-ACCESS-TOKEN' } })),
+}))
 
 import {
   buildMissingPatchQuery, normalizeMissingPatches, getMissingPatches, clearMissingPatchCache,

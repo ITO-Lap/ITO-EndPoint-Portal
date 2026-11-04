@@ -1,5 +1,5 @@
 import { getManageEngineConfig } from '../store/integrationStore.js'
-import { getAccessToken } from './manageEngine.js'
+import { zohoFetch } from './manageEngine.js'
 
 // Endpoint Central Cloud Patch Manager (verified against the tenant: GET
 // /api/1.4/patch/allsystems). Lives on a different host than the MDM On-Demand
@@ -111,14 +111,11 @@ export async function getPatchSystems(force = false): Promise<PatchSystemStatus[
   const cfg = getManageEngineConfig()
   if (!cfg) throw new Error('ManageEngine is not configured')
 
-  const token = await getAccessToken(cfg)
   const host = getBaseUrl()
   const rows: PatchSystemStatus[] = []
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await fetch(`${host}/api/1.4/patch/allsystems?pagelimit=${PAGE_LIMIT}&page=${page}`, {
-      headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    })
+    const res = await zohoFetch(cfg, `${host}/api/1.4/patch/allsystems?pagelimit=${PAGE_LIMIT}&page=${page}`)
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`Endpoint Central Patch API ${res.status}: ${body.slice(0, 200)}`)
@@ -284,14 +281,11 @@ export async function getMissingPatches(
   const cfg = getManageEngineConfig()
   if (!cfg) throw new PatchApiError('upstream', 'ManageEngine is not configured')
 
-  const token = await getAccessToken(cfg)
   const base = getBaseUrl()
   const patches: MissingPatch[] = []
 
   for (let page = 1; page <= DETAIL_MAX_PAGES; page++) {
-    const res = await fetch(`${base}/dcapi/threats/systemreport/patches?${buildMissingPatchQuery(detailResourceId, view, page)}`, {
-      headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    })
+    const res = await zohoFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${buildMissingPatchQuery(detailResourceId, view, page)}`)
     if (res.status === 401 || res.status === 403) {
       throw new PatchApiError('scope_required', `Patch API rejected the token (${res.status})`)
     }
@@ -329,13 +323,12 @@ export async function getFleetCriticalPatches(force = false): Promise<Map<string
   const cfg = getManageEngineConfig()
   if (!cfg) throw new PatchApiError('upstream', 'ManageEngine is not configured')
 
-  const token = await getAccessToken(cfg)
   const base = getBaseUrl()
   const map = new Map<string, MissingPatch[]>()
 
   for (let page = 1; page <= FLEET_MAX_PAGES; page++) {
     const q = new URLSearchParams({ severity: 'Critical', patch_status: 'Missing', pageLimit: String(DETAIL_PAGE_LIMIT), page: String(page) })
-    const res = await fetch(`${base}/dcapi/threats/systemreport/patches?${q}`, { headers: { Authorization: `Zoho-oauthtoken ${token}` } })
+    const res = await zohoFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${q}`)
     if (res.status === 401 || res.status === 403) throw new PatchApiError('scope_required', `Patch API rejected the token (${res.status})`)
     const text = await res.text().catch(() => '')
     let json: RawDetailResponse & { errorCode?: string; errorMsg?: string }

@@ -1,5 +1,5 @@
 import { getManageEngineConfig } from '../store/integrationStore.js'
-import { getAccessToken } from './manageEngine.js'
+import { zohoFetch } from './manageEngine.js'
 import { getPatchSystems, type PatchSystemStatus } from './endpointCentralPatch.js'
 
 const DEFAULT_HOST = 'https://endpointcentral.manageengine.com'
@@ -123,10 +123,9 @@ function baseUrl(): string {
 async function updatePatchManager(path: string, body: Record<string, unknown>): Promise<void> {
   const config = getManageEngineConfig()
   if (!config) throw new Error('ManageEngine is not configured')
-  const token = await getAccessToken(config)
-  const response = await fetch(`${baseUrl()}${path}`, {
+  const response = await zohoFetch(config, `${baseUrl()}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   if (!response.ok) throw new Error(`Endpoint Central Patch Manager update failed (${response.status}). Verify the PatchMgmt.UPDATE scope and deployment policy.`)

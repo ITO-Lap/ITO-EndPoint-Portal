@@ -5,7 +5,11 @@ import type { AddressInfo } from 'net'
 import { errorHandler } from '../../middleware/errorHandler.js'
 
 vi.mock('../../store/integrationStore.js', () => ({ getManageEngineConfig: vi.fn(() => ({ clientId: 'c', clientSecret: 's', refreshToken: 'r', apiDomain: 'x' })) }))
-vi.mock('../../services/manageEngine.js', () => ({ getAccessToken: vi.fn(async () => 'SECRET-ACCESS-TOKEN') }))
+vi.mock('../../services/manageEngine.js', () => ({
+  getAccessToken: vi.fn(async () => 'SECRET-ACCESS-TOKEN'),
+  zohoFetch: vi.fn(async (_cfg: unknown, url: string, init: RequestInit = {}) =>
+    fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: 'Zoho-oauthtoken SECRET-ACCESS-TOKEN' } })),
+}))
 
 import router from '../endpointCentral.js'
 import { clearMissingPatchCache } from '../../services/endpointCentralPatch.js'
