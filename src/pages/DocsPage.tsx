@@ -826,12 +826,13 @@ function ConfigurationSection() {
     },
     {
       name: 'ManageEngine',
-      fields: ['MANAGEENGINE_URL', 'MANAGEENGINE_API_KEY'],
+      fields: ['MANAGEENGINE_CLIENT_ID', 'MANAGEENGINE_CLIENT_SECRET', 'MANAGEENGINE_REFRESH_TOKEN', 'MANAGEENGINE_API_DOMAIN'],
       steps: [
-        'In ManageEngine UEM, go to Admin → API → Generate API Key',
-        'Note your server URL including port (default: 8443)',
-        'Paste the URL and API key in Settings → Integrations → ManageEngine',
-        'ManageEngine supplies both Windows and macOS device inventory',
+        'In the Zoho API Console, create a Self Client for MDM On-Demand (Endpoint Central Cloud)',
+        'Grant scope MDMOnDemand.MDMInventory.READ (and DesktopCentralCloud.PatchMgmt.READ for Patch Operations)',
+        'Generate a grant token, then exchange it for a Client ID, Client Secret, and Refresh Token',
+        'Paste all three plus your API domain (e.g. https://mdm.manageengine.com) in Settings → Integrations → ManageEngine',
+        'ManageEngine supplies both Windows and macOS device inventory, plus Patch Manager data for Patch Operations',
       ],
     },
     {
@@ -878,8 +879,10 @@ function ConfigurationSection() {
             <p>INTUNE_TENANT_ID=<span className="text-amber-400">your-tenant-id</span></p>
             <p>INTUNE_CLIENT_ID=<span className="text-amber-400">your-client-id</span></p>
             <p>INTUNE_CLIENT_SECRET=<span className="text-amber-400">your-client-secret</span></p>
-            <p className="mt-2">MANAGEENGINE_URL=<span className="text-amber-400">https://yourserver:8443</span></p>
-            <p>MANAGEENGINE_API_KEY=<span className="text-amber-400">your-api-key</span></p>
+            <p className="mt-2">MANAGEENGINE_CLIENT_ID=<span className="text-amber-400">your-client-id</span></p>
+            <p>MANAGEENGINE_CLIENT_SECRET=<span className="text-amber-400">your-client-secret</span></p>
+            <p>MANAGEENGINE_REFRESH_TOKEN=<span className="text-amber-400">your-refresh-token</span></p>
+            <p>MANAGEENGINE_API_DOMAIN=<span className="text-amber-400">https://mdm.manageengine.com</span></p>
             <p className="mt-2 text-slate-500"># Identity</p>
             <p>ENTRA_TENANT_ID=<span className="text-amber-400">your-tenant-id</span></p>
             <p>ENTRA_CLIENT_ID=<span className="text-amber-400">your-client-id</span></p>
@@ -977,11 +980,10 @@ function TroubleshootingSection() {
     },
     {
       problem: 'Automation rule test run fails with "Rule not found"',
-      cause: 'The rule was deleted from another browser tab or the server was restarted (in-memory store is cleared on restart).',
+      cause: 'The rule was deleted from another browser tab, or the rule ID in the request is stale.',
       steps: [
         'Refresh the Automation page to reload the current rule list.',
-        'If the server was restarted, rules saved to in-memory store are lost — this is a known limitation of the mock data layer.',
-        'For persistent rules, connect the automation store to a database (see docs/03-backend).',
+        'Rules and their run history are saved to disk (automations.json under DATA_DIR) after every change, so a server restart or redeploy does not lose them.',
       ],
     },
     {

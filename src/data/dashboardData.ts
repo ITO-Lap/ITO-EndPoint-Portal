@@ -15,6 +15,7 @@ import {
   CalendarClock,
   Activity,
   Wrench,
+  BookOpen,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -57,6 +58,7 @@ export const navItems: NavItem[] = [
 
   // ── SETTINGS ──────────────────────────────────────────────────────────────────
   { id: 'settings',             title: 'Settings',            icon: Settings,      group: 'Settings' },
+  { id: 'documentation',        title: 'Documentation',       icon: BookOpen,      group: 'Settings' },
 ]
 
 // ── Group order — controls render sequence in sidebar ─────────────────────────

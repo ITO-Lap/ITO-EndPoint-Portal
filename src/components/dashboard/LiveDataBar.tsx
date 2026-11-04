@@ -394,12 +394,12 @@ export function LiveDataBar({
           )}
         </div>
 
-        {/* Slack — direct link to Activity Log */}
+        {/* Slack — direct link to Scheduled Reports, where Slack notification schedules live */}
         <button
           type="button"
-          onClick={() => onNavigate?.('Activity Log')}
+          onClick={() => onNavigate?.('Scheduled Reports')}
           className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold transition bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 hover:border-purple-300"
-          title="Slack — view audit activity log"
+          title="Slack — view scheduled report notifications"
         >
           <MessageSquare className="h-2.5 w-2.5" />
           <span>Slack</span>
