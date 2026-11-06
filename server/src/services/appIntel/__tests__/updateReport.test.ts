@@ -41,3 +41,27 @@ describe('buildUpdateReport', () => {
     expect(r.messages.join('')).not.toContain('<!channel>')
   })
 })
+
+describe('sendUpdateReportToSlack Excel attachment', () => {
+  it('posts the text, attaches the workbook, and still succeeds if the upload fails', async () => {
+    const { vi } = await import('vitest')
+    vi.resetModules()
+    const sendSlackMessage = vi.fn().mockResolvedValue({ ok: true })
+    const uploadSlackFile = vi.fn().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, error: 'boom' })
+    vi.doMock('../../slack.js', () => ({ sendSlackMessage, uploadSlackFile }))
+    vi.doMock('../../../store/integrationStore.js', () => ({ getSlackConfig: () => ({ botToken: 'xoxb-1' }) }))
+    vi.doMock('../../reportExporter.js', () => ({ exportToExcel: vi.fn().mockResolvedValue(Buffer.from('x')) }))
+    vi.doMock('../service.js', () => ({ getAppIntelService: vi.fn() }))
+    const { sendUpdateReportToSlack } = await import('../updateReport.js')
+    const meta = { syncedAt: NOW, errors: {} }
+    const first = await sendUpdateReportToSlack([app()], meta, 'C1')
+    expect(first).toMatchObject({ ok: true, fileAttached: true })
+    expect(sendSlackMessage).toHaveBeenCalled()
+    expect(uploadSlackFile.mock.calls[0]![1]).toMatchObject({ channelId: 'C1', filename: 'managed-app-report-2026-10-12.xlsx' })
+    const second = await sendUpdateReportToSlack([app()], meta, 'C1')
+    expect(second).toMatchObject({ ok: true, fileAttached: false })
+    const none = await sendUpdateReportToSlack([app({ affectedDevices: 0, installed: [{ version: '6.1.0', deviceCount: 8, provider: 'manageengine-mdm' }] })], meta, 'C1')
+    expect(none.fileAttached).toBe(false)
+    expect(uploadSlackFile).toHaveBeenCalledTimes(2)
+  })
+})

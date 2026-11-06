@@ -1,5 +1,5 @@
 import { getSlackConfig } from '../../store/integrationStore.js'
-import { sendSlackMessage } from '../slack.js'
+import { sendSlackMessage, uploadSlackFile } from '../slack.js'
 import { exportToExcel, type ReportColumn } from '../reportExporter.js'
 import { formatCount, type ReportOverview } from '../reportOverview.js'
 import { ok, warn, type DataCheck } from '../dataQuality.js'
@@ -85,7 +85,7 @@ export function buildUpdateReport(apps: AssessedApp[], meta: UpdateReportMeta): 
   return { messages, updatesAvailable: updates.length, devicesBehind }
 }
 
-export async function sendUpdateReportToSlack(apps: AssessedApp[], meta: UpdateReportMeta, channelId = process.env.SLACK_APP_UPDATE_CHANNEL_ID ?? process.env.SLACK_CRITICAL_PATCH_CHANNEL_ID): Promise<{ ok: boolean; error?: string; updatesAvailable: number; devicesBehind: number }> {
+export async function sendUpdateReportToSlack(apps: AssessedApp[], meta: UpdateReportMeta, channelId = process.env.SLACK_APP_UPDATE_CHANNEL_ID ?? process.env.SLACK_CRITICAL_PATCH_CHANNEL_ID): Promise<{ ok: boolean; error?: string; fileAttached?: boolean; updatesAvailable: number; devicesBehind: number }> {
   const report = buildUpdateReport(apps, meta)
   const cfg = getSlackConfig()
   if (!cfg || (!cfg.webhookUrl && !(cfg.botToken && channelId))) {
@@ -95,7 +95,18 @@ export async function sendUpdateReportToSlack(apps: AssessedApp[], meta: UpdateR
     const sent = await sendSlackMessage(cfg, channelId, text)
     if (!sent.ok) return { ok: false, ...(sent.error ? { error: sent.error } : {}), updatesAvailable: report.updatesAvailable, devicesBehind: report.devicesBehind }
   }
-  return { ok: true, updatesAvailable: report.updatesAvailable, devicesBehind: report.devicesBehind }
+  // The Excel is a bonus on top of the message: the text is already delivered, so a failed upload must not
+  // report failure (callers would resend the whole report). Needs a bot token + channel; webhooks cannot upload.
+  let fileAttached = false
+  if (cfg.botToken && channelId && report.updatesAvailable > 0) {
+    try {
+      const workbook = await buildAppUpdatesWorkbook({ apps, syncedAt: meta.syncedAt, errors: meta.errors })
+      const uploaded = await uploadSlackFile(cfg, { channelId, filename: workbook.filename, title: 'Managed App Report', content: workbook.content, initialComment: ':page_facing_up: Full workbook: every managed app, installed vs latest verified version, and next steps.' })
+      fileAttached = uploaded.ok
+      if (!uploaded.ok) console.error('[app-update-report] Excel upload failed:', uploaded.error)
+    } catch (error) { console.error('[app-update-report] Could not build or upload the Excel:', error) }
+  }
+  return { ok: true, fileAttached, updatesAvailable: report.updatesAvailable, devicesBehind: report.devicesBehind }
 }
 
 /** What limits "apps behind": sync errors, inventory age, and apps whose latest version cannot be verified. */
@@ -161,6 +172,11 @@ export async function createAppUpdatesReport(): Promise<{ content: Buffer; filen
   let snap = svc.getSnapshot()
   if (!snap) { await svc.startSync(); snap = svc.getSnapshot() }
   if (!snap) throw new Error(`No verified application inventory is available: ${svc.getState().lastError ?? 'sync has not completed'}`)
+  return buildAppUpdatesWorkbook(snap)
+}
+
+/** Builds the Managed App Report workbook from an explicit inventory, so it can run mid-sync without touching the service. */
+export async function buildAppUpdatesWorkbook(snap: { apps: AssessedApp[]; syncedAt: string; errors: Record<string, string> }): Promise<{ content: Buffer; filename: string; rows: number; overview: ReportOverview }> {
   const rows = [...snap.apps]
     .sort((a, b) => (hasUpdateAvailable(b) ? 1 : 0) - (hasUpdateAvailable(a) ? 1 : 0) || b.affectedDevices - a.affectedDevices || a.identity.displayName.localeCompare(b.identity.displayName))
     .map(a => ({
