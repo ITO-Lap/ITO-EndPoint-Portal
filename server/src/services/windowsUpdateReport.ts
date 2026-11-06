@@ -4,6 +4,7 @@ import { getSlackConfig } from '../store/integrationStore.js'
 import { uploadSlackFile } from './slack.js'
 import { buildOverviewMessage, countBy, formatCount, topBreakdown, type ReportOverview } from './reportOverview.js'
 import { ok, warn, type DataCheck } from './dataQuality.js'
+import { credentialsFromEnv, getManagedDevices, type GraphManagedDevice } from './graphApi.js'
 import { dataFile, readJsonFile, writeJsonAtomic } from '../store/dataDir.js'
 import { isRebootRequired, isSupportedCriticalPatchClient } from './criticalPatchReport.js'
 
@@ -50,10 +51,19 @@ export const isWindowsClient = (system: PatchSystemStatus): boolean => system.pl
  * (e.g. "Windows 11, version 24H2"); Security = security updates, rollups and anything with a CVE/bulletin.
  * Anything else (non-security, drivers, service packs) is outside this report and returns null.
  */
+/** Windows itself plus its bundled components (.NET Framework, Defender, servicing stack); not Microsoft apps such as Visual Studio, SSMS or Microsoft 365 Apps. */
+export function isWindowsComponent(patch: MissingPatch): boolean {
+  const text = `${patch.name} ${patch.description}`
+  if (/visual studio|sql server|microsoft 365|office/i.test(text) && !/for windows (10|11)/i.test(text)) return false
+  return /windows\s*(10|11)|windows(10|11)\.0|\.net framework|defender|malicious software removal|servicing stack/i.test(text)
+}
+
 export function classifyWindowsUpdate(patch: MissingPatch): WindowsUpdateKind | null {
   const type = patch.updateType ?? ''
+  if (/bios|driver|firmware/i.test(type)) return null // vendor BIOS/driver packages carry bulletin IDs but are not Windows updates
   if (/feature|upgrade/i.test(type) || /feature update|\bversion\s*\d{2}h\d\b|\bupgrade\b/i.test(patch.name)) return 'Feature update'
   if (/non.?security/i.test(type)) return null
+  if (!isWindowsComponent(patch)) return null // Endpoint Central files Visual Studio, SSMS, Microsoft 365 Apps etc. under 'OS update' too
   if (/security|rollup|critical/i.test(type) || patch.cves.length > 0 || !!patch.bulletinId) return 'Security update'
   return null
 }
@@ -74,6 +84,39 @@ function recommendAction(kind: WindowsUpdateKind, priority: WindowsUpdatePriorit
 }
 
 const PRIORITY_ORDER: Record<WindowsUpdatePriority, number> = { 'P1 Urgent': 0, 'P2 High': 1, 'P3 Normal': 2 }
+// ── Feature updates ─────────────────────────────────────────────────────────────
+// Endpoint Central's patch data has no feature-update type (verified: only Security, Non-Security, Service Packs and
+// BIOS), so a missing feature update is detected from the device's Windows build in Intune: build < target build.
+const BUILD_LABELS: Record<number, string> = { 19045: 'Windows 10 22H2', 22621: 'Windows 11 22H2', 22631: 'Windows 11 23H2', 26100: 'Windows 11 24H2', 26200: 'Windows 11 25H2' }
+const DEFAULT_TARGET_BUILD = 26200 // Windows 11 25H2; set WINDOWS_FEATURE_TARGET_BUILD (e.g. 26300) when a newer release becomes the target.
+
+export function featureTargetBuild(): number {
+  const configured = Number(process.env.WINDOWS_FEATURE_TARGET_BUILD)
+  return Number.isInteger(configured) && configured >= 22000 ? configured : DEFAULT_TARGET_BUILD
+}
+export const windowsBuildOf = (osVersion: string): number | null => {
+  const build = Number(osVersion.split('.')[2])
+  return Number.isInteger(build) && build > 0 ? build : null
+}
+const buildLabel = (build: number): string => BUILD_LABELS[build] ?? `Windows build ${build}`
+/** Win10 22H2 / Win11 builds only; Windows Server builds (e.g. 20348) are not feature-update targets here. */
+const isClientBuild = (build: number): boolean => (build >= 19041 && build <= 19045) || build >= 22000
+
+export function buildFeatureUpdateRows(devices: GraphManagedDevice[], serverNames: ReadonlySet<string>, targetBuild = featureTargetBuild()): WindowsUpdateReportRow[] {
+  return devices.flatMap(d => {
+    if (!/windows/i.test(d.operatingSystem) || serverNames.has(d.deviceName.toLowerCase())) return []
+    const build = windowsBuildOf(d.osVersion)
+    if (build === null || !isClientBuild(build) || build >= targetBuild) return []
+    const priority: WindowsUpdatePriority = build < 22000 ? 'P1 Urgent' : BUILD_LABELS[build] === undefined || targetBuild - build > 200 ? 'P2 High' : 'P3 Normal'
+    return [{
+      priority, action: build < 22000 ? 'Windows 10 is out of support: upgrade to Windows 11 (check hardware readiness first).' : recommendAction('Feature update', priority, false),
+      device: d.deviceName, operatingSystem: `${buildLabel(build)} (${d.osVersion})`, kind: 'Feature update' as const,
+      update: `Feature update to ${buildLabel(targetBuild)}`, kb: '', severity: '', cves: '', releasedAt: '', daysMissing: '', rebootRequired: 'Yes',
+      lastScan: d.lastSyncDateTime ? new Date(d.lastSyncDateTime).toLocaleString('en-IN') : '',
+    }]
+  })
+}
+
 const KIND_ORDER: Record<WindowsUpdateKind, number> = { 'Feature update': 0, 'Security update': 1 }
 
 export function buildWindowsUpdateRows(systems: PatchSystemStatus[], patchesBySystem: Map<string, MissingPatch[]>, now = new Date()): WindowsUpdateReportRow[] {
@@ -138,7 +181,7 @@ function trackTrend(devices: string[], now: Date): WindowsUpdateTrend | null {
   return trend
 }
 
-export function buildWindowsUpdateOverview(systems: PatchSystemStatus[], rows: WindowsUpdateReportRow[], excludedOther: number, now = new Date(), trend: WindowsUpdateTrend | null = null): ReportOverview {
+export function buildWindowsUpdateOverview(systems: PatchSystemStatus[], rows: WindowsUpdateReportRow[], excludedOther: number, now = new Date(), trend: WindowsUpdateTrend | null = null, extraChecks: DataCheck[] = []): ReportOverview {
   const clients = systems.filter(isWindowsClient)
   const devices = (kind?: WindowsUpdateKind) => new Set(rows.filter(r => !kind || r.kind === kind).map(r => r.device)).size
   const failedScans = clients.filter(s => !s.scanSucceeded).length
@@ -154,6 +197,7 @@ export function buildWindowsUpdateOverview(systems: PatchSystemStatus[], rows: W
     excludedOther > 0
       ? ok('Scope', `${formatCount(excludedOther)} other missing OS update(s) (non-security, service packs) are outside this report.`)
       : ok('Scope', 'Only Feature and Security updates are reported.'),
+    ...extraChecks,
   ]
   return {
     title: 'Windows Updates (Feature & Security)',
@@ -175,14 +219,25 @@ export function buildWindowsUpdateOverview(systems: PatchSystemStatus[], rows: W
   }
 }
 
+async function loadIntuneWindowsDevices(): Promise<{ devices: GraphManagedDevice[]; error?: string }> {
+  try { return { devices: await getManagedDevices(credentialsFromEnv()) } }
+  catch (error) { return { devices: [], error: error instanceof Error ? error.message : 'unknown error' } }
+}
+
 export async function createWindowsUpdateReport(force = false): Promise<{ content: Buffer; filename: string; devices: number; rows: number; overview: ReportOverview }> {
-  const [systems, patchesBySystem] = await Promise.all([getPatchSystems(force), getFleetMissingOsPatches(force)])
+  const [systems, patchesBySystem, intune] = await Promise.all([getPatchSystems(force), getFleetMissingOsPatches(force), loadIntuneWindowsDevices()])
   const now = new Date()
-  const rows = buildWindowsUpdateRows(systems, patchesBySystem, now)
+  const serverNames = new Set(systems.filter(s => s.platform === 'Windows' && !isSupportedCriticalPatchClient(s)).flatMap(s => s.names.map(n => n.toLowerCase())))
+  const featureRows = buildFeatureUpdateRows(intune.devices, serverNames)
+  const rows = [...buildWindowsUpdateRows(systems, patchesBySystem, now), ...featureRows]
+    .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.device.localeCompare(b.device) || a.update.localeCompare(b.update))
+  const featureCheck: DataCheck = intune.error
+    ? warn('Feature updates', `Windows builds could not be read from Intune (${intune.error}), so Feature updates are not included in this report.`)
+    : ok('Feature updates', `Detected from Intune Windows builds: ${formatCount(intune.devices.length)} Windows devices checked against the ${buildLabel(featureTargetBuild())} target (build ${featureTargetBuild()}).`)
   const clientIds = new Set(systems.filter(s => s.scanSucceeded && isWindowsClient(s)).map(s => s.detailResourceId))
   const excludedOther = [...patchesBySystem].filter(([id]) => clientIds.has(id)).reduce((n, [, list]) => n + list.filter(p => !classifyWindowsUpdate(p)).length, 0)
   const trend = trackTrend([...new Set(rows.map(r => r.device))], now)
-  const overview = buildWindowsUpdateOverview(systems, rows, excludedOther, now, trend)
+  const overview = buildWindowsUpdateOverview(systems, rows, excludedOther, now, trend, [featureCheck])
   const content = await exportToExcel(rows.map(r => ({ ...r })), columns, {
     title: 'Windows Update Report', subtitle: 'Windows client devices missing Feature or Security updates, reported by Endpoint Central Patch Manager',
     generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, ...(overview.dataChecks ? { dataChecks: overview.dataChecks } : {}),
