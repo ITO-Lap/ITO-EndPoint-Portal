@@ -2,6 +2,8 @@ import type { MacAppClassification, MacAppSource } from './macAppClassification.
 import type { Device, AppStatus } from '../types.js'
 import type { RuntimeManageEngineConfig } from '../store/integrationStore.js'
 import { getManageEngineConfig } from '../store/integrationStore.js'
+import { dataFile, readJsonFile, writeFileAtomic } from '../store/dataDir.js'
+import { rmSync } from 'node:fs'
 
 // ManageEngine MDM On-Demand (Endpoint Central Cloud) — Zoho OAuth2 client-credentials-style
 // refresh-token flow. Distinct from on-prem Endpoint Central's static-API-key scheme; the two
@@ -16,6 +18,16 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null
+
+// Zoho throttles token requests, and the in-memory cache is lost on every restart, so a dev-server restart loop (or a
+// few quick deploys) can lock the integration out. Keep the short-lived access token on disk (owner-only, git-ignored
+// data folder) so a restart reuses it until it expires.
+const TOKEN_FILE = dataFile('manageengine-token.json')
+const persistToken = (t: TokenCache): void => { try { writeFileAtomic(TOKEN_FILE, JSON.stringify(t), 0o600) } catch { /* best effort */ } }
+function loadPersistedToken(clientId: string): TokenCache | null {
+  const t = readJsonFile<TokenCache>(TOKEN_FILE)
+  return t && t.clientId === clientId && typeof t.token === 'string' && typeof t.expiresAt === 'number' && Date.now() < t.expiresAt - 60_000 ? t : null
+}
 
 // Zoho enforces a per-minute rate limit on token exchanges for a given
 // refresh token; back-to-back requests (e.g. two processes refreshing close
@@ -36,7 +48,13 @@ async function requestAccessToken(cfg: RuntimeManageEngineConfig): Promise<{ acc
       await new Promise(r => setTimeout(r, TOKEN_RETRY_DELAYS_MS[attempt]))
       continue
     }
-    if (!res.ok) throw new Error(`ManageEngine auth failed: ${res.status} ${res.statusText}`)
+    if (!res.ok) {
+      // Zoho reports its token throttle as HTTP 400 {"error":"Access Denied","error_description":"You have made too many requests…"},
+      // so surface its own explanation instead of a bare "400".
+      const detail = await res.json().then((j: { error_description?: string; error?: string }) => j.error_description ?? j.error ?? '', () => '')
+      if (/too many requests/i.test(detail)) throw new Error('ManageEngine auth is temporarily rate-limited by Zoho (too many token requests). Wait a few minutes before retrying; frequent server restarts or manual test runs each request a new token.')
+      throw new Error(`ManageEngine auth failed: ${res.status} ${detail || res.statusText}`.trim())
+    }
     return res.json() as Promise<{ access_token?: string; error?: string; expires_in?: number; scope?: string }>
   }
 }
@@ -45,6 +63,8 @@ export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<st
   if (tokenCache && tokenCache.clientId === cfg.clientId && Date.now() < tokenCache.expiresAt - 60_000) {
     return tokenCache.token
   }
+  const persisted = loadPersistedToken(cfg.clientId)
+  if (persisted) { tokenCache = persisted; return persisted.token }
 
   const data = await requestAccessToken(cfg)
   if (!data.access_token) throw new Error(`ManageEngine auth failed: ${data.error ?? 'no access_token returned'}`)
@@ -55,6 +75,7 @@ export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<st
     clientId:  cfg.clientId,
     scope:     data.scope ?? '',
   }
+  persistToken(tokenCache)
   return tokenCache.token
 }
 
@@ -72,6 +93,7 @@ export async function zohoFetch(cfg: RuntimeManageEngineConfig, url: string, ini
   const res = await call()
   if (res.status !== 401) return res
   tokenCache = null
+  try { rmSync(TOKEN_FILE, { force: true }) } catch { /* ignore */ }
   return call()
 }
 

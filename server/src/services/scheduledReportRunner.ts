@@ -9,6 +9,7 @@
 // just on its own day/time-driven schedule instead of raw cron), so both
 // engines never fire for the same report.
 
+import { sendWindowsBriefing } from './windowsBriefing.js'
 import * as store from '../store/scheduledReportsStore.js'
 import type { ScheduledReportRecord } from '../store/scheduledReportsStore.js'
 import { createCriticalPatchReport } from './criticalPatchReport.js'
@@ -82,6 +83,7 @@ const CONTENT_TYPES: Record<string, string> = {
 async function generateReportContent(schedule: ScheduledReportRecord): Promise<{ content: Buffer; filename: string; rows: number; overview?: ReportOverview }> {
   switch (schedule.report_type) {
     case 'fleet-digest':
+    case 'windows-briefing':
     case 'entra-duplicate-devices': throw new Error(`${schedule.report_type} is delivered as a Slack message, not a file`)
     case 'critical-patching': { const r = await createCriticalPatchReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length, overview: r.overview } }
@@ -94,25 +96,37 @@ async function generateReportContent(schedule: ScheduledReportRecord): Promise<{
 
 async function deliver(schedule: ScheduledReportRecord, content: Buffer, filename: string, overview?: ReportOverview): Promise<{ ok: boolean; error?: string }> {
   const channelId = slackChannel(schedule.filters)
-  if (channelId) {
+  const hasEmail = schedule.recipients.length > 0
+  if (!channelId && !hasEmail) return { ok: false, error: 'This schedule has no Slack channel or email recipients configured.' }
+
+  // Slack and email are independent: a schedule with both sends to both, and reports which one failed.
+  const sendSlack = async (id: string): Promise<{ ok: boolean; error?: string }> => {
     const cfg = getSlackConfig()
     if (!cfg?.botToken) return { ok: false, error: 'Slack Bot OAuth token is not configured.' }
     // With an overview, the headline figures and the file arrive as one message
     // (Slack ignores blocks when an initial comment is present, so send only one).
     const today = new Date().toISOString().slice(0, 10)
     return uploadSlackFile(cfg, {
-      channelId, filename, title: schedule.name, content,
+      channelId: id, filename, title: schedule.name, content,
       ...(overview ? { blocks: buildOverviewMessage(overview, today).blocks } : { initialComment: `📊 ${schedule.name}` }),
     })
   }
-  if (schedule.recipients.length > 0) {
-    return sendReportEmail({
-      recipients: schedule.recipients, subject: schedule.name,
-      message: overview ? `${overviewToText(overview)}\n\nThe full report "${schedule.name}" is attached.` : `Your scheduled report "${schedule.name}" is attached.`,
-      filename, content, contentType: CONTENT_TYPES[schedule.format] ?? 'application/octet-stream',
-    })
-  }
-  return { ok: false, error: 'This schedule has no Slack channel or email recipients configured.' }
+  const sendEmail = () => sendReportEmail({
+    recipients: schedule.recipients, subject: schedule.name,
+    message: overview ? `${overviewToText(overview)}\n\nThe full report "${schedule.name}" is attached.` : `Your scheduled report "${schedule.name}" is attached.`,
+    filename, content, contentType: CONTENT_TYPES[schedule.format] ?? 'application/octet-stream',
+  })
+
+  const slackResult = channelId ? await sendSlack(channelId) : null
+  const emailResult = hasEmail ? await sendEmail() : null
+  const failures: string[] = []
+  if (slackResult && !slackResult.ok) failures.push(`Slack: ${slackResult.error ?? 'delivery failed'}`)
+  if (emailResult && !emailResult.ok) failures.push(`Email: ${emailResult.error ?? 'delivery failed'}`)
+  if (failures.length === 0) return { ok: true }
+  // Single destination: keep the plain upstream error (no Slack:/Email: prefix).
+  if (!(slackResult && emailResult)) return { ok: false, error: (slackResult ?? emailResult)?.error ?? 'Delivery failed' }
+  const delivered = [slackResult?.ok && 'Slack', emailResult?.ok && 'Email'].filter(Boolean).join(' and ')
+  return { ok: false, error: `${failures.join('; ')}${delivered ? ` (${delivered} delivered)` : ''}` }
 }
 
 async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'scheduler') {
@@ -128,6 +142,17 @@ async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 
         error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
       })
       return { ok: true, runId: runRecord?.id, rows: digest.snapshot?.total ?? 0, filename: undefined }
+    }
+    if (schedule.report_type === 'windows-briefing') {
+      const channelId = slackChannel(schedule.filters)
+      if (!channelId) throw new Error('The Windows Patch Tuesday briefing is delivered to Slack; configure a Slack channel for this schedule.')
+      const result = await sendWindowsBriefing(channelId)
+      if (!result.ok) throw new Error(result.error ?? 'Delivery failed')
+      const runRecord = await store.recordReportRun(schedule.id, {
+        status: 'completed', format: schedule.format, record_count: result.devices ?? 0, file_size_bytes: null,
+        error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
+      })
+      return { ok: true, runId: runRecord?.id, rows: result.devices ?? 0, filename: undefined }
     }
     if (schedule.report_type === 'entra-duplicate-devices') {
       const channelId = slackChannel(schedule.filters)
@@ -160,7 +185,9 @@ async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 
 
 /** Runs a schedule and puts the outcome on the bell, so automatic deliveries are visible without opening Slack. */
 async function run(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 'scheduler') {
-  const destination = slackChannel(schedule.filters) ? 'to Slack' : 'by email'
+  const toSlack = !!slackChannel(schedule.filters)
+  const toEmail = schedule.recipients.length > 0 && schedule.report_type !== 'fleet-digest' && schedule.report_type !== 'entra-duplicate-devices' && schedule.report_type !== 'windows-briefing'
+  const destination = toSlack && toEmail ? 'to Slack and email' : toSlack ? 'to Slack' : 'by email'
   try {
     const result = await execute(schedule, triggeredBy)
     addNotification(`${schedule.name} delivered ${destination}${triggeredBy === 'manual' ? ' (manual run)' : ''}.`, 'success')

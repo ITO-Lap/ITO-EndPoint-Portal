@@ -119,12 +119,15 @@ async function seedBuiltinRoles(): Promise<void> {
          ON CONFLICT (name) DO NOTHING`,
         [name, JSON.stringify(builtinPermissions(name))],
       )
+      // Built-in roles seeded by an older build lack keys added since (e.g. a new page); existing values win.
+      await query('UPDATE custom_roles SET permissions = $2::jsonb || permissions WHERE name = $1 AND is_builtin', [name, JSON.stringify(builtinPermissions(name))])
     }
     return
   }
   const now = new Date().toISOString()
   for (const name of names) {
-    if (state.roles.some(r => r.name === name)) continue
+    const existing = state.roles.find(r => r.name === name)
+    if (existing) { existing.permissions = { ...builtinPermissions(name), ...existing.permissions }; continue }
     state.roles.push({ id: randomUUID(), name, is_builtin: true, permissions: builtinPermissions(name), created_by: null, created_at: now, updated_at: now })
   }
   persist()

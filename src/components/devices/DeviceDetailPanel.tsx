@@ -8,9 +8,11 @@ import {
 } from 'lucide-react'
 import { api } from '../../api'
 import { CopyText } from '../ui/CopyText'
+import { DeviceLogsTab } from './DeviceLogsTab'
+import { useOptionalPermissions } from '../../context/PermissionsContext'
 import type { ApiDevice, AppStatus, ManageEngineDeviceProfileSnapshot } from '../../api'
 
-type Tab = 'overview' | 'hardware' | 'network' | 'security' | 'apps' | 'compliance'
+type Tab = 'overview' | 'hardware' | 'network' | 'security' | 'apps' | 'compliance' | 'logs'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview',   label: 'Overview'   },
@@ -19,6 +21,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'security',   label: 'Security'   },
   { id: 'apps',       label: 'Apps'       },
   { id: 'compliance', label: 'Compliance' },
+  { id: 'logs',       label: 'Logs'       },
 ]
 
 interface Props {
@@ -741,6 +744,8 @@ function formatProfileAppliedTime(value: string): string {
 
 export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices', initialTab = 'overview' }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
+  const perms = useOptionalPermissions()
+  const canLogs = perms?.['devices.logs'] === true && (d.platform === 'Windows' || d.platform === 'macOS')
 
   const failedApps = d.apps?.filter(a => a.status === 'Failed').length ?? 0
   const pendingApps = d.apps?.filter(a => a.status === 'Pending').length ?? 0
@@ -794,7 +799,7 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
 
         {/* Tabs */}
         <div className="flex gap-0.5 px-5 pb-0 overflow-x-auto">
-          {TABS.map(tab => {
+          {TABS.filter(t => t.id !== 'logs' || canLogs).map(tab => {
             const hasBadge = tab.id === 'apps' && (failedApps + pendingApps) > 0
             return (
               <button
@@ -827,6 +832,7 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
         {activeTab === 'security'   && <SecurityTab   d={d} />}
         {activeTab === 'apps'       && <AppsTab       d={d} />}
         {activeTab === 'compliance' && <ComplianceTab d={d} />}
+        {activeTab === 'logs'       && canLogs && <DeviceLogsTab d={d} />}
       </div>
     </div>
   )

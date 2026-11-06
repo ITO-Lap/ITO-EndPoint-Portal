@@ -18,7 +18,7 @@ import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from './dat
 import { randomUUID } from 'crypto'
 import { isDbAvailable, query } from '../db/index.js'
 
-export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest' | 'entra-duplicate-devices' | 'windows-updates'
+export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest' | 'entra-duplicate-devices' | 'windows-updates' | 'windows-briefing'
 export type ReportFormat = 'pdf' | 'excel' | 'csv' | 'pptx'
 export type NotificationFrequency = 'daily' | 'weekly'
 
@@ -218,12 +218,12 @@ export async function createReport(input: {
   return record
 }
 
-export async function updateReport(id: string, patch: Partial<Pick<ScheduledReportRecord, 'name' | 'schedule_cron' | 'format' | 'recipients' | 'is_active'>>): Promise<ScheduledReportRecord | undefined> {
+export async function updateReport(id: string, patch: Partial<Pick<ScheduledReportRecord, 'name' | 'schedule_cron' | 'format' | 'recipients' | 'filters' | 'is_active'>>): Promise<ScheduledReportRecord | undefined> {
   if (USE_DB) {
     const fields = Object.keys(patch) as Array<keyof typeof patch>
     if (fields.length === 0) return getReport(id)
     const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ')
-    const values = fields.map(f => (f === 'recipients' ? JSON.stringify(patch[f]) : patch[f]))
+    const values = fields.map(f => (f === 'recipients' || f === 'filters' ? JSON.stringify(patch[f]) : patch[f]))
     const { rows } = await query<ReportRow>(
       `UPDATE scheduled_reports SET ${sets}, updated_at = NOW() WHERE id = $1 RETURNING *`,
       [id, ...values],

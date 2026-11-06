@@ -1,7 +1,9 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies } from '../services/intune.js'
+import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies, requestIntuneDiagnostics, getIntuneDiagnosticsStatus } from '../services/intune.js'
+import { requireCapability } from '../middleware/requireRole.js'
+import { collectDeviceLog, logToCsv, logToExcel, logFilename } from '../services/deviceLogs.js'
 import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies, getManageEngineDeviceProfileResults, getManageEngineDeviceProfileResultsForDevices } from '../services/manageEngine.js'
 import { recordFetchResult } from '../store/integrationStore.js'
 import { loadSourceDevices, saveSourceDevices, type DeviceSource } from '../store/deviceSnapshotStore.js'
@@ -39,7 +41,7 @@ function categorizeIssue(primaryIssue: string): string | null {
 // (apps/policies/detail) re-fetches the entire fleet (5000+ Intune devices)
 // from Graph just to find one record, which took ~100s in practice.
 const CACHE_TTL_MS = 5 * 60 * 1000
-const SOURCE_FETCH_TIMEOUT_MS = 30_000
+const SOURCE_FETCH_TIMEOUT_MS = 60_000
 export interface FetchedDevices {
   devices: Device[]
   mock: boolean
@@ -308,6 +310,55 @@ router.get('/:id/profile-results', asyncHandler(async (req, res) => {
 
   const profiles = await getManageEngineDeviceProfileResults(deviceId)
   res.json({ success: true, data: profiles })
+}))
+
+// ── Device logs (activity history + export + Windows diagnostics) ─────────────
+const paramId = (req: { params: Record<string, string | string[] | undefined> }, name = 'id'): string => { const v = req.params[name]; return (Array.isArray(v) ? v[0] : v) ?? '' }
+async function findDevice(id: string): Promise<Device | undefined> { return (await fetchAllDevices()).devices.find(d => d.id === id) }
+
+// GET /api/devices/:id/logs — activity timeline for one device (JSON).
+router.get('/:id/logs', requireCapability('devices.logs'), asyncHandler(async (req, res) => {
+  const device = await findDevice(paramId(req))
+  if (!device) { res.status(404).json({ success: false, error: 'Device not found' }); return }
+  res.json({ success: true, data: await collectDeviceLog(device) })
+}))
+
+// GET /api/devices/:id/logs/export?format=csv|excel — downloadable log file.
+router.get('/:id/logs/export', requireCapability('devices.logs'), asyncHandler(async (req, res) => {
+  const device = await findDevice(paramId(req))
+  if (!device) { res.status(404).json({ success: false, error: 'Device not found' }); return }
+  const format = req.query['format'] === 'csv' ? 'csv' : 'excel'
+  const log = await collectDeviceLog(device)
+  console.info(`[device-logs] ${req.header('x-user-email') ?? 'unknown'} exported ${format} log for device ${device.id}`)
+  if (format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${logFilename(log, 'csv')}"`)
+    res.send(logToCsv(log))
+    return
+  }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader('Content-Disposition', `attachment; filename="${logFilename(log, 'xlsx')}"`)
+  res.send(await logToExcel(log, req.header('x-user-email') ?? 'ITO Endpoint'))
+}))
+
+// POST /api/devices/:id/diagnostics — ask Intune to collect diagnostics from a Windows device.
+router.post('/:id/diagnostics', requireCapability('devices.logs'), asyncHandler(async (req, res) => {
+  const device = await findDevice(paramId(req))
+  if (!device) { res.status(404).json({ success: false, error: 'Device not found' }); return }
+  if (device.platform !== 'Windows' || device.managementSource !== 'Microsoft Intune' || !isIntuneConfigured()) {
+    res.status(400).json({ success: false, error: 'Diagnostics collection is available for Windows devices managed by Intune only.' }); return
+  }
+  console.info(`[device-logs] ${req.header('x-user-email') ?? 'unknown'} requested Intune diagnostics for device ${device.id}`)
+  try { res.json({ success: true, data: await requestIntuneDiagnostics(device.id) }) }
+  catch (e) { res.status(502).json({ success: false, error: e instanceof Error ? e.message : 'Diagnostics request failed' }) }
+}))
+
+// GET /api/devices/:id/diagnostics/:requestId — status; includes a download link once Intune has finished.
+router.get('/:id/diagnostics/:requestId', requireCapability('devices.logs'), asyncHandler(async (req, res) => {
+  const device = await findDevice(paramId(req))
+  if (!device || device.managementSource !== 'Microsoft Intune') { res.status(404).json({ success: false, error: 'Device not found' }); return }
+  try { res.json({ success: true, data: await getIntuneDiagnosticsStatus(device.id, paramId(req, 'requestId')) }) }
+  catch (e) { res.status(502).json({ success: false, error: e instanceof Error ? e.message : 'Diagnostics status failed' }) }
 }))
 
 // GET /api/devices/:id

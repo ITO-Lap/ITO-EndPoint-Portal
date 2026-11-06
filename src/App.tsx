@@ -21,6 +21,7 @@ import { PolicyConflictPage } from './pages/PolicyConflictPage'
 import { RiskScoringPage } from './pages/RiskScoringPage'
 import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { PatchOperationsPage } from './pages/PatchOperationsPage'
+import { WindowsUpdatesPage } from './pages/WindowsUpdatesPage'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { CopilotPanel } from './components/copilot/CopilotPanel'
 import { api, apiDeviceToDeviceData } from './api'
@@ -35,7 +36,7 @@ import {
 } from 'lucide-react'
 import { ZinniaBadge } from './components/ui/ZinniaLogo'
 import type { StatCardData, UserToolRole } from './types'
-import { canAccess } from './lib/permissions'
+import { canAccess, isPageListed } from './lib/permissions'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import { CopilotContextProvider } from './context/CopilotContextProvider'
 import { PermissionsProvider, usePermissions } from './context/PermissionsContext'
@@ -108,11 +109,24 @@ const PAGE_META: Record<string, { description: string }> = {
   'Settings':           { description: 'Configure integrations, notification preferences, and account settings.' },
 }
 
+const PAGE_PARAM = 'page'
+function pageFromHash(): string {
+  const page = new URLSearchParams(window.location.hash.replace(/^#/, '')).get(PAGE_PARAM)
+  return page && isPageListed(page) ? page : 'Dashboard'
+}
+function writePageToHash(page: string): void {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  if (page === 'Dashboard') params.delete(PAGE_PARAM); else params.set(PAGE_PARAM, page)
+  const frag = params.toString()
+  window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${frag ? `#${frag}` : ''}`)
+}
+
 function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerRole: string; displayName?: string; userEmail?: string; onSignOut?: () => void }) {
   const permissions = usePermissions()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  // Always open on the Dashboard (on page load and after sign-in), not on the last page visited.
-  const [activePage, setActivePage] = useState('Dashboard')
+  // The current page lives in the URL hash (#page=Windows%20Updates) so a refresh stays on it and Back/Forward work.
+  // A fresh sign-in or an unknown/missing value opens the Dashboard.
+  const [activePage, setActivePage] = useState(pageFromHash)
   const [searchInput, setSearchInput] = useState('')
   const [searchLoading, setSearchLoading] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
@@ -125,6 +139,16 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [activePage])
+
+  // Keep the URL hash in step with the page, and follow Back/Forward.
+  useEffect(() => {
+    if (pageFromHash() !== activePage) writePageToHash(activePage)
+  }, [activePage])
+  useEffect(() => {
+    const onPop = () => setActivePage(pageFromHash())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   const { stats, offline, countdown, lastUpdated, refresh: refreshStats } = useStats()
   const { notifications, markAllRead } = useNotifications()
@@ -318,6 +342,8 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                   <RiskScoringPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Patch Operations' ? (
                   <PatchOperationsPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Windows Updates' ? (
+                  <WindowsUpdatesPage onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Scheduled Reports' ? (
                   <ScheduledReportsPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
 

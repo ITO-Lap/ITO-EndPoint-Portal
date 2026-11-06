@@ -11,7 +11,8 @@ import { asyncHandler } from '../middleware/errorHandler.js'
 
 const router = Router()
 
-const VALID_TYPES: ReportType[] = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices', 'windows-updates']
+const SLACK_ONLY = new Set<string>(['fleet-digest', 'entra-duplicate-devices', 'windows-briefing'])
+const VALID_TYPES: ReportType[] = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices', 'windows-updates', 'windows-briefing']
 const VALID_FORMATS: ReportFormat[] = ['pdf', 'excel', 'csv', 'pptx']
 
 // Validate a 5-field cron expression (lightweight — not a full parser)
@@ -69,15 +70,33 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/scheduled-reports/:id
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { name, schedule_cron, format, recipients, is_active } = req.body as {
-    name?: string; schedule_cron?: string; format?: string; recipients?: string[]; is_active?: boolean
+  const { name, schedule_cron, format, recipients, filters, is_active } = req.body as {
+    name?: string; schedule_cron?: string; format?: string; recipients?: string[]; filters?: Record<string, unknown>; is_active?: boolean
   }
 
   if (schedule_cron && !isValidCron(schedule_cron)) {
     res.status(400).json({ success: false, error: 'Invalid cron expression' }); return
   }
 
+  if (format !== undefined && !VALID_FORMATS.includes(format as ReportFormat)) {
+    res.status(400).json({ success: false, error: `format must be one of: ${VALID_FORMATS.join(', ')}` }); return
+  }
+  const existing = await store.getReport(req.params.id as string)
+  if (!existing) { res.status(404).json({ success: false, error: 'Schedule not found' }); return }
+  // Validate the delivery that will result from this update, not just the fields sent.
+  const nextFilters = filters ?? existing.filters
+  const nextRecipients = recipients ?? existing.recipients
+  const slackId = (nextFilters as { slackChannelId?: unknown }).slackChannelId
+  const nextHasSlack = typeof slackId === 'string' && slackId.trim().length > 0
+  if (!nextHasSlack && nextRecipients.length === 0) {
+    res.status(400).json({ success: false, error: 'A Slack channel or at least one email recipient is required.' }); return
+  }
+  if (!nextHasSlack && SLACK_ONLY.has(existing.report_type)) {
+    res.status(400).json({ success: false, error: 'This report is delivered to Slack only; a Slack channel is required.' }); return
+  }
+
   const patch: Record<string, unknown> = {}
+  if (filters !== undefined) patch.filters = filters
   if (name !== undefined) patch.name = name
   if (schedule_cron !== undefined) patch.schedule_cron = schedule_cron
   if (format !== undefined) patch.format = format

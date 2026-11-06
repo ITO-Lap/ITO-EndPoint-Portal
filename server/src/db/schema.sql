@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS scheduled_reports (
   id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   tenant_id      UUID REFERENCES tenants(id) ON DELETE CASCADE,
   name           TEXT NOT NULL,
-  report_type    TEXT NOT NULL,          -- critical-patching | stale-devices | compliance | inventory | app-updates | fleet-digest | entra-duplicate-devices | windows-updates
+  report_type    TEXT NOT NULL,          -- critical-patching | stale-devices | compliance | inventory | app-updates | fleet-digest | entra-duplicate-devices | windows-updates | windows-briefing
   schedule_cron  TEXT NOT NULL,          -- standard 5-field cron expression
   format         TEXT NOT NULL DEFAULT 'pdf',  -- pdf | excel | csv | pptx
   recipients     JSONB NOT NULL DEFAULT '[]',  -- ["user@org.com", …]

@@ -17,3 +17,8 @@ export function usePermissions(): PermissionMap {
   if (!ctx) throw new Error('usePermissions must be inside PermissionsProvider')
   return ctx
 }
+
+/** Like usePermissions(), but returns null outside a provider (for shared components that also render in isolation). */
+export function useOptionalPermissions(): PermissionMap | null {
+  return useContext(PermissionsContext)
+}

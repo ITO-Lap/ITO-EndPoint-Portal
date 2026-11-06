@@ -98,9 +98,9 @@ export const windowsBuildOf = (osVersion: string): number | null => {
   const build = Number(osVersion.split('.')[2])
   return Number.isInteger(build) && build > 0 ? build : null
 }
-const buildLabel = (build: number): string => BUILD_LABELS[build] ?? `Windows build ${build}`
+export const buildLabel = (build: number): string => BUILD_LABELS[build] ?? `Windows build ${build}`
 /** Win10 22H2 / Win11 builds only; Windows Server builds (e.g. 20348) are not feature-update targets here. */
-const isClientBuild = (build: number): boolean => (build >= 19041 && build <= 19045) || build >= 22000
+export const isClientBuild = (build: number): boolean => (build >= 19041 && build <= 19045) || build >= 22000
 
 export function buildFeatureUpdateRows(devices: GraphManagedDevice[], serverNames: ReadonlySet<string>, targetBuild = featureTargetBuild()): WindowsUpdateReportRow[] {
   return devices.flatMap(d => {
@@ -224,13 +224,19 @@ async function loadIntuneWindowsDevices(): Promise<{ devices: GraphManagedDevice
   catch (error) { return { devices: [], error: error instanceof Error ? error.message : 'unknown error' } }
 }
 
-export async function createWindowsUpdateReport(force = false): Promise<{ content: Buffer; filename: string; devices: number; rows: number; overview: ReportOverview }> {
+/** Gathers the per-device missing Feature/Security updates (Endpoint Central + Intune builds). Shared by the report and the Windows Updates page. */
+export async function collectWindowsUpdateRows(force = false) {
   const [systems, patchesBySystem, intune] = await Promise.all([getPatchSystems(force), getFleetMissingOsPatches(force), loadIntuneWindowsDevices()])
   const now = new Date()
   const serverNames = new Set(systems.filter(s => s.platform === 'Windows' && !isSupportedCriticalPatchClient(s)).flatMap(s => s.names.map(n => n.toLowerCase())))
   const featureRows = buildFeatureUpdateRows(intune.devices, serverNames)
   const rows = [...buildWindowsUpdateRows(systems, patchesBySystem, now), ...featureRows]
     .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.device.localeCompare(b.device) || a.update.localeCompare(b.update))
+  return { systems, patchesBySystem, intune, serverNames, rows, now }
+}
+
+export async function createWindowsUpdateReport(force = false): Promise<{ content: Buffer; filename: string; devices: number; rows: number; overview: ReportOverview }> {
+  const { systems, patchesBySystem, intune, rows, now } = await collectWindowsUpdateRows(force)
   const featureCheck: DataCheck = intune.error
     ? warn('Feature updates', `Windows builds could not be read from Intune (${intune.error}), so Feature updates are not included in this report.`)
     : ok('Feature updates', `Detected from Intune Windows builds: ${formatCount(intune.devices.length)} Windows devices checked against the ${buildLabel(featureTargetBuild())} target (build ${featureTargetBuild()}).`)

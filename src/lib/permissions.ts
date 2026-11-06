@@ -12,7 +12,7 @@ export const KNOWN_PAGES = [
   'Dashboard',
   'Managed Devices', 'ManageEngine App Inventory', 'Stale Devices', 'App Guardian',
   'Mac Fleet Reports', 'Entra Intelligence',
-  'Security Posture', 'Policy Conflicts', 'Risk Scoring', 'Role Activity Audit', 'Patch Operations',
+  'Security Posture', 'Policy Conflicts', 'Risk Scoring', 'Role Activity Audit', 'Patch Operations', 'Windows Updates',
   'Automation',
   'Reports & Analytics', 'Scheduled Reports',
   'Settings', 'Documentation',

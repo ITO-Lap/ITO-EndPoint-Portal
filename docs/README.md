@@ -69,6 +69,8 @@ docs/
 - [Automation Engine](07-features/AUTOMATION-ENGINE.md) ← **New**
 - [App Intelligence](07-features/APP-INTELLIGENCE.md)
 - [Stale Devices](07-features/STALE-DEVICES.md)
+- [Windows Updates](07-features/WINDOWS-UPDATES.md) — exposure score, CISA KEV deadline clock, Patch Tuesday briefing ← **New**
+- [Device Logs](07-features/DEVICE-LOGS.md) — per-device activity log, export, Windows diagnostics ← **New**
 - [Entra Intelligence Dashboard](07-features/ENTRA-INTELLIGENCE.md) ← **New**
 
 ### Design & UI guidelines

@@ -23,6 +23,7 @@ import roleActivityRouter from './routes/roleActivity.js'
 import intuneScriptsConfigRouter from './routes/intuneScriptsConfig.js'
 import copilotRouter from './routes/copilot.js'
 import patchRouter from './routes/patch.js'
+import windowsUpdatesRouter from './routes/windowsUpdates.js'
 import endpointCentralRouter from './routes/endpointCentral.js'
 import securityPostureRouter from './routes/securityPosture.js'
 import appIntelRouter from './routes/appIntel.js'
@@ -76,7 +77,7 @@ const strictLimiter = rateLimit({
 
 void strictLimiter // reserved for future rate-limited endpoints
 
-app.use(cors())
+app.use(cors({ exposedHeaders: ['Content-Disposition'] }))
 app.use(express.json())
 app.use(requestLogger)
 
@@ -113,6 +114,7 @@ app.use('/api/role-activity',      apiLimiter, roleActivityRouter)
 app.use('/api/intune-scripts-config', apiLimiter, intuneScriptsConfigRouter)
 app.use('/api/copilot',            apiLimiter, copilotRouter)
 app.use('/api/patch',              apiLimiter, patchRouter)
+app.use('/api/windows-updates',    apiLimiter, windowsUpdatesRouter)
 app.use('/api/endpoint-central',   apiLimiter, endpointCentralRouter)
 app.use('/api/security-posture',   apiLimiter, securityPostureRouter)
 app.use('/api/app-intel',          apiLimiter, appIntelRouter)

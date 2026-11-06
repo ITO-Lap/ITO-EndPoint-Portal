@@ -149,3 +149,11 @@ Never paste `.env`, tokens, client secrets, `session-secret`, `integration-crede
 | Host, IIS, service, backups | Infrastructure | — |
 
 *Names and on-call details are Not verified; fill in your organisation's contacts.*
+
+## ManageEngine shows "Error" / "auth failed: 400"
+
+Zoho throttles token requests and reports it as HTTP 400 ("You have made too many requests continuously"). The app now shows that explanation, and keeps the access token in `manageengine-token.json` in the data folder so server restarts reuse it. Cause: frequent restarts or repeated manual runs each request a new token. Fix: wait a few minutes (Zoho decides when it clears), avoid restart loops, then refresh the dashboard. If it persists, re-generate the refresh token in the Zoho API console.
+
+## Intune shows "Error" but credentials are fine
+
+Each source gets 60 s per device fetch (`SOURCE_FETCH_TIMEOUT_MS` in `server/src/routes/devices.ts`); under load (several heavy jobs at once) a ~5,000-device pull can exceed a shorter limit and the badge keeps the last error until the next successful refresh. Refresh the dashboard; Graph 429 responses clear on their own.

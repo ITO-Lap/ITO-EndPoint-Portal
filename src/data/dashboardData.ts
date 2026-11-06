@@ -16,6 +16,7 @@ import {
   Activity,
   Wrench,
   BookOpen,
+  RefreshCcw,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -42,6 +43,7 @@ export const navItems: NavItem[] = [
 
   // ── PATCHES ───────────────────────────────────────────────────────────────────
   { id: 'patch_operations',     title: 'Patch Operations',    icon: Wrench,        group: 'Patches', badge: 'New' },
+  { id: 'windows_updates',      title: 'Windows Updates',     icon: RefreshCcw,    group: 'Patches' },
 
   // ── SECURITY ──────────────────────────────────────────────────────────────────
   { id: 'security_posture',     title: 'Security Posture',    icon: Shield,        group: 'Security' },

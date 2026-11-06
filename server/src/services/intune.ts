@@ -606,3 +606,76 @@ export function getIntuneSelfServiceWindowsApps(cfg?: RuntimeIntuneConfig, force
   }
   return selfService
 }
+
+// ── Device activity log + diagnostics collection ──────────────────────────────
+
+export interface IntuneActivityEntry { time: string; category: 'Action' | 'Remote action'; event: string; status: string; detail: string }
+
+/** Actions performed on a device (sync, restart, wipe, …) from the managed device record and Intune's remote-action audit. */
+export async function getIntuneDeviceActivity(deviceId: string, deviceName: string, cfg?: RuntimeIntuneConfig): Promise<IntuneActivityEntry[]> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const headers = { Authorization: `Bearer ${await getAccessToken(config)}` }
+  const out: IntuneActivityEntry[] = []
+  const errors: string[] = []
+
+  const detail = await fetch(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${encodeURIComponent(deviceId)}?$select=deviceActionResults,lastSyncDateTime`, { headers })
+  if (detail.ok) {
+    const j = await detail.json() as { deviceActionResults?: Array<{ actionName?: string; actionState?: string; startDateTime?: string; lastUpdatedDateTime?: string }> }
+    for (const a of j.deviceActionResults ?? []) out.push({ time: a.startDateTime ?? a.lastUpdatedDateTime ?? '', category: 'Action', event: a.actionName ?? 'Device action', status: a.actionState ?? '', detail: a.lastUpdatedDateTime ? `Last updated ${a.lastUpdatedDateTime}` : '' })
+  } else errors.push(`device record ${detail.status}`)
+
+  // remoteActionAudits is a beta-only collection. Filter server-side by device id; if Graph refuses the filter,
+  // read the most recent audits and match locally by id or display name.
+  const base = 'https://graph.microsoft.com/beta/deviceManagement/remoteActionAudits'
+  type AuditRow = { action?: string; actionState?: string; requestDateTime?: string; initiatedByUserPrincipalName?: string; deviceDisplayName?: string; managedDeviceId?: string }
+  let audit = await fetch(`${base}?$filter=${encodeURIComponent(`managedDeviceId eq '${deviceId.replace(/'/g, "''")}'`)}&$top=100`, { headers })
+  let local = false
+  if (audit.status === 400) { audit = await fetch(`${base}?$top=500`, { headers }); local = true }
+  if (audit.ok) {
+    const j = await audit.json() as { value?: AuditRow[] }
+    const rows = (j.value ?? []).filter(a => !local || a.managedDeviceId === deviceId || a.deviceDisplayName === deviceName)
+    for (const a of rows) out.push({ time: a.requestDateTime ?? '', category: 'Remote action', event: a.action ?? 'Remote action', status: a.actionState ?? '', detail: a.initiatedByUserPrincipalName ? `Requested by ${a.initiatedByUserPrincipalName}` : '' })
+  } else errors.push(`remote action audit ${audit.status}`)
+
+  if (!out.length && errors.length === 2) throw new Error(`Microsoft Graph refused both action-history requests (${errors.join(', ')}); the app registration may lack DeviceManagementManagedDevices.Read.All.`)
+  return out
+}
+
+export interface IntuneDiagnosticsStatus { requestId: string; status: string; requestedAt: string; expiresAt: string; downloadUrl?: string }
+
+const diagFromGraph = (j: { id?: string; status?: string; requestedDateTime?: string; expirationDateTime?: string }): IntuneDiagnosticsStatus => ({
+  requestId: j.id ?? '', status: j.status ?? 'unknown', requestedAt: j.requestedDateTime ?? '', expiresAt: j.expirationDateTime ?? '',
+})
+
+const diagError = async (res: Response, what: string): Promise<Error> => {
+  const body = await res.text().catch(() => '')
+  const hint = res.status === 403 ? ' The app registration needs the DeviceManagementManagedDevices.PrivilegedOperations.All Graph application permission (admin consent).' : ''
+  return new Error(`${what} failed (${res.status}).${hint} ${body.slice(0, 160)}`.trim())
+}
+
+/** Asks Intune to collect diagnostics from a Windows device (beta API; the device must be online). */
+export async function requestIntuneDiagnostics(deviceId: string, cfg?: RuntimeIntuneConfig): Promise<IntuneDiagnosticsStatus> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const res = await fetch(`https://graph.microsoft.com/beta/deviceManagement/managedDevices/${encodeURIComponent(deviceId)}/createDeviceLogCollectionRequest`, {
+    method: 'POST', headers: { Authorization: `Bearer ${await getAccessToken(config)}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ templateType: { '@odata.type': '#microsoft.graph.deviceLogCollectionRequest', templateType: 'predefined' } }),
+  })
+  if (!res.ok) throw await diagError(res, 'Diagnostics request')
+  return diagFromGraph(await res.json() as Parameters<typeof diagFromGraph>[0])
+}
+
+export async function getIntuneDiagnosticsStatus(deviceId: string, requestId: string, cfg?: RuntimeIntuneConfig): Promise<IntuneDiagnosticsStatus> {
+  const config = cfg ?? getIntuneConfig()
+  if (!config) throw new Error('Intune credentials not configured')
+  const headers = { Authorization: `Bearer ${await getAccessToken(config)}` }
+  const base = `https://graph.microsoft.com/beta/deviceManagement/managedDevices/${encodeURIComponent(deviceId)}/logCollectionRequests/${encodeURIComponent(requestId)}`
+  const res = await fetch(base, { headers })
+  if (!res.ok) throw await diagError(res, 'Diagnostics status')
+  const status = diagFromGraph(await res.json() as Parameters<typeof diagFromGraph>[0])
+  if (status.status.toLowerCase() === 'completed') {
+    const dl = await fetch(`${base}/createDownloadUrl`, { method: 'POST', headers })
+    if (dl.ok) { const j = await dl.json() as { value?: string }; if (j.value) status.downloadUrl = j.value }
+  }
+  return status
+}

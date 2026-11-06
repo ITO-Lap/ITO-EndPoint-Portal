@@ -57,7 +57,9 @@ describe('sign-in endpoints', () => {
   it('signs in the allow-listed email and returns the user', async () => {
     const r = await call('POST', '/api/auth/session', { body: { email: 'avinash.verma@zinnia.com' } })
     expect(r.status).toBe(200)
-    expect(r.json['data'].user).toEqual({ email: 'avinash.verma@zinnia.com', displayName: 'Avinash Verma', role: 'Global Admin' })
+    expect(r.json['data'].user).toMatchObject({ email: 'avinash.verma@zinnia.com', displayName: 'Avinash Verma', role: 'Global Admin' })
+    // The client renders with this on first load, so it must carry the permission map like GET /me does.
+    expect(r.json['data'].user.permissions['devices.logs']).toBe(true)
   })
   it('refuses other emails without issuing a token', async () => {
     const r = await call('POST', '/api/auth/session', { body: { email: 'someone.else@zinnia.com' } })

@@ -223,3 +223,5 @@ Helpdesk therefore has read-only access to this module — the same tier that ha
 ---
 
 *For questions about this documentation, contact: it-support@zinnia.com*
+
+> **Device logs** (`devices.logs`): pulling and exporting a device's log from Managed Devices is open to Global Admin, IT Admin and Helpdesk by default; it is a toggle for custom roles. See [07-features/DEVICE-LOGS.md](07-features/DEVICE-LOGS.md).

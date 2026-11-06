@@ -301,11 +301,14 @@ router.get('/config', (_req, res) => {
 })
 
 // POST /api/auth/session { email, password? } — signs in an allow-listed email
-router.post('/session', signInLimiter, (req, res) => {
+router.post('/session', signInLimiter, (req, res, next) => {
   const body = (req.body ?? {}) as { email?: unknown; password?: unknown }
   const result = authenticate(body.email, body.password)
   if (!result.ok) { res.status(result.status).json({ success: false, error: result.error }); return }
-  res.json({ success: true, data: { token: signSession(result.claims), user: result.claims } })
+  // The client needs the permission map on first render (same shape as GET /me), not only after a reload.
+  permissionsForRole(result.claims.role)
+    .then(permissions => res.json({ success: true, data: { token: signSession(result.claims), user: { ...result.claims, permissions } } }))
+    .catch(next)
 })
 
 // GET /api/auth/me — the signed-in user for a Bearer token (used on page load).
