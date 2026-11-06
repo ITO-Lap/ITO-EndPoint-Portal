@@ -176,7 +176,7 @@ Sidebar title is still **"ManageEngine App Inventory"** (the RBAC page key), pag
 | Purpose | Ad-hoc report catalogue and exports; recurring reports posted to Slack/email; weekly fleet digest |
 | UI | `components/reports/ReportsPage.tsx`, `pages/ReportBuilderPage.tsx`, `pages/ScheduledReportsPage.tsx`, `components/notifications/*` |
 | API | `GET /api/reports`, `POST /:id/run`, `GET /:id/export/csv`; `GET/POST/PUT/DELETE /api/scheduled-reports`, `POST /:id/run`, `GET /:id/runs`; `GET /api/notification-schedules`, `PATCH /:module/:sourceId` (`notificationSchedules.edit`) |
-| Report types | `critical-patching`, `stale-devices`, `compliance`, `inventory`, `app-updates`, `fleet-digest`, `entra-duplicate-devices` (formats pdf, excel, csv, pptx) — `store/scheduledReportsStore.ts` |
+| Report types | `critical-patching`, `stale-devices`, `compliance`, `inventory`, `app-updates`, `fleet-digest`, `entra-duplicate-devices`, `windows-updates` (formats pdf, excel, csv, pptx) — `store/scheduledReportsStore.ts` |
 | Logic | 60-second tick; cron expression + timezone match; Slack channel in `filters.slackChannelId`; schedules with an opened "Slack Notification Schedule" section are owned by the generic notification scheduler instead (comment in `scheduledReportRunner.ts`) |
 | Digest | Daily snapshot saved per run; week-over-week deltas vs the snapshot closest to 7 days back (max 14 days) |
 | Errors | If the workbook cannot be built the digest is posted without the file and the run is reported as failed; a snapshot is saved only after a successful post |

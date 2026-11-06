@@ -18,7 +18,7 @@ import { dataFile, legacyServerFile, readJsonFile, writeJsonAtomic } from './dat
 import { randomUUID } from 'crypto'
 import { isDbAvailable, query } from '../db/index.js'
 
-export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest' | 'entra-duplicate-devices'
+export type ReportType = 'critical-patching' | 'stale-devices' | 'compliance' | 'inventory' | 'app-updates' | 'fleet-digest' | 'entra-duplicate-devices' | 'windows-updates'
 export type ReportFormat = 'pdf' | 'excel' | 'csv' | 'pptx'
 export type NotificationFrequency = 'daily' | 'weekly'
 

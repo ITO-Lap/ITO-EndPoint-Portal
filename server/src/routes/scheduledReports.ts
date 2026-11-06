@@ -11,7 +11,7 @@ import { asyncHandler } from '../middleware/errorHandler.js'
 
 const router = Router()
 
-const VALID_TYPES: ReportType[] = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices']
+const VALID_TYPES: ReportType[] = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices', 'windows-updates']
 const VALID_FORMATS: ReportFormat[] = ['pdf', 'excel', 'csv', 'pptx']
 
 // Validate a 5-field cron expression (lightweight — not a full parser)

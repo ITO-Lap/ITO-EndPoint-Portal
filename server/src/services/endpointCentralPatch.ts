@@ -315,11 +315,12 @@ export async function getMissingPatches(
 // Posture page show WHICH critical patches each device is missing without a request per device.
 
 let fleetCriticalCache: { map: Map<string, MissingPatch[]>; expiresAt: number } | null = null
+let fleetOsCache: { map: Map<string, MissingPatch[]>; expiresAt: number } | null = null
 
-export function clearFleetCriticalCache(): void { fleetCriticalCache = null }
+export function clearFleetCriticalCache(): void { fleetCriticalCache = null; fleetOsCache = null }
 
-export async function getFleetCriticalPatches(force = false): Promise<Map<string, MissingPatch[]>> {
-  if (!force && fleetCriticalCache && Date.now() < fleetCriticalCache.expiresAt) return fleetCriticalCache.map
+/** Pages the fleet-wide missing-patch report once. `severity` narrows server-side; `keep` filters each device's patches. */
+async function fetchFleetMissingPatches(severity: PatchSeverity | undefined, keep: (p: MissingPatch) => boolean): Promise<Map<string, MissingPatch[]>> {
   const cfg = getManageEngineConfig()
   if (!cfg) throw new PatchApiError('upstream', 'ManageEngine is not configured')
 
@@ -327,7 +328,8 @@ export async function getFleetCriticalPatches(force = false): Promise<Map<string
   const map = new Map<string, MissingPatch[]>()
 
   for (let page = 1; page <= FLEET_MAX_PAGES; page++) {
-    const q = new URLSearchParams({ severity: 'Critical', patch_status: 'Missing', pageLimit: String(DETAIL_PAGE_LIMIT), page: String(page) })
+    const q = new URLSearchParams({ patch_status: 'Missing', pageLimit: String(DETAIL_PAGE_LIMIT), page: String(page) })
+    if (severity) q.set('severity', severity)
     const res = await zohoFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${q}`)
     if (res.status === 401 || res.status === 403) throw new PatchApiError('scope_required', `Patch API rejected the token (${res.status})`)
     const text = await res.text().catch(() => '')
@@ -336,12 +338,25 @@ export async function getFleetCriticalPatches(force = false): Promise<Map<string
     if (!res.ok || json.errorCode) throw new PatchApiError('upstream', `Patch API ${res.status} ${json.errorCode ?? ''}: ${(json.errorMsg ?? text).slice(0, 200)}`)
     if (json.response_code === 204) break
     for (const row of json.message_response?.systemreport ?? []) {
-      const patches = normalizeRawPatches(row.patches ?? []).filter(p => p.severity === 'Critical')
+      const patches = normalizeRawPatches(row.patches ?? []).filter(keep)
       if (row.resource_id !== undefined && patches.length) map.set(String(row.resource_id), patches)
     }
     if (page >= Number(json.metadata?.totalPages ?? 1)) break
   }
+  return map
+}
 
+export async function getFleetCriticalPatches(force = false): Promise<Map<string, MissingPatch[]>> {
+  if (!force && fleetCriticalCache && Date.now() < fleetCriticalCache.expiresAt) return fleetCriticalCache.map
+  const map = await fetchFleetMissingPatches('Critical', p => p.severity === 'Critical')
   fleetCriticalCache = { map, expiresAt: Date.now() + CACHE_TTL_MS }
+  return map
+}
+
+/** Fleet-wide missing OS patches of every severity (security, non-security, feature/upgrade); third-party apps excluded. */
+export async function getFleetMissingOsPatches(force = false): Promise<Map<string, MissingPatch[]>> {
+  if (!force && fleetOsCache && Date.now() < fleetOsCache.expiresAt) return fleetOsCache.map
+  const map = await fetchFleetMissingPatches(undefined, p => p.category === 'OS update')
+  fleetOsCache = { map, expiresAt: Date.now() + CACHE_TTL_MS }
   return map
 }

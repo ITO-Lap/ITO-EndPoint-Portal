@@ -22,6 +22,7 @@ import { sendReportEmail } from './reportEmail.js'
 import { sendFleetDigest } from './fleetDigest.js'
 import { addNotification } from '../data/notificationStore.js'
 import { buildOverviewMessage, overviewToText, type ReportOverview } from './reportOverview.js'
+import { createWindowsUpdateReport } from './windowsUpdateReport.js'
 import { sendDuplicateDevicesReport } from './entraDuplicateDevicesReport.js'
 
 function matchesPart(value: number, expression: string): boolean {
@@ -84,6 +85,7 @@ async function generateReportContent(schedule: ScheduledReportRecord): Promise<{
     case 'entra-duplicate-devices': throw new Error(`${schedule.report_type} is delivered as a Slack message, not a file`)
     case 'critical-patching': { const r = await createCriticalPatchReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length, overview: r.overview } }
+    case 'windows-updates':   { const r = await createWindowsUpdateReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'app-updates':       { const r = await createAppUpdatesReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'compliance':        return createComplianceReport(schedule.format as ExportFormat)
     case 'inventory':         return createInventoryReport(schedule.format as ExportFormat)

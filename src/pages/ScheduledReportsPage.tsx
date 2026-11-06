@@ -7,7 +7,7 @@ import { canEditSlackSchedules } from '../lib/permissions'
 import { SlackScheduleSection } from '../components/notifications/SlackScheduleSection'
 import { usePermissions } from '../context/PermissionsContext'
 
-const REPORT_TYPES = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices']
+const REPORT_TYPES = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices', 'windows-updates']
 const FORMATS      = ['pdf', 'excel', 'csv', 'pptx']
 const DEFAULT_RECIPIENT = 'ITO_Endpoint@zinnia.com'
 const DEFAULT_SLACK_CHANNEL = 'C08S9K7G2AH'
@@ -149,7 +149,7 @@ export function ScheduledReportsPage({ onBack, viewerRole = 'Global Admin', user
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Report Type *</label>
               <select value={form.report_type} onChange={e => setForm(p => ({ ...p, report_type: e.target.value }))} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:outline-none">
-                {REPORT_TYPES.map(t => <option key={t} value={t}>{t === 'app-updates' ? 'Managed App Report' : t === 'fleet-digest' ? 'fleet health digest (Slack only)' : t === 'entra-duplicate-devices' ? 'duplicate Entra device objects (Slack only)' : t.replace('-', ' ')}</option>)}
+                {REPORT_TYPES.map(t => <option key={t} value={t}>{t === 'app-updates' ? 'Managed App Report' : t === 'windows-updates' ? 'Windows updates (feature & security)' : t === 'fleet-digest' ? 'fleet health digest (Slack only)' : t === 'entra-duplicate-devices' ? 'duplicate Entra device objects (Slack only)' : t.replace('-', ' ')}</option>)}
               </select>
             </div>
             <div>
