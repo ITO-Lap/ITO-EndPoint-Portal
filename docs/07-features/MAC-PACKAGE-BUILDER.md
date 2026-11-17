@@ -13,14 +13,13 @@ copy** — change the original, then:
 ```bash
 npm run sync:mac-builder     # mirror the original into apps/mac-package-builder (adds, updates and deletes)
 npm run check:mac-builder    # exit 1 if the copy differs from the original (use before committing / in CI)
-npm run sync:mac-builder -- --with-agent   # also mirror WindowsBuildAgent (the .NET Windows worker)
 ```
 
 `apps/mac-package-builder/.synced-from` records where and when it was last mirrored.
 
 ## What is and is not copied
 
-Allow-listed only: `Sources`, `Tests`, `scripts`, `docs`, `Package.swift`, `Package.resolved`, `README*.md`, `CHECKLIST.md`.
+The whole project is mirrored: `Sources`, `Tests`, `scripts`, `docs`, `WindowsBuildAgent` (the .NET Windows worker), the App Guardian workspace (`apps/`, `services/`, `api/`, `database/`, `package.json`, `package-lock.json`), `Package.swift`, `Package.resolved`, `README*.md`, `CHECKLIST.md`. Only an allow-list of top-level paths is read, so stray local output (such as the original's `~` folder) is never copied.
 Never copied: `.build`, `dist*`, `node_modules`, `bin/obj`, `.signing/`, keychains, `keychain.pass`, `*.p12/.pfx/.pem/.key`,
 `.env*`, `*.dmg/.pkg/.app`. The script aborts (exit 2) if any signing material or secret is found in the copy.
 

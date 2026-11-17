@@ -2,6 +2,10 @@
 .swiftpm/
 dist/
 dist-*/
+bin/
+obj/
+node_modules/
+*.tsbuildinfo
 .signing/
 *.keychain*
 keychain.pass

@@ -5,7 +5,7 @@
 #   npm run check:mac-builder         exit 1 if the copy has drifted from the original (use in CI / before commits)
 #
 # Options: --source <dir>   original project (default: ../Apps Package Builder, or $MAC_BUILDER_SOURCE)
-#          --with-agent     also mirror WindowsBuildAgent (the .NET Windows worker)
+#          --with-agent     accepted for compatibility (WindowsBuildAgent is now always included)
 #          --check          report differences only; change nothing
 #
 # Only an allow-list of source paths is copied. Build output, signing material (.signing/, keychains, *.pass, *.p12, keys)
@@ -39,9 +39,10 @@ EXCLUDES=(
   --exclude='.env' --exclude='.env.*' --exclude='*.dmg' --exclude='*.pkg' --exclude='*.app/' --exclude='*.tsbuildinfo'
 )
 
-DIRS=(Sources Tests scripts docs)
-FILES=(Package.swift Package.resolved README.md README-INSTALL.md CHECKLIST.md)
-(( WITH_AGENT )) && DIRS+=(WindowsBuildAgent)
+# The complete project: the Swift app, the Windows build agent, and the App Guardian workspace (apps/, services/, api/, database/).
+# Not copied: build output, signing material, editor settings, and stray local output such as the '~' folder.
+DIRS=(Sources Tests scripts docs WindowsBuildAgent api apps database services)
+FILES=(Package.swift Package.resolved package.json package-lock.json README.md README-INSTALL.md CHECKLIST.md)
 
 scan_for_secrets() {
   local hits
@@ -69,7 +70,7 @@ if [[ "$MODE" == check ]]; then
   [[ -d "$DEST" ]] || { echo "No copy yet: run npm run sync:mac-builder"; exit 1; }
   for d in $DIRS;  do [[ -d "$SRC/$d" ]] && changes+="$(run_rsync "$SRC/$d/" "$DEST/$d/" -n | prefixed "$d" || true)"$'\n'; done
   for f in $FILES; do [[ -f "$SRC/$f" ]] && changes+="$(file_sync "$f" check)"$'\n'; done
-  changes="$(printf '%s' "$changes" | sed '/^$/d' | grep -v 'creating directory' || true)"
+  changes="$(printf '%s' "$changes" | sed '/^$/d' | grep -v 'creating directory' | grep -v '^\.d\.\.t' || true)"
   scan_for_secrets
   if [[ -n "$changes" ]]; then echo "apps/mac-package-builder differs from the original:"; echo "$changes"; echo "Run: npm run sync:mac-builder"; exit 1; fi
   echo "apps/mac-package-builder is in sync with $SRC"; exit 0
@@ -80,7 +81,8 @@ for d in $DIRS;  do [[ -d "$SRC/$d" ]] && { mkdir -p "$DEST/$d"; changes+="$(run
 for f in $FILES; do [[ -f "$SRC/$f" ]] && changes+="$(file_sync "$f")"$'\n'; done
 scan_for_secrets
 
-[[ -f "$DEST/.gitignore" ]] || printf '.build/\n.swiftpm/\ndist/\ndist-*/\n.signing/\n*.keychain*\nkeychain.pass\n.DS_Store\n' > "$DEST/.gitignore"
+# Keep build output out of git even if someone builds inside the copy (rewritten each sync; it is not part of the original).
+printf '.build/\n.swiftpm/\ndist/\ndist-*/\nbin/\nobj/\nnode_modules/\n*.tsbuildinfo\n.signing/\n*.keychain*\nkeychain.pass\n.DS_Store\n' > "$DEST/.gitignore"
 commit="$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo none)"
 {
   echo "Mirrored from: $SRC"

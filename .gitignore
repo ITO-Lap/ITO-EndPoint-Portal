@@ -53,3 +53,6 @@ server/.cache
 
 # Runtime data folder (DATA_DIR default for local development)
 server/data/
+
+# The mirrored macOS project (apps/mac-package-builder) includes the Windows agent solution file
+!apps/mac-package-builder/**/*.sln

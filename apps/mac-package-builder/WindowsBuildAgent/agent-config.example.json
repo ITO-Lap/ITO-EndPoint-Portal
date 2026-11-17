@@ -1,0 +1,8 @@
+{
+  "ListenPrefix": "https://windows-agent.example.internal:8443/",
+  "WorkspaceRoot": "C:\\ProgramData\\AppPackageBuilder\\Jobs",
+  "TokenSha256": "REPLACE_WITH_SHA256_OF_LONG_RANDOM_BEARER_TOKEN",
+  "IntuneWinAppUtilPath": "C:\\Tools\\IntuneWinAppUtil.exe",
+  "MaximumConcurrentJobs": 2,
+  "AllowedSources": ["winget", "msstore"]
+}
