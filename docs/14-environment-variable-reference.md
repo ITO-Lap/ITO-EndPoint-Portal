@@ -48,6 +48,17 @@
 | `ENDPOINT_CENTRAL_BASE_URL` / `ENDPOINT_CENTRAL_PATCH_URL` | O | | Patch Manager host (default `https://endpointcentral.manageengine.com`) | | `endpointCentralPatch.ts`, `endpointCentralSoftware.ts`, `patchOperations.ts` |
 | `MAC_ADMIN_REPORT_KEY` | O | S | Shared secret (16+ chars) the Mac script sends as `x-report-key`; unset = ingest disabled | Generate randomly | `services/macAdminAccess.ts` |
 
+## 4b. Windows Package Builder
+
+| Variable | Req | S | Purpose / format | How to obtain | Used in |
+|---|---|---|---|---|---|
+| `WIN_PACKAGER_MAX_UPLOAD_MB` | O | | Upload limit in MB (default 2048; capped at the 30 GB Intune limit) | Choose | `winPackager/workspace.ts` |
+| `WIN_PACKAGER_RETENTION_DAYS` | O | | Delete finished job workspaces older than this (default 14) | Choose | `routes/winPackager.ts` |
+| `WIN_PACKAGER_WORKER_URL` | O | | HTTPS base URL of the Windows worker. Unset = "API Unavailable"; installers are never run on this server | Worker host owner | `winPackager/worker.ts` |
+| `WIN_PACKAGER_WORKER_TOKEN` | O | S | Bearer token the worker validates; also the HMAC key for the worker's signed source/output links. Never sent to the browser | Generate a long random value; configure the same on the worker | `winPackager/worker.ts`, `signing.ts` |
+| `WIN_PACKAGER_PUBLIC_URL` | O | | HTTPS URL of this server as the worker reaches it (for signed links) | Deployment URL | `routes/winPackager.ts` |
+| `ENDPOINT_CENTRAL_SOFTWARE_API_URL` / `ENDPOINT_CENTRAL_SOFTWARE_API_VERIFIED` | O | | Only when a separate software-distribution API host and permissions are verified (`VERIFIED=true`). Otherwise the guide shows "Endpoint Central publishing API not configured" | Endpoint Central admin | `winPackager/guides.ts` |
+
 ## 5. Slack, Teams, Jira, Confluence
 
 | Variable | Req | S | Purpose | Used in |

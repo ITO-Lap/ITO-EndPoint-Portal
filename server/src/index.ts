@@ -33,6 +33,8 @@ import dashboardRouter from './routes/dashboard.js'
 import rolesRouter from './routes/roles.js'
 import { macAdminIngestRouter, macAdminReadRouter } from './routes/macAdminAccess.js'
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
+import winPackagerRouter, { cleanupOldJobs } from './routes/winPackager.js'
+import winPackagerWorkerRouter from './routes/winPackagerWorker.js'
 import { startScheduledReportRunner, stopScheduledReportRunner, runScheduledReportNow } from './services/scheduledReportRunner.js'
 import { startAutomationScheduler, stopAutomationScheduler } from './services/automationScheduler.js'
 import { startVerifiedAppReleaseMonitor, stopVerifiedAppReleaseMonitor } from './services/appIntel/releaseMonitor.js'
@@ -92,6 +94,10 @@ app.use('/api/mac-admin-access', macAdminIngestRouter)
 app.use('/api', requireSessionExceptAuth)
 if (authEnforced() && emailSignInEnabled() && !passwordRequired()) {
   console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Unset AUTH_PASSWORDLESS (Microsoft sign-in only) or set AUTH_PASSWORD before exposing this beyond a trusted network.')
+// The Windows packaging worker pulls sources / pushes packages with short-lived HMAC-signed links, not a user session
+// (see routes/winPackagerWorker.ts). Mounted before the session gate; every request is verified against the link signature.
+app.use('/api/win-packager-worker', rateLimit({ windowMs: 15 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false }), winPackagerWorkerRouter)
+
 }
 if (!authEnforced()) console.warn('[auth] AUTH_ENFORCED=false: the API is NOT protected.')
 
@@ -127,6 +133,7 @@ app.use('/api/mac-admin-access',       apiLimiter, macAdminReadRouter)
 // ── Serve the built frontend (single-process deployment) ───────────────────────
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,
 // two levels up. In local dev, Vite serves the frontend separately (port 5173)
+app.use('/api/win-packager',           apiLimiter, winPackagerRouter)
 // and this directory won't exist, so this block is skipped entirely.
 const clientDist = path.join(__dirname, '../../dist')
 if (fs.existsSync(clientDist)) {
@@ -167,3 +174,8 @@ const server = app.listen(port, () => {
 
 process.on('SIGTERM', () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); server.close() })
 process.on('SIGINT',  () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); server.close() })
+
+  // Windows Package Builder: remove finished job workspaces past the retention window (WIN_PACKAGER_RETENTION_DAYS).
+  const sweep = (): void => { try { const n = cleanupOldJobs(); if (n) console.log(`[win-packager] removed ${n} expired job workspace(s)`) } catch (e) { console.warn('[win-packager] cleanup failed:', e instanceof Error ? e.message : e) } }
+  sweep()
+  setInterval(sweep, 6 * 60 * 60 * 1000).unref()

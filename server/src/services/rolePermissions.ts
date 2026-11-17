@@ -23,7 +23,7 @@ const PAGE_TITLES = [
   'Dashboard',
   'Managed Devices', 'ManageEngine App Inventory', 'Stale Devices', 'App Guardian',
   'Mac Fleet Reports', 'Entra Intelligence',
-  'Security Posture', 'Policy Conflicts', 'Risk Scoring', 'Role Activity Audit', 'Patch Operations', 'Windows Updates',
+  'Security Posture', 'Policy Conflicts', 'Risk Scoring', 'Role Activity Audit', 'Patch Operations', 'Windows Updates', 'Windows Package Builder',
   'Automation',
   'Reports & Analytics', 'Scheduled Reports',
   'Settings', 'Documentation',
@@ -56,6 +56,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'roleActivity.export',                    label: 'Export Role Activity Audit data' },
       { key: 'settings.navigationEdit',                label: 'Edit sidebar navigation visibility' },
       { key: 'roles.manage',                           label: 'Manage custom roles & user assignments' },
+      { key: 'winPackager.read',                       label: 'Windows Package Builder: view jobs' },
+      { key: 'winPackager.write',                      label: 'Windows Package Builder: upload sources & edit configuration' },
+      { key: 'winPackager.validate',                   label: 'Windows Package Builder: run Windows validation & create packages' },
+      { key: 'winPackager.publish',                    label: 'Windows Package Builder: approve publishing (never automatic)' },
     ],
   },
 ]
@@ -72,7 +76,7 @@ function permsFor(trueKeys: string[]): PermissionMap {
 
 // Mirrors today's PAGE_ROLES in src/lib/permissions.ts exactly.
 const IT_ADMIN_PAGES = PAGE_TITLES // IT Admin is listed on every page today
-const HELPDESK_EXCLUDED_PAGES = ['Policy Conflicts', 'Risk Scoring', 'Automation', 'Reports & Analytics', 'Scheduled Reports', 'Settings']
+const HELPDESK_EXCLUDED_PAGES = ['Policy Conflicts', 'Risk Scoring', 'Automation', 'Reports & Analytics', 'Scheduled Reports', 'Settings', 'Windows Package Builder']
 const HELPDESK_PAGES = PAGE_TITLES.filter(t => !HELPDESK_EXCLUDED_PAGES.includes(t))
 
 export const BUILTIN_ROLE_DEFAULTS: Record<'IT Admin' | 'Helpdesk', PermissionMap> = {
@@ -89,6 +93,7 @@ export const BUILTIN_ROLE_DEFAULTS: Record<'IT Admin' | 'Helpdesk', PermissionMa
     'roleActivity.export', 'settings.navigationEdit',
   ]),
   'Helpdesk': permsFor([
+    'winPackager.read', 'winPackager.write', 'winPackager.validate',
     ...HELPDESK_PAGES.map(pageKey),
     'appIntel.read',
     'securityPolicies.read',

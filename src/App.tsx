@@ -22,6 +22,7 @@ import { RiskScoringPage } from './pages/RiskScoringPage'
 import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { PatchOperationsPage } from './pages/PatchOperationsPage'
 import { WindowsUpdatesPage } from './pages/WindowsUpdatesPage'
+import { WindowsPackageBuilderPage } from './pages/WindowsPackageBuilderPage'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { CopilotPanel } from './components/copilot/CopilotPanel'
 import { api, apiDeviceToDeviceData } from './api'
@@ -344,6 +345,8 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                   <PatchOperationsPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Windows Updates' ? (
                   <WindowsUpdatesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Windows Package Builder' ? (
+                  <WindowsPackageBuilderPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} />
                 ) : activePage === 'Scheduled Reports' ? (
                   <ScheduledReportsPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} {...(userEmail ? { userEmail } : {})} />
 
