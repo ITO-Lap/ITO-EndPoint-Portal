@@ -23,6 +23,7 @@ import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { PatchOperationsPage } from './pages/PatchOperationsPage'
 import { WindowsUpdatesPage } from './pages/WindowsUpdatesPage'
 import { WindowsPackageBuilderPage } from './pages/WindowsPackageBuilderPage'
+import { WhatsNewBanner } from './components/layout/WhatsNewBanner'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { CopilotPanel } from './components/copilot/CopilotPanel'
 import { api, apiDeviceToDeviceData } from './api'
@@ -283,6 +284,7 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
             />
             <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
               <div className="mx-auto w-full max-w-[1600px]">
+                {activePage === 'Dashboard' && <WhatsNewBanner canOpen={p => canAccess(viewerRole as UserToolRole, permissions, p)} onOpen={setActivePage} />}
                 {!canAccess(viewerRole as UserToolRole, permissions, activePage) ? (
                   <AccessDenied page={activePage} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Dashboard' ? (

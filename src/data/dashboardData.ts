@@ -41,7 +41,7 @@ export const navItems: NavItem[] = [
   // ── APPLICATIONS ──────────────────────────────────────────────────────────────
   { id: 'manageengine_apps',    title: 'ManageEngine App Inventory', icon: Layers, group: 'Applications' },
   { id: 'app_guardian',         title: 'App Guardian',        icon: ShieldCheck,   group: 'Applications', badge: 'Mac' },
-  { id: 'windows_package_builder', title: 'Windows Package Builder', icon: Package, group: 'Applications' },
+  { id: 'windows_package_builder', title: 'Windows Package Builder', icon: Package, group: 'Applications', badge: 'New' },
 
   // ── PATCHES ───────────────────────────────────────────────────────────────────
   { id: 'patch_operations',     title: 'Patch Operations',    icon: Wrench,        group: 'Patches', badge: 'New' },
