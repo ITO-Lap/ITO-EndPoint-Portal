@@ -1,0 +1,11 @@
+#!/bin/sh
+# Runs as root at the end of the .pkg install (manual or via Endpoint Central).
+# $2 = install location (/Applications), $3 = destination volume.
+# Clears the download-quarantine flag so an unsigned app opens without a
+# second Gatekeeper prompt. Never touches user data. Always exits 0.
+LOCATION="${2:-/Applications}"
+VOLUME="${3:-/}"
+[ "$VOLUME" = "/" ] && VOLUME=""
+APP="$VOLUME$LOCATION/App Package Builder.app"
+[ -d "$APP" ] && /usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+exit 0
