@@ -23,6 +23,7 @@ import { ScheduledReportsPage } from './pages/ScheduledReportsPage'
 import { PatchOperationsPage } from './pages/PatchOperationsPage'
 import { WindowsUpdatesPage } from './pages/WindowsUpdatesPage'
 import { WindowsPackageBuilderPage } from './pages/WindowsPackageBuilderPage'
+import { MacPackageBuilderPage } from './pages/MacPackageBuilderPage'
 import { WhatsNewBanner } from './components/layout/WhatsNewBanner'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { CopilotPanel } from './components/copilot/CopilotPanel'
@@ -347,6 +348,8 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                   <PatchOperationsPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Windows Updates' ? (
                   <WindowsUpdatesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Mac Package Builder' ? (
+                  <MacPackageBuilderPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} />
                 ) : activePage === 'Windows Package Builder' ? (
                   <WindowsPackageBuilderPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} />
                 ) : activePage === 'Scheduled Reports' ? (

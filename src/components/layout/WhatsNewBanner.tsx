@@ -13,7 +13,17 @@ const WHATS_NEW: WhatsNewEntry[] = [
     steps: [
       'Upload an .msi, .exe, .msix, .appx or .zip — it is inspected automatically (nothing is run on this server).',
       'Review the suggested silent commands and detection rule, then validate on the Windows worker.',
-      'Create the .intunewin and follow the Intune / Endpoint Central publishing guide. Nothing is published automatically.',
+      'Approve the configuration and create the .intunewin, then open the output folder. This module only packages — it does not publish to Intune.',
+    ],
+  },
+  {
+    id: 'mac-package-builder-v1',
+    page: 'Mac Package Builder',
+    title: 'New: Mac Package Builder (Package Builder menu)',
+    steps: [
+      'Download the native macOS app (when published) or build it from the bundled source.',
+      'Build macOS packages, or browse an .msi/.exe and create the .intunewin on your Mac.',
+      'For MSI files the ProductCode, version and uninstall command are read automatically.',
     ],
   },
 ]

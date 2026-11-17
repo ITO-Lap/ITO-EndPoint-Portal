@@ -35,6 +35,7 @@ import { macAdminIngestRouter, macAdminReadRouter } from './routes/macAdminAcces
 import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 import winPackagerRouter, { cleanupOldJobs } from './routes/winPackager.js'
 import winPackagerWorkerRouter from './routes/winPackagerWorker.js'
+import macPackagerRouter from './routes/macPackager.js'
 import { startScheduledReportRunner, stopScheduledReportRunner, runScheduledReportNow } from './services/scheduledReportRunner.js'
 import { startAutomationScheduler, stopAutomationScheduler } from './services/automationScheduler.js'
 import { startVerifiedAppReleaseMonitor, stopVerifiedAppReleaseMonitor } from './services/appIntel/releaseMonitor.js'
@@ -134,6 +135,7 @@ app.use('/api/mac-admin-access',       apiLimiter, macAdminReadRouter)
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,
 // two levels up. In local dev, Vite serves the frontend separately (port 5173)
 app.use('/api/win-packager',           apiLimiter, winPackagerRouter)
+app.use('/api/mac-packager',           apiLimiter, macPackagerRouter)
 // and this directory won't exist, so this block is skipped entirely.
 const clientDist = path.join(__dirname, '../../dist')
 if (fs.existsSync(clientDist)) {

@@ -57,6 +57,7 @@
 | `WIN_PACKAGER_WORKER_URL` | O | | HTTPS base URL of the Windows worker. Unset = "API Unavailable"; installers are never run on this server | Worker host owner | `winPackager/worker.ts` |
 | `WIN_PACKAGER_WORKER_TOKEN` | O | S | Bearer token the worker validates; also the HMAC key for the worker's signed source/output links. Never sent to the browser | Generate a long random value; configure the same on the worker | `winPackager/worker.ts`, `signing.ts` |
 | `WIN_PACKAGER_PUBLIC_URL` | O | | HTTPS URL of this server as the worker reaches it (for signed links) | Deployment URL | `routes/winPackager.ts` |
+| `MAC_PACKAGE_BUILDER_DIST_DIR` | O | | Absolute folder with published macOS builds (`.dmg`/`.pkg`/`.zip`) offered on the Mac Package Builder page. Unset = no downloads; the page shows build-from-source steps | Create the folder; copy a trusted build into it | `services/macPackager.ts` |
 | `ENDPOINT_CENTRAL_SOFTWARE_API_URL` / `ENDPOINT_CENTRAL_SOFTWARE_API_VERIFIED` | O | | Only when a separate software-distribution API host and permissions are verified (`VERIFIED=true`). Otherwise the guide shows "Endpoint Central publishing API not configured" | Endpoint Central admin | `winPackager/guides.ts` |
 
 ## 5. Slack, Teams, Jira, Confluence

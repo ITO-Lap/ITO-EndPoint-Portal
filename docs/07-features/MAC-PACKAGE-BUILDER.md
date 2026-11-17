@@ -37,3 +37,22 @@ scripts/build-release.sh      # -> dist/App Package Builder.app (unsigned unless
 The original is not its own git repository (it sits inside a larger one and its sources are untracked), so there is
 nothing for a subtree or submodule to point at. If it is moved into its own repository later, replace the script with
 `git subtree add --prefix=apps/mac-package-builder <repo> main --squash`.
+
+## Portal page — Package Builder → Mac Package Builder
+
+The portal lists **Mac Package Builder** under the **Package Builder** menu (next to Windows Package Builder). The page is
+read-only: it explains the tool, shows the bundled source's sync status, gives copyable build commands, and offers published
+builds for download. It cannot run the macOS app — that is a native app.
+
+| API (`/api/mac-packager`) | Permission | Purpose |
+|---|---|---|
+| `GET /info` | `macPackager.read` | features, requirements, build steps, source/sync info, published builds (name, size, date, SHA-256) |
+| `GET /download/:name` | `macPackager.read` | stream one published `.dmg` / `.pkg` / `.zip` (audited as `macPackager.download`) |
+
+**Publishing a build for download:** set `MAC_PACKAGE_BUILDER_DIST_DIR` in `server/.env` to a folder and copy the finished
+installer into it (e.g. zip or `.dmg` of `App Package Builder.app`). Only top-level regular files named `*.dmg|*.pkg|*.zip` are
+listed; symlinks, directories, dotfiles and any other file type are ignored and can never be downloaded. Publish only builds you
+trust — the page shows each file's SHA-256 so users can verify it. Unsigned builds need right-click → Open (Gatekeeper); sign and
+notarize with `scripts/build-release.sh --sign … --notary-profile …` for wider distribution.
+
+Access: page permission `Mac Package Builder` plus capability `macPackager.read` (IT Admin by default; Helpdesk has neither).
