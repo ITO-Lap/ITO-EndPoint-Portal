@@ -55,6 +55,14 @@
 
 html, body, #root { min-height: 100%; }
 
+/* Scale the UI with the monitor: Tailwind sizes are rem-based, so raising the root size enlarges text, spacing and
+   controls together on QHD/4K/ultrawide screens instead of leaving a small UI in a sea of empty space. */
+html { font-size: 16px; }
+@media (min-width: 1920px) { html { font-size: 17px; } }
+@media (min-width: 2400px) { html { font-size: 20px; } }
+@media (min-width: 3000px) { html { font-size: 24px; } }
+@media (min-width: 3800px) { html { font-size: 30px; } }
+
 body {
   margin: 0;
   color: var(--text-primary);

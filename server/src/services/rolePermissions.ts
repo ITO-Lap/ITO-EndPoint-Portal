@@ -24,6 +24,7 @@ const PAGE_TITLES = [
   'Managed Devices', 'ManageEngine App Inventory', 'Stale Devices', 'App Guardian',
   'Mac Fleet Reports', 'Entra Intelligence',
   'Security Posture', 'Policy Conflicts', 'Risk Scoring', 'Role Activity Audit', 'Patch Operations', 'Windows Updates', 'Windows Package Builder', 'Mac Package Builder',
+  'Remote Action Center',
   'Automation',
   'Reports & Analytics', 'Scheduled Reports',
   'Settings', 'Documentation',
@@ -41,8 +42,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     keys: [
       { key: 'appIntel.read',                         label: 'View App Guardian data' },
       { key: 'appIntel.write',                         label: 'Send App Guardian reports / submit requests' },
-      { key: 'securityPolicies.read',                  label: 'View Policy Conflicts data' },
-      { key: 'securityPolicies.sync',                  label: 'Trigger a Policy Conflicts sync' },
+      { key: 'securityPolicies.read',                  label: 'Security Policies snapshots: view (separate from the Policy Conflicts page)' },
+      { key: 'securityPolicies.sync',                  label: 'Security Policies snapshots: trigger a sync' },
       { key: 'staleDevices.read',                      label: 'View Stale Devices data' },
       { key: 'staleDevices.export',                    label: 'Export Stale Devices data' },
       { key: 'devices.logs',                          label: 'Pull and export device logs (Managed Devices)' },
@@ -50,17 +51,27 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'copilot.access',                         label: 'Use the Copilot panel' },
       { key: 'copilot.read',                           label: 'Copilot: chat, view conversations' },
       { key: 'copilot.write',                          label: 'Copilot: confirm write actions' },
+      { key: 'ocean.docs.manage',                      label: 'Ocean: manage the knowledge base & read administrator-only documentation' },
       { key: 'intuneScriptsConfig.access',             label: 'View Scripts & Configurations tab' },
       { key: 'notificationSchedules.edit',             label: 'Edit a notification schedule (day/time)' },
       { key: 'scheduledReports.editSlackSchedule',     label: 'Edit Slack notification schedule time' },
       { key: 'roleActivity.export',                    label: 'Export Role Activity Audit data' },
       { key: 'settings.navigationEdit',                label: 'Edit sidebar navigation visibility' },
-      { key: 'macPackager.read',                       label: 'Mac Package Builder: view and download published builds' },
-      { key: 'roles.manage',                           label: 'Manage custom roles & user assignments' },
       { key: 'winPackager.read',                       label: 'Windows Package Builder: view jobs' },
       { key: 'winPackager.write',                      label: 'Windows Package Builder: upload sources & edit configuration' },
       { key: 'winPackager.validate',                   label: 'Windows Package Builder: run Windows validation & create packages' },
-      { key: 'winPackager.publish',                    label: 'Windows Package Builder: approve publishing (never automatic)' },
+      { key: 'macPackager.read',                       label: 'Mac Package Builder: view and download published builds' },
+      { key: 'remoteActions.read',                     label: 'Remote Action Center: view scripts, jobs and results (Viewer)' },
+      { key: 'remoteActions.author',                   label: 'Remote Action Center: create and edit scripts (Script Admin)' },
+      { key: 'remoteActions.execute',                  label: 'Remote Action Center: create and run jobs from approved scripts (Operator)' },
+      { key: 'remoteActions.approve',                  label: 'Remote Action Center: approve medium/high-risk scripts and jobs (Approver)' },
+      { key: 'remoteActions.admin',                    label: 'Remote Action Center: provider settings, security policy and emergency stop (Super Admin)' },
+      { key: 'graphRunner.read',                       label: 'Graph API Runner: view history and saved templates' },
+      { key: 'graphRunner.run',                        label: 'Graph API Runner: run read-only requests' },
+      { key: 'graphRunner.change',                     label: 'Graph API Runner: submit change (POST/PATCH/PUT) requests' },
+      { key: 'graphRunner.approve',                    label: 'Graph API Runner: approve destructive (DELETE) and high-impact requests' },
+      { key: 'sync.manage',                            label: 'Data sync: run a sync now & change sync schedules' },
+      { key: 'roles.manage',                           label: 'Manage custom roles & user assignments' },
     ],
   },
 ]
@@ -77,7 +88,7 @@ function permsFor(trueKeys: string[]): PermissionMap {
 
 // Mirrors today's PAGE_ROLES in src/lib/permissions.ts exactly.
 const IT_ADMIN_PAGES = PAGE_TITLES // IT Admin is listed on every page today
-const HELPDESK_EXCLUDED_PAGES = ['Policy Conflicts', 'Risk Scoring', 'Automation', 'Reports & Analytics', 'Scheduled Reports', 'Settings', 'Windows Package Builder', 'Mac Package Builder']
+const HELPDESK_EXCLUDED_PAGES = ['Policy Conflicts', 'Risk Scoring', 'Automation', 'Reports & Analytics', 'Scheduled Reports', 'Settings', 'Windows Package Builder', 'Mac Package Builder', 'Remote Action Center']
 const HELPDESK_PAGES = PAGE_TITLES.filter(t => !HELPDESK_EXCLUDED_PAGES.includes(t))
 
 export const BUILTIN_ROLE_DEFAULTS: Record<'IT Admin' | 'Helpdesk', PermissionMap> = {
@@ -89,13 +100,17 @@ export const BUILTIN_ROLE_DEFAULTS: Record<'IT Admin' | 'Helpdesk', PermissionMa
     'devices.logs',
     'patchOps.scanRemediate',
     'copilot.access', 'copilot.read', 'copilot.write',
+    'ocean.docs.manage',
     'intuneScriptsConfig.access',
     'notificationSchedules.edit', 'scheduledReports.editSlackSchedule',
     'roleActivity.export', 'settings.navigationEdit',
-  ]),
-  'Helpdesk': permsFor([
     'winPackager.read', 'winPackager.write', 'winPackager.validate',
     'macPackager.read',
+    'remoteActions.read', 'remoteActions.author', 'remoteActions.execute',
+    'graphRunner.read', 'graphRunner.run',
+    'sync.manage',
+  ]),
+  'Helpdesk': permsFor([
     ...HELPDESK_PAGES.map(pageKey),
     'appIntel.read',
     'securityPolicies.read',

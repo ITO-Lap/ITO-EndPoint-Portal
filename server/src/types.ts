@@ -11,6 +11,8 @@ export interface Device {
   encryptionStatus: string
   /** MDM-reported passcode state; 'Unknown' when the source does not return it. */
   passcodeStatus?: 'Present' | 'Missing' | 'Unknown'
+  /** ISO time the MDM detail values (encryption, passcode, compliance) were last actually read; set only when this sync could not read them and the last known values were kept. */
+  detailsStaleSince?: string
   primaryIssue: string
   policyFailed: string
   severity: 'Low' | 'Medium' | 'High' | 'Critical'
@@ -68,6 +70,7 @@ export interface AppStatus {
   publisher: string
   status: 'Installed' | 'Failed' | 'Pending' | 'NotApplicable'
   appType?: string      // e.g. "App Store", "System", "MDM Managed"
+  bundleId?: string     // macOS bundle identifier when the source reports one (e.g. com.crowdstrike.falcon.App)
   installDate?: string
   size?: string
   errorCode?: string

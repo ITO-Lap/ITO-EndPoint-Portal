@@ -1,11 +1,11 @@
 import { dataFile } from '../store/dataDir.js'
 import fs from 'node:fs'
 import path from 'node:path'
-import { getManageEngineConfig } from '../store/integrationStore.js'
-import { getAccessToken, buildAppInventory } from './manageEngine.js'
+import { getManageEngineConfig, type RuntimeManageEngineConfig } from '../store/integrationStore.js'
+import { zohoFetch, buildAppInventory } from './manageEngine.js'
 import type { MEAppRaw, MEAppEntry } from './manageEngine.js'
 import { getPatchSystems } from './endpointCentralPatch.js'
-import type { Device } from '../types.js'
+import type { AppStatus, Device } from '../types.js'
 import { macosMajorFromName } from '../data/macosSystemApps.js'
 import { classifyMacApp, dedupeInventoryRecords } from './macAppClassification.js'
 import type { InventoryRecord } from './macAppClassification.js'
@@ -20,8 +20,6 @@ import { getMacDeploymentIndex } from './intune.js'
 const DEFAULT_HOST = 'https://endpointcentral.manageengine.com'
 const PAGE_LIMIT = 1000
 const MAX_PAGES = 5
-const CONCURRENCY = 8
-const CACHE_TTL_MS = 30 * 60 * 1000
 
 export interface EcInstalledSoftware {
   software_name?: string
@@ -71,13 +69,14 @@ export function toRawApp(app: EcInstalledSoftware): MEAppRaw {
 
 class RateLimitError extends Error { constructor() { super('Endpoint Central rate limit (429)') } }
 
-async function fetchInstalledSoftware(token: string, detailResourceId: string): Promise<EcInstalledSoftware[]> {
+// Every request goes through zohoFetch, which uses the CURRENT access token and retries once with a fresh one on a 401.
+// (The scan used to fetch one token up front and reuse it for hours; Zoho tokens last about an hour and are revoked
+// when another job mints one, so everything after the first hour failed instantly.)
+async function fetchInstalledSoftware(cfg: RuntimeManageEngineConfig, detailResourceId: string): Promise<EcInstalledSoftware[]> {
   const host = (process.env.ENDPOINT_CENTRAL_BASE_URL ?? process.env.ENDPOINT_CENTRAL_PATCH_URL ?? DEFAULT_HOST).replace(/\/$/, '')
   const rows: EcInstalledSoftware[] = []
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await fetch(`${host}/api/1.4/inventory/installedsoftware?resid=${detailResourceId}&pagelimit=${PAGE_LIMIT}&page=${page}`, {
-      headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    })
+    const res = await zohoFetch(cfg, `${host}/api/1.4/inventory/installedsoftware?resid=${detailResourceId}&pagelimit=${PAGE_LIMIT}&page=${page}`)
     if (res.status === 429) throw new RateLimitError()
     if (!res.ok) throw new Error(`Endpoint Central inventory API ${res.status}`)
     const json = await res.json() as { status?: string; error_description?: string; message_response?: { total?: number; installedsoftware?: EcInstalledSoftware[] } }
@@ -112,7 +111,7 @@ export interface EndpointCentralAppInventory {
 // so scanning is a background job. Macs are scanned first (they matter most and are the smaller set), results are
 // saved to disk after every batch so a server restart resumes instead of starting over, and the endpoint returns
 // whatever has been scanned so far plus progress.
-const BASE_DELAY_MS = 2_500
+const BASE_DELAY_MS = process.env['NODE_ENV'] === 'test' ? 0 : 2_500
 const MAX_RETRIES = 8
 const RESCAN_AFTER_MS = 6 * 60 * 60 * 1000
 const PUBLISH_EVERY = 25
@@ -154,6 +153,8 @@ let total = 0
 let failed = 0
 let progress: ScanProgress = { status: 'idle', scanned: 0, total: 0, startedAt: null, finishedAt: null }
 let scanning = false
+let lastScanError: string | null = null
+const failureReasons = new Map<string, number>()
 
 function newestScan(): number { return Math.max(0, ...[...scannedDevices.values()].map(d => d.scannedAt)) }
 
@@ -219,7 +220,7 @@ async function runScan(): Promise<void> {
   const cfg = getManageEngineConfig()
   if (!cfg) throw new Error('ManageEngine credentials not configured')
 
-  const [token, systems] = await Promise.all([getAccessToken(cfg), getPatchSystems(true)])
+  const systems = await getPatchSystems(true)
   const seen = new Set<string>()
   const targets: Array<{ id: string; name: string; platform: 'Windows' | 'macOS'; lastCheckIn: string; macosMajor: number | null }> = []
   for (const sys of systems) {
@@ -240,6 +241,7 @@ async function runScan(): Promise<void> {
   platformTotals.Windows = targets.filter(t => t.platform === 'Windows').length
   platformTotals.macOS = targets.filter(t => t.platform === 'macOS').length
   failed = 0
+  failureReasons.clear()
 
   // Devices scanned recently are kept; only missing or stale ones are fetched again.
   const pending = targets.filter(t => Date.now() - (scannedDevices.get(t.id)?.scannedAt ?? 0) > RESCAN_AFTER_MS)
@@ -252,7 +254,7 @@ async function runScan(): Promise<void> {
     let done = false
     for (let attempt = 0; attempt <= MAX_RETRIES && !done; attempt++) {
       try {
-        const rows = await fetchInstalledSoftware(token, t.id)
+        const rows = await fetchInstalledSoftware(cfg, t.id)
         const apps = rows.filter(a => isUserInstalledSoftware(a, t.platform))
         scannedDevices.set(t.id, {
           name: t.name, platform: t.platform, lastCheckIn: t.lastCheckIn, scannedAt: Date.now(),
@@ -265,7 +267,12 @@ async function runScan(): Promise<void> {
         if (e instanceof RateLimitError && attempt < MAX_RETRIES) {
           delay = Math.min(delay + 500, 6_000) // adapt: slow down after each 429
           await sleep(30_000 * Math.min(attempt + 1, 4))
-        } else { failed++; done = true }
+        } else {
+          failed++; done = true
+          // Say WHY, in aggregate: "HTTP 404 for 1,200 devices" is something an admin can act on, a bare count is not.
+          const reason = e instanceof RateLimitError ? 'rate limited (retries used up)' : (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 120)
+          failureReasons.set(reason, (failureReasons.get(reason) ?? 0) + 1)
+        }
       }
     }
     progress.scanned++
@@ -280,8 +287,10 @@ async function runScan(): Promise<void> {
 function startScan(): void {
   if (scanning) return
   scanning = true
+  lastScanError = null
   runScan()
     .catch(e => {
+      lastScanError = e instanceof Error ? e.message : String(e)
       console.error('[EndpointCentralSoftware] scan failed:', e instanceof Error ? e.message : e)
       progress = { ...progress, status: 'idle', finishedAt: new Date().toISOString() }
     })
@@ -293,4 +302,47 @@ export function getEndpointCentralAppInventory(force = false, includeSystem = fa
   const stale = Date.now() - newestScan() > RESCAN_AFTER_MS || (progress.finishedAt === null && progress.status === 'idle' && targetIds.size === 0)
   if (!scanning && (force || stale)) startScan()
   return { ...snapshot(includeSystem), progress }
+}
+
+export interface AppInventoryRefresh { apps: number; devices: number; scanned: number; failed: number; /** Why devices could not be read, most common first. */ failureReasons: Array<{ reason: string; devices: number }> }
+
+/**
+ * Starts the inventory scan (or joins one already running) and waits for it to finish, so the scheduled sync can
+ * report a real outcome. Devices scanned recently are kept, so this only re-reads the stale ones. Throws when the
+ * scan itself fails; the inventory already on disk stays in use meanwhile.
+ */
+export async function refreshEndpointCentralAppInventory(onTick?: () => Promise<unknown>, pollMs = 5_000): Promise<AppInventoryRefresh> {
+  if (!getManageEngineConfig()) throw new Error('ManageEngine is not configured')
+  startScan()
+  while (scanning) {
+    await sleep(pollMs)
+    if (onTick) await onTick()
+  }
+  if (lastScanError) throw new Error(lastScanError)
+  const snap = snapshot(false)
+  const reasons = [...failureReasons].map(([reason, devices]) => ({ reason, devices })).sort((a, b) => b.devices - a.devices)
+  return { apps: snap.windows.length + snap.macos.length, devices: total, scanned: snap.coverage.withInventory, failed, failureReasons: reasons }
+}
+
+const toAppStatus = (name: string, version: string, publisher: string, bundleId?: string): AppStatus => ({
+  name, version: version || 'Unknown', publisher, status: 'Installed', appType: 'Endpoint Central inventory', ...(bundleId ? { bundleId } : {}),
+})
+
+let appIndex: { version: number; value: Map<string, AppStatus[]> } | null = null
+
+/**
+ * Installed apps per scanned device, keyed by Endpoint Central `detailResourceId` (the `ec-` device id without its
+ * prefix). Read-only view over the scan cache: it never triggers a scan. macOS rows are NOT classified or filtered,
+ * so security agents (Falcon, Zscaler) are always visible even though they are not "user-installed".
+ */
+export function getScannedAppsByResourceId(): Map<string, AppStatus[]> {
+  if (appIndex?.version === dataVersion) return appIndex.value
+  const value = new Map<string, AppStatus[]>()
+  for (const [id, d] of scannedDevices) {
+    value.set(id, d.platform === 'macOS'
+      ? (d.macApps ?? []).map(a => toAppStatus(a.n, a.v, a.vd, a.b))
+      : d.apps.map(a => toAppStatus(a.name, a.version, '')))
+  }
+  appIndex = { version: dataVersion, value }
+  return value
 }

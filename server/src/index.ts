@@ -22,20 +22,31 @@ import securityInventoryRouter, { startSecurityInventoryWarmup, stopSecurityInve
 import roleActivityRouter from './routes/roleActivity.js'
 import intuneScriptsConfigRouter from './routes/intuneScriptsConfig.js'
 import copilotRouter from './routes/copilot.js'
+import oceanRouter from './routes/ocean.js'
+import { ensureKnowledgeBase } from './services/ocean/indexer.js'
 import patchRouter from './routes/patch.js'
 import windowsUpdatesRouter from './routes/windowsUpdates.js'
 import endpointCentralRouter from './routes/endpointCentral.js'
 import securityPostureRouter from './routes/securityPosture.js'
+import syncRouter from './routes/sync.js'
+import settingsRouter from './routes/settings.js'
+import { isJiraConfigured } from './services/jira.js'
+import { isConfluenceConfigured } from './services/confluence.js'
+import { migrateOnStartup } from './db/migrate.js'
+import { isDbAvailable } from './db/index.js'
+import { markDbReady, startSyncScheduler, stopSyncScheduler } from './services/sync/syncEngine.js'
 import appIntelRouter from './routes/appIntel.js'
 import { createStaleDevicesRouter } from './routes/staleDevices.js'
 import notificationSchedulesRouter from './routes/notificationSchedules.js'
 import dashboardRouter from './routes/dashboard.js'
 import rolesRouter from './routes/roles.js'
-import { macAdminIngestRouter, macAdminReadRouter } from './routes/macAdminAccess.js'
-import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 import winPackagerRouter, { cleanupOldJobs } from './routes/winPackager.js'
 import winPackagerWorkerRouter from './routes/winPackagerWorker.js'
 import macPackagerRouter from './routes/macPackager.js'
+import remoteActionsRouter from './routes/remoteActions.js'
+import { startRemoteActionsScheduler, stopRemoteActionsScheduler } from './remoteActions/service.js'
+import { macAdminIngestRouter, macAdminReadRouter } from './routes/macAdminAccess.js'
+import { startSlackHealthMonitor, stopSlackHealthMonitor } from './services/slackHealth.js'
 import { startScheduledReportRunner, stopScheduledReportRunner, runScheduledReportNow } from './services/scheduledReportRunner.js'
 import { startAutomationScheduler, stopAutomationScheduler } from './services/automationScheduler.js'
 import { startVerifiedAppReleaseMonitor, stopVerifiedAppReleaseMonitor } from './services/appIntel/releaseMonitor.js'
@@ -81,6 +92,10 @@ const strictLimiter = rateLimit({
 void strictLimiter // reserved for future rate-limited endpoints
 
 app.use(cors({ exposedHeaders: ['Content-Disposition'] }))
+// Ocean accepts documentation uploads up to ~1 MB; every other route keeps the default 100 KB body limit.
+app.use('/api/ocean', express.json({ limit: '2mb' }))
+// Scripts are up to ~200 KB (plus a rollback script), above the default 100 KB body limit.
+app.use('/api/remote-actions', express.json({ limit: '600kb' }))
 app.use(express.json())
 app.use(requestLogger)
 
@@ -91,14 +106,14 @@ app.get('/health', (_req, res) => {
 // Macs report local-admin status here with a shared secret instead of a user session (see services/macAdminAccess.ts).
 app.use('/api/mac-admin-access', macAdminIngestRouter)
 
-// Everything under /api needs a signed-in session, except sign-in itself.
-app.use('/api', requireSessionExceptAuth)
-if (authEnforced() && emailSignInEnabled() && !passwordRequired()) {
-  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Unset AUTH_PASSWORDLESS (Microsoft sign-in only) or set AUTH_PASSWORD before exposing this beyond a trusted network.')
 // The Windows packaging worker pulls sources / pushes packages with short-lived HMAC-signed links, not a user session
 // (see routes/winPackagerWorker.ts). Mounted before the session gate; every request is verified against the link signature.
 app.use('/api/win-packager-worker', rateLimit({ windowMs: 15 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false }), winPackagerWorkerRouter)
 
+// Everything under /api needs a signed-in session, except sign-in itself.
+app.use('/api', requireSessionExceptAuth)
+if (authEnforced() && emailSignInEnabled() && !passwordRequired()) {
+  console.warn('[auth] Passwordless sign-in is ON: anyone who enters an allow-listed email can sign in. Unset AUTH_PASSWORDLESS (Microsoft sign-in only) or set AUTH_PASSWORD before exposing this beyond a trusted network.')
 }
 if (!authEnforced()) console.warn('[auth] AUTH_ENFORCED=false: the API is NOT protected.')
 
@@ -120,22 +135,26 @@ app.use('/api/security-inventory', apiLimiter, securityInventoryRouter)
 app.use('/api/role-activity',      apiLimiter, roleActivityRouter)
 app.use('/api/intune-scripts-config', apiLimiter, intuneScriptsConfigRouter)
 app.use('/api/copilot',            apiLimiter, copilotRouter)
+app.use('/api/ocean',              apiLimiter, oceanRouter)
 app.use('/api/patch',              apiLimiter, patchRouter)
 app.use('/api/windows-updates',    apiLimiter, windowsUpdatesRouter)
 app.use('/api/endpoint-central',   apiLimiter, endpointCentralRouter)
 app.use('/api/security-posture',   apiLimiter, securityPostureRouter)
+app.use('/api/sync',               apiLimiter, syncRouter)
+app.use('/api/settings',           apiLimiter, settingsRouter)
 app.use('/api/app-intel',          apiLimiter, appIntelRouter)
 app.use('/api/stale-devices',      apiLimiter, createStaleDevicesRouter())
 app.use('/api/notification-schedules', apiLimiter, notificationSchedulesRouter)
 app.use('/api/dashboard',              apiLimiter, dashboardRouter)
 app.use('/api/roles',                  apiLimiter, rolesRouter)
+app.use('/api/win-packager',           apiLimiter, winPackagerRouter)
+app.use('/api/mac-packager',           apiLimiter, macPackagerRouter)
+app.use('/api/remote-actions',         apiLimiter, remoteActionsRouter)
 app.use('/api/mac-admin-access',       apiLimiter, macAdminReadRouter)
 
 // ── Serve the built frontend (single-process deployment) ───────────────────────
 // Compiles to server/dist/index.js — the client build lives at <repo root>/dist,
 // two levels up. In local dev, Vite serves the frontend separately (port 5173)
-app.use('/api/win-packager',           apiLimiter, winPackagerRouter)
-app.use('/api/mac-packager',           apiLimiter, macPackagerRouter)
 // and this directory won't exist, so this block is skipped entirely.
 const clientDist = path.join(__dirname, '../../dist')
 if (fs.existsSync(clientDist)) {
@@ -154,8 +173,11 @@ const server = app.listen(port, () => {
   console.log(`  ManageEngine: ${isConfigured('manageengine') ? '✓ configured' : '— not configured'}`)
   console.log(`  Entra ID:     ${isConfigured('entra')        ? '✓ configured' : '— not configured'}`)
   console.log(`  Slack:        ${isConfigured('slack')        ? '✓ configured' : '— not configured'}`)
-  console.log(`  Jira:         ${process.env.JIRA_BASE_URL ? '✓ configured' : '— not configured'}`)
-  console.log(`  Confluence:   ${process.env.CONFLUENCE_BASE_URL ?? process.env.JIRA_BASE_URL ? '✓ configured' : '— not configured'}`)
+  console.log(`  Jira:         ${isJiraConfigured() ? '✓ configured' : '— not configured'}`)
+  console.log(`  Confluence:   ${isConfluenceConfigured() ? '✓ configured' : '— not configured'}`)
+
+  // Ocean: index the project documentation on first start (background; Ocean answers from it as soon as it is ready).
+  void ensureKnowledgeBase()
 
   registerNotificationHandler('scheduled_report', async (sourceId) => {
     try {
@@ -169,15 +191,23 @@ const server = app.listen(port, () => {
   startSlackHealthMonitor()
   startScheduledReportRunner()
   startAutomationScheduler()
+  startRemoteActionsScheduler()
   startVerifiedAppReleaseMonitor()
   startNotificationScheduler()
   startSecurityInventoryWarmup()
-})
 
-process.on('SIGTERM', () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); server.close() })
-process.on('SIGINT',  () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); server.close() })
+  // Stored-data sync: apply PostgreSQL migrations when a connection is configured (Settings -> Integrations -> PostgreSQL
+  // or DATABASE_URL), then start the background scheduler. With no PostgreSQL the same sync runs on local files.
+  void migrateOnStartup()
+    .then(() => { if (isDbAvailable()) markDbReady() })
+    .catch(e => console.error('[db] migrations failed; the sync store stays on local files:', e instanceof Error ? e.message : e))
+    .finally(() => startSyncScheduler())
 
   // Windows Package Builder: remove finished job workspaces past the retention window (WIN_PACKAGER_RETENTION_DAYS).
   const sweep = (): void => { try { const n = cleanupOldJobs(); if (n) console.log(`[win-packager] removed ${n} expired job workspace(s)`) } catch (e) { console.warn('[win-packager] cleanup failed:', e instanceof Error ? e.message : e) } }
   sweep()
   setInterval(sweep, 6 * 60 * 60 * 1000).unref()
+})
+
+process.on('SIGTERM', () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopRemoteActionsScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); stopSyncScheduler(); server.close() })
+process.on('SIGINT',  () => { stopSlackHealthMonitor(); stopScheduledReportRunner(); stopAutomationScheduler(); stopRemoteActionsScheduler(); stopVerifiedAppReleaseMonitor(); stopNotificationScheduler(); stopSecurityInventoryWarmup(); stopSyncScheduler(); server.close() })

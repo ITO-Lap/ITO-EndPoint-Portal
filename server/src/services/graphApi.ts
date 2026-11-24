@@ -548,3 +548,23 @@ export function credentialsFromEnv(): TenantCredentials {
   }
   return { tenantId, clientId, clientSecret }
 }
+
+// ─── Server-side token access for the Remote Action Center / Graph API Runner ─
+// The token itself never leaves the server: callers use it to make requests and read its granted application roles.
+
+/** Bearer token for the tenant (client-credentials, cached). Server-side use only — never return it from an API route. */
+export async function getGraphAccessToken(creds: TenantCredentials): Promise<string> {
+  return getToken(creds)
+}
+
+/** Application permissions (the JWT `roles` claim) actually granted to the app registration. Decoded locally; the signature is not needed to read our own token. */
+export function graphRolesFromToken(token: string): string[] {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as { roles?: unknown }
+    return Array.isArray(payload.roles) ? payload.roles.filter((r): r is string => typeof r === 'string') : []
+  } catch { return [] }
+}
+
+export async function getGrantedGraphRoles(creds: TenantCredentials): Promise<string[]> {
+  return graphRolesFromToken(await getToken(creds))
+}

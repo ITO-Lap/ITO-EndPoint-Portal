@@ -7,8 +7,8 @@ import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import type { ConnectedSource, BadgeVariant, UserToolRole } from '../../types'
 import { canAccess } from '../../lib/permissions'
-import { useNavVisibility } from '../../context/NavVisibilityContext'
-import { usePermissions } from '../../context/PermissionsContext'
+import { useNavVisibility } from '../../context/navVisibilityHooks'
+import { usePermissions } from '../../context/permissionsHooks'
 
 interface SidebarProps {
   isOpen?: boolean
@@ -109,12 +109,36 @@ function NavButton({ item, isActive, isAutomation, onClick }: {
   )
 }
 
+function ParentButton({ label, icon: Icon, expanded, hasActiveChild, onToggle }: {
+  label: string; icon: React.ElementType; expanded: boolean; hasActiveChild: boolean; onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className="group flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-xs font-semibold transition-all water-glow focus-visible:outline-none"
+      style={{ background: 'transparent', border: '1px solid transparent', color: hasActiveChild ? '#0284C7' : '#64748B' }}
+    >
+      <span
+        className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-xl"
+        style={{ background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(148,163,184,0.20)', color: hasActiveChild ? '#0EA5E9' : '#94A3B8' }}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className="flex-1 truncate">{label}</span>
+      <ChevronDown className={`h-3 w-3 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+    </button>
+  )
+}
+
 export function Sidebar({
   isOpen = true, onClose, activePage, onNavSelect, onSourceClick, viewerRole = 'Global Admin',
 }: SidebarProps) {
   const [statusMap, setStatusMap]         = useState<Record<string, IntegrationStatusItem>>({})
   const [statusLoading, setStatusLoading] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     api.fetchIntegrationStatus()
@@ -130,7 +154,15 @@ export function Sidebar({
   const toggleGroup = (g: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev)
-      next.has(g) ? next.delete(g) : next.add(g)
+      if (next.has(g)) next.delete(g); else next.add(g)
+      return next
+    })
+  }
+
+  const toggleParent = (p: string) => {
+    setCollapsedParents(prev => {
+      const next = new Set(prev)
+      if (next.has(p)) next.delete(p); else next.add(p)
       return next
     })
   }
@@ -153,7 +185,7 @@ export function Sidebar({
       {isOpen && <div className="fixed inset-0 z-40 xl:hidden cursor-pointer" style={{ background: 'rgba(15,23,42,0.20)', backdropFilter: 'blur(4px)' }} onClick={onClose} />}
 
       <aside
-        className={`flex min-h-full w-full max-w-[260px] xl:w-[260px] xl:max-w-none flex-col px-3 py-4 glass-light transition-transform duration-300 xl:translate-x-0 fixed left-0 top-0 z-50 h-full overflow-y-auto xl:static xl:z-auto xl:h-auto ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`flex min-h-full w-full max-w-[16.25rem] xl:w-[16.25rem] xl:max-w-none flex-col px-3 py-4 glass-light transition-transform duration-300 xl:translate-x-0 fixed left-0 top-0 z-50 h-full overflow-y-auto xl:static xl:z-auto xl:h-auto ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ borderRight: '1px solid rgba(148,163,184,0.15)', boxShadow: '4px 0 24px rgba(14,165,233,0.06)' }}
       >
         {/* Top accent */}
@@ -188,15 +220,46 @@ export function Sidebar({
 
                 {!isCollapsed && (
                   <div className="space-y-0.5">
-                    {items.map(item => (
-                      <NavButton
-                        key={item.title}
-                        item={item}
-                        isActive={item.title === activePage}
-                        isAutomation={isAutomation}
-                        onClick={() => { onNavSelect(item.title); onClose?.() }}
-                      />
-                    ))}
+                    {items.map(item => {
+                      const button = (
+                        <NavButton
+                          key={item.title}
+                          item={item}
+                          isActive={item.title === activePage}
+                          isAutomation={isAutomation}
+                          onClick={() => { onNavSelect(item.title); onClose?.() }}
+                        />
+                      )
+                      if (!item.parent) return button
+                      const siblings = items.filter(i => i.parent === item.parent)
+                      if (siblings[0] !== item) return null // rendered together with the first child
+                      const parentOpen = !collapsedParents.has(item.parent)
+                      const parent = item.parent
+                      return (
+                        <div key={`parent-${parent}`}>
+                          <ParentButton
+                            label={parent}
+                            icon={item.icon}
+                            expanded={parentOpen}
+                            hasActiveChild={siblings.some(c => c.title === activePage)}
+                            onToggle={() => toggleParent(parent)}
+                          />
+                          {parentOpen && (
+                            <div className="ml-5 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: 'rgba(148,163,184,0.25)' }}>
+                              {siblings.map(child => (
+                                <NavButton
+                                  key={child.title}
+                                  item={child}
+                                  isActive={child.title === activePage}
+                                  isAutomation={isAutomation}
+                                  onClick={() => { onNavSelect(child.title); onClose?.() }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

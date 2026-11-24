@@ -1,6 +1,7 @@
 import { AuthGate } from './components/auth/AuthGate'
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { ToastProvider, useToast } from './components/ui/ToastProvider'
+import { ToastProvider } from './components/ui/ToastProvider'
+import { useToast } from './components/ui/toastHooks'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
 import { DashboardContent } from './components/dashboard/DashboardContent'
@@ -24,6 +25,7 @@ import { PatchOperationsPage } from './pages/PatchOperationsPage'
 import { WindowsUpdatesPage } from './pages/WindowsUpdatesPage'
 import { WindowsPackageBuilderPage } from './pages/WindowsPackageBuilderPage'
 import { MacPackageBuilderPage } from './pages/MacPackageBuilderPage'
+import { RemoteActionCenterPage } from './pages/RemoteActionCenterPage'
 import { WhatsNewBanner } from './components/layout/WhatsNewBanner'
 import { RoleActivityAuditPage } from './pages/RoleActivityAuditPage'
 import { CopilotPanel } from './components/copilot/CopilotPanel'
@@ -42,7 +44,8 @@ import type { StatCardData, UserToolRole } from './types'
 import { canAccess, isPageListed } from './lib/permissions'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import { CopilotContextProvider } from './context/CopilotContextProvider'
-import { PermissionsProvider, usePermissions } from './context/PermissionsContext'
+import { PermissionsProvider } from './context/PermissionsContext'
+import { usePermissions } from './context/permissionsHooks'
 
 function OfflineBanner({ onRetry }: { onRetry: () => void }) {
   return (
@@ -284,7 +287,7 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
               {...(onSignOut ? { onSignOut } : {})}
             />
             <main className="flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 xl:px-6 xl:py-6 overflow-x-hidden w-full glass-bg">
-              <div className="mx-auto w-full max-w-[1600px]">
+              <div className="mx-auto w-full max-w-[100rem]">
                 {activePage === 'Dashboard' && <WhatsNewBanner canOpen={p => canAccess(viewerRole as UserToolRole, permissions, p)} onOpen={setActivePage} />}
                 {!canAccess(viewerRole as UserToolRole, permissions, activePage) ? (
                   <AccessDenied page={activePage} onBack={() => setActivePage('Dashboard')} />
@@ -348,6 +351,8 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                   <PatchOperationsPage viewerRole={viewerRole as UserToolRole} userEmail={userEmail} onBack={() => setActivePage('Dashboard')} />
                 ) : activePage === 'Windows Updates' ? (
                   <WindowsUpdatesPage onBack={() => setActivePage('Dashboard')} />
+                ) : activePage === 'Remote Action Center' ? (
+                  <RemoteActionCenterPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} />
                 ) : activePage === 'Mac Package Builder' ? (
                   <MacPackageBuilderPage onBack={() => setActivePage('Dashboard')} viewerRole={viewerRole} />
                 ) : activePage === 'Windows Package Builder' ? (

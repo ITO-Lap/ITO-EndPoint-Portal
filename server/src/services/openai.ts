@@ -287,6 +287,17 @@ Be concise, technical, and action-oriented. Prefer bullet points for steps.`
   return response.choices[0]?.message.content ?? 'Unable to generate a response.'
 }
 
+/** One-shot completion for features that build their own prompts (Remote Action Center assistant). Callers must redact first. */
+export async function completeText(system: string, user: string, opts: { maxTokens?: number; temperature?: number } = {}): Promise<string> {
+  const response = await getClient().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    max_tokens: opts.maxTokens ?? 900,
+    temperature: opts.temperature ?? 0.2,
+  })
+  return response.choices[0]?.message.content ?? ''
+}
+
 export function isOpenAIConfigured(): boolean {
   return !!getOpenAIConfig()?.apiKey
 }

@@ -1,21 +1,22 @@
 import type { AppStatus, Device } from '../../types.js'
 import type { ISecurityAgentCollector, SecurityAgentInfo, AgentHealth } from '../types.js'
-import { findAppByNamePattern, healthFromAppStatus } from './agentDetection.js'
+import { findAgentApp, healthFromAppStatus } from './agentDetection.js'
 
 const NAME_PATTERN = /crowdstrike|falcon sensor/i
+const BUNDLE_ID_PATTERN = /^com\.crowdstrike\.falcon\.app$/i
 
 export class CrowdStrikeCollector implements ISecurityAgentCollector {
   readonly agentKey = 'crowdstrike'
   readonly agentName = 'CrowdStrike Falcon Sensor'
 
   getInstalledAgents(device: Device, apps: AppStatus[]): SecurityAgentInfo[] {
-    const app = findAppByNamePattern(apps, NAME_PATTERN)
+    const app = findAgentApp(apps, NAME_PATTERN, BUNDLE_ID_PATTERN)
     const seenViaAntivirusStatus = !app && device.antivirusStatus?.toLowerCase().includes('crowdstrike')
     return app || seenViaAntivirusStatus ? [this.getAgentInfo(device, apps)] : []
   }
 
   getAgentInfo(device: Device, apps: AppStatus[]): SecurityAgentInfo {
-    const app = findAppByNamePattern(apps, NAME_PATTERN)
+    const app = findAgentApp(apps, NAME_PATTERN, BUNDLE_ID_PATTERN)
     if (!app) {
       // Some connectors surface Falcon detection via a profile
       // name mapped onto Device.antivirusStatus rather than an installed-app

@@ -1,0 +1,26 @@
+// One row per sidebar page: [page title, sidebar group, what it does, document(s) under docs/07-features/ or docs/].
+// Rendered by the in-app Documentation page; a test keeps it in step with the navigation and the files on disk.
+export const PAGES: string[][] = [
+  ['Dashboard', 'Overview', 'Compliance stats, issue breakdown, selected device, AI runbook, patch priority panel', 'DASHBOARD.md'],
+  ['Managed Devices', 'Devices', 'Intune and cross-platform device table with KPI cards, reports and rules', 'ENDPOINT-PAGES.md'],
+  ['Mac Devices / Mac Fleet Reports', 'Devices', 'ManageEngine macOS inventory, apps, security and fleet report with Excel export', 'mac-devices.md, MAC-FLEET-REPORTS.md'],
+  ['Stale Devices', 'Devices', 'Devices that have not checked in', 'STALE-DEVICES.md'],
+  ['ManageEngine App Inventory', 'Applications', 'App inventory and verified updates (App Intelligence)', 'APP-INTELLIGENCE.md'],
+  ['App Guardian', 'Applications', 'Mac application monitoring and enforcement', 'APP-GUARDIAN.md'],
+  ['Windows Package Builder', 'Applications', 'Upload, inspect, validate and package Windows apps (.intunewin)', 'WINDOWS-PACKAGE-BUILDER.md'],
+  ['Mac Package Builder', 'Applications', 'Published macOS build downloads', 'MAC-PACKAGE-BUILDER.md'],
+  ['Patch Operations', 'Patches', 'Patch Manager health, critical queue, scan and deploy with confirmation', 'PATCH-OPERATIONS.md'],
+  ['Windows Updates', 'Patches', 'Exposure score, CISA KEV deadlines, Patch Tuesday briefing', 'WINDOWS-UPDATES.md'],
+  ['Security Posture', 'Security', 'Four-pillar score, device drill-downs, agent coverage, Falcon/Zscaler coverage', 'SECURITY-POSTURE.md'],
+  ['Role Activity Audit', 'Security', 'Admin role changes across Entra, Intune and SharePoint', 'ROLE-ACTIVITY-AUDIT.md'],
+  ['Policy Conflicts', 'Security', 'Duplicate, stale and colliding Intune policies', 'POLICY-CONFLICTS.md'],
+  ['Risk Scoring', 'Security', '0–100 device risk score with factors', 'RISK-SCORING.md'],
+  ['Entra Intelligence', 'Identity', 'Entra users, sign-ins and identity risk', 'ENTRA-INTELLIGENCE.md'],
+  ['Remote Action Center', 'Automations', 'Secure script execution on managed devices, approvals, live job status and a Microsoft Graph API runner', 'REMOTE-ACTION-CENTER.md'],
+  ['Automation', 'Automations', 'Trigger → condition → action rules (Jira, Slack, Teams, runbooks)', 'AUTOMATION-ENGINE.md'],
+  ['Reports & Analytics', 'Reports', 'Compliance, security, patch and inventory reports', 'REPORTS-ANALYTICS.md'],
+  ['Scheduled Reports', 'Reports', 'Recurring report delivery', 'SCHEDULED-REPORTS.md'],
+  ['Settings', 'Settings', 'Integrations, roles and permissions, Ocean Knowledge', 'SETTINGS.md'],
+  ['Documentation', 'Settings', 'This page. The same content lives in docs/ for Ocean to search', 'docs/README.md'],
+  ['Ocean (floating button)', 'Everywhere', 'Documentation answers with citations, live data tools, confirmed actions', 'OCEAN.md, AI-COPILOT.md'],
+]

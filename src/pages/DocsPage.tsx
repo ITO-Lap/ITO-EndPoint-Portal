@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { SectionWrap, DocCard, CardHeader } from '../components/docs/DocPrimitives'
+import { SecuritySection, PatchingSection, RemoteActionsSection, AnalysisSection, OceanSection, PagesIndexSection } from '../components/docs/FeatureSections'
 import {
   BookMarked, ShieldCheck, Zap, Users, Laptop2, Settings,
   CheckCircle2, XCircle, MinusCircle, ChevronRight,
@@ -11,7 +13,7 @@ import {
 
 type DocSection =
   | 'overview' | 'quickstart' | 'onboarding'
-  | 'dashboard' | 'automation' | 'reports' | 'security'
+  | 'dashboard' | 'automation' | 'reports' | 'security' | 'patching' | 'remote' | 'analysis' | 'ocean' | 'pages'
   | 'configuration' | 'roles'
   | 'troubleshooting' | 'faq'
 
@@ -34,6 +36,11 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'automation',  label: 'Automation Rules',          icon: Activity    },
       { key: 'reports',     label: 'Reports & Analytics',       icon: BarChart2   },
       { key: 'security',    label: 'Security Posture',          icon: ShieldCheck },
+      { key: 'patching',    label: 'Patching',                  icon: Package, badge: 'New' },
+      { key: 'remote',      label: 'Remote Action Center',      icon: Activity    },
+      { key: 'analysis',    label: 'Security Analysis',         icon: Activity    },
+      { key: 'ocean',       label: 'Ocean Assistant',           icon: Waves       },
+      { key: 'pages',       label: 'Every Page (A–Z)',          icon: FileText    },
     ],
   },
   {
@@ -51,39 +58,6 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ]
-
-// ─── Shared primitives ────────────────────────────────────────────────────────
-
-function SectionWrap({ title, description, children }: {
-  title: string; description: string; children: React.ReactNode
-}) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-bold text-slate-900">{title}</h2>
-        <p className="text-xs text-slate-500 mt-0.5">{description}</p>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function DocCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-[18px] border border-slate-200 bg-white shadow-sm shadow-slate-900/5 overflow-hidden ${className}`}>
-      {children}
-    </div>
-  )
-}
-
-function CardHeader({ title, description }: { title: string; description?: string }) {
-  return (
-    <div className="border-b border-slate-100 px-5 py-3.5">
-      <p className="text-xs font-semibold text-slate-900">{title}</p>
-      {description && <p className="text-[0.65rem] text-slate-500 mt-0.5">{description}</p>}
-    </div>
-  )
-}
 
 // Permission cell icons
 function Allow() { return <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" /> }
@@ -1275,77 +1249,6 @@ function DashboardSection() {
   )
 }
 
-// ─── Section: Security Posture ────────────────────────────────────────────────
-
-function SecuritySection() {
-  const securityCategories = [
-    { label: 'Encryption',       desc: 'FileVault (macOS) and BitLocker (Windows) status per device. Tracks whether encryption is On, Off, or Pending.',  color: 'bg-red-100 text-red-700' },
-    { label: 'Antivirus / EDR',  desc: 'Checks whether an endpoint detection and response agent or antivirus is active and up to date.',                   color: 'bg-orange-100 text-orange-700' },
-    { label: 'Firewall',         desc: 'Host-based firewall status. Any corporate device with firewall disabled is flagged as Non-Compliant.',             color: 'bg-amber-100 text-amber-700' },
-    { label: 'OS / Patching',    desc: 'Operating system version against the expected minimum. Tracks missing patches and update policy compliance.',     color: 'bg-yellow-100 text-yellow-700' },
-    { label: 'MFA',              desc: 'Whether the device\'s assigned user has enrolled in multi-factor authentication (pulled from Entra ID).',          color: 'bg-violet-100 text-violet-700' },
-    { label: 'Device Check-in',  desc: 'How recently the device last synced with its MDM source. Devices not checking in indicate connectivity or agent issues.', color: 'bg-slate-100 text-slate-700' },
-  ]
-
-  return (
-    <SectionWrap title="Security Posture" description="Fleet-wide security controls, LAPS, and encryption monitoring">
-
-      <DocCard>
-        <CardHeader title="Security Posture Page" description="Navigate via Security Posture in the sidebar" />
-        <div className="px-5 py-4 space-y-3 text-[0.72rem] text-slate-600 leading-relaxed">
-          <p>The Security Posture page gives a fleet-wide view of your organisation's security controls — aggregated across all MDM sources. It answers: <em>"How secure is the entire fleet right now?"</em></p>
-          <p>Each category shows a coverage percentage (what % of devices are compliant for that control) and the absolute device counts for quick prioritisation.</p>
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Security Categories" description="The six controls tracked across all managed devices" />
-        <div className="divide-y divide-slate-100">
-          {securityCategories.map(c => (
-            <div key={c.label} className="flex items-start gap-3 px-5 py-3">
-              <span className={`inline-flex rounded-lg px-2 py-1 text-[0.62rem] font-bold min-w-[100px] text-center justify-center flex-shrink-0 mt-0.5 ${c.color}`}>{c.label}</span>
-              <p className="text-[0.72rem] text-slate-600 leading-snug">{c.desc}</p>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="LAPS (Local Admin Password)" />
-        <div className="px-5 py-4 space-y-2 text-[0.72rem] text-slate-600 leading-relaxed">
-          <p><strong>LAPS</strong> (Local Administrator Password Solution) automatically rotates the local admin password on managed devices so that every device has a unique, time-limited credential.</p>
-          <p>View LAPS status per device in the <strong>Device Detail Panel → LAPS tab</strong>. Fields shown: enabled status, managing source (Microsoft LAPS / ManageEngine Managed / Legacy LAPS), account name, last rotation, and expiry date.</p>
-        </div>
-      </DocCard>
-
-      <DocCard>
-        <CardHeader title="Encryption Monitoring in Depth" />
-        <div className="px-5 py-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[0.72rem]">
-            {[
-              { platform: 'macOS (FileVault)', states: ['On — volume fully encrypted', 'Off — encryption disabled', 'Pending — encryption in progress'], color: 'bg-slate-100 text-slate-700' },
-              { platform: 'Windows (BitLocker)', states: ['On — all drives protected', 'Off — no BitLocker policy', 'Pending — awaiting TPM activation'], color: 'bg-orange-50 text-orange-800' },
-              { platform: 'Remediation', states: ['Auto-trigger: rule-001 fires on encryption Off', 'Runbook: Enable FileVault / BitLocker', 'LAPS rotation after remediation recommended'], color: 'bg-emerald-50 text-emerald-800' },
-            ].map(p => (
-              <div key={p.platform} className={`rounded-xl px-3.5 py-3 ${p.color}`}>
-                <p className="text-[0.65rem] font-bold mb-2">{p.platform}</p>
-                <ul className="space-y-1">
-                  {p.states.map(s => (
-                    <li key={s} className="flex items-start gap-1.5 text-[0.62rem] opacity-80">
-                      <ChevronRight className="h-3 w-3 flex-shrink-0 mt-0.5 opacity-60" />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      </DocCard>
-    </SectionWrap>
-  )
-}
-
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 const SECTION_MAP: Record<DocSection, React.ReactNode> = {
@@ -1356,6 +1259,11 @@ const SECTION_MAP: Record<DocSection, React.ReactNode> = {
   automation:      <AutomationSection />,
   reports:         <ReportsSection />,
   security:        <SecuritySection />,
+  patching:        <PatchingSection />,
+  remote:          <RemoteActionsSection />,
+  analysis:        <AnalysisSection />,
+  ocean:           <OceanSection />,
+  pages:           <PagesIndexSection />,
   configuration:   <ConfigurationSection />,
   roles:           <RolesSection />,
   troubleshooting: <TroubleshootingSection />,

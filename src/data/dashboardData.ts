@@ -18,6 +18,7 @@ import {
   BookOpen,
   RefreshCcw,
   Package,
+  TerminalSquare,
 } from 'lucide-react'
 import type {
   ComplianceDetailRow,
@@ -40,11 +41,11 @@ export const navItems: NavItem[] = [
 
   // ── APPLICATIONS ──────────────────────────────────────────────────────────────
   { id: 'manageengine_apps',    title: 'ManageEngine App Inventory', icon: Layers, group: 'Applications' },
-  { id: 'app_guardian',         title: 'App Guardian',        icon: ShieldCheck,   group: 'Applications', badge: 'Mac' },
-  { id: 'windows_package_builder', title: 'Windows Package Builder', icon: Package, group: 'Applications', badge: 'New' },
+  { id: 'app_guardian',         title: 'App Guardian',        icon: ShieldCheck,   group: 'Applications' },
+  { id: 'windows_package_builder', title: 'Windows Package Builder', icon: Package, group: 'Applications' },
 
   // ── PATCHES ───────────────────────────────────────────────────────────────────
-  { id: 'patch_operations',     title: 'Patch Operations',    icon: Wrench,        group: 'Patches', badge: 'New' },
+  { id: 'patch_operations',     title: 'Patch Operations',    icon: Wrench,        group: 'Patches' },
   { id: 'windows_updates',      title: 'Windows Updates',     icon: RefreshCcw,    group: 'Patches' },
 
   // ── SECURITY ──────────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ export const navItems: NavItem[] = [
 
   // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
   { id: 'automation',           title: 'Automation',          icon: Zap,           group: 'Automations' },
+  { id: 'remote_action_center', title: 'Remote Action Center', icon: TerminalSquare, group: 'Automations' },
 
   // ── REPORTS ───────────────────────────────────────────────────────────────────
   { id: 'reports_analytics',    title: 'Reports & Analytics', icon: BarChart3,     group: 'Reports' },

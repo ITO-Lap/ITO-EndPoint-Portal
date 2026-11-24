@@ -1,20 +1,21 @@
 import type { AppStatus, Device } from '../../types.js'
 import type { ISecurityAgentCollector, SecurityAgentInfo, AgentHealth } from '../types.js'
-import { findAppByNamePattern, healthFromAppStatus } from './agentDetection.js'
+import { findAgentApp, healthFromAppStatus } from './agentDetection.js'
 
 const NAME_PATTERN = /zscaler/i
+const BUNDLE_ID_PATTERN = /^com\.zscaler\.zscaler$/i
 
 export class ZscalerCollector implements ISecurityAgentCollector {
   readonly agentKey = 'zscaler'
   readonly agentName = 'Zscaler Client Connector'
 
   getInstalledAgents(_device: Device, apps: AppStatus[]): SecurityAgentInfo[] {
-    const app = findAppByNamePattern(apps, NAME_PATTERN)
+    const app = findAgentApp(apps, NAME_PATTERN, BUNDLE_ID_PATTERN)
     return app ? [this.getAgentInfo(_device, apps)] : []
   }
 
   getAgentInfo(_device: Device, apps: AppStatus[]): SecurityAgentInfo {
-    const app = findAppByNamePattern(apps, NAME_PATTERN)
+    const app = findAgentApp(apps, NAME_PATTERN, BUNDLE_ID_PATTERN)
     if (!app) {
       return { agentKey: this.agentKey, agentName: this.agentName, installed: false, health: 'NotInstalled' }
     }
