@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Building2, Bell, Lock, ShieldCheck, AlertTriangle, Zap,
   Database, Server, Cloud, Cpu, Settings, RefreshCw, Plug,
-  Download, Trash2, Plus, Link2, Copy, Check,
+  Download, Trash2, Plus, Copy, Check,
   Eye, EyeOff, WifiOff, Hash, LifeBuoy, FileText,
   ShieldAlert, RotateCcw, Info, Users, CheckCircle2, XCircle,
   UserPlus, BookOpen,
-  ChevronDown, ChevronRight, X, Key, Wifi, Edit2, Upload,
+  ChevronDown, X, Key, Wifi, Edit2, Upload,
   LayoutDashboard,
 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
@@ -657,7 +657,7 @@ function AddIntegrationModal({ open, onClose }: {
         </div>
 
         <div className="p-6 overflow-y-auto flex-1">
-          {!selected ? (
+          {(
             <>
               <p className="text-xs font-semibold text-slate-500 mb-1">Integration roadmap</p>
               <p className="text-[0.68rem] text-slate-500 mb-3">These connectors are planned. They cannot accept credentials or connect until their server integrations are available.</p>
@@ -683,7 +683,7 @@ function AddIntegrationModal({ open, onClose }: {
                 })}
               </div>
             </>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
@@ -1362,7 +1362,6 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
 }
 
 function IntegrationsSection() {
-  const { notify } = useToast()
   const [addOpen, setAddOpen] = useState(false)
   const [cardStates, setCardStates] = useState<Record<string, CardState>>(
     () => Object.fromEntries(INTEG_DEFS.map(d => [d.id, initCardState(d)]))
