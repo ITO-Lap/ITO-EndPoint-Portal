@@ -10,6 +10,7 @@
 // engines never fire for the same report.
 
 import { sendWindowsBriefing } from './windowsBriefing.js'
+import { effectiveFormat } from './reportFormats.js'
 import * as store from '../store/scheduledReportsStore.js'
 import type { ScheduledReportRecord } from '../store/scheduledReportsStore.js'
 import { createCriticalPatchReport } from './criticalPatchReport.js'
@@ -89,8 +90,8 @@ async function generateReportContent(schedule: ScheduledReportRecord): Promise<{
     case 'stale-devices':     { const r = await createStaleDevicesReport(); return { content: r.content, filename: r.filename, rows: r.rows.length, overview: r.overview } }
     case 'windows-updates':   { const r = await createWindowsUpdateReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
     case 'app-updates':       { const r = await createAppUpdatesReport(); return { content: r.content, filename: r.filename, rows: r.rows, overview: r.overview } }
-    case 'compliance':        return createComplianceReport(schedule.format as ExportFormat)
-    case 'inventory':         return createInventoryReport(schedule.format as ExportFormat)
+    case 'compliance':        return createComplianceReport(effectiveFormat(schedule.report_type, schedule.format) as ExportFormat)
+    case 'inventory':         return createInventoryReport(effectiveFormat(schedule.report_type, schedule.format) as ExportFormat)
   }
 }
 
@@ -114,7 +115,7 @@ async function deliver(schedule: ScheduledReportRecord, content: Buffer, filenam
   const sendEmail = () => sendReportEmail({
     recipients: schedule.recipients, subject: schedule.name,
     message: overview ? `${overviewToText(overview)}\n\nThe full report "${schedule.name}" is attached.` : `Your scheduled report "${schedule.name}" is attached.`,
-    filename, content, contentType: CONTENT_TYPES[schedule.format] ?? 'application/octet-stream',
+    filename, content, contentType: CONTENT_TYPES[effectiveFormat(schedule.report_type, schedule.format)] ?? 'application/octet-stream',
   })
 
   const slackResult = channelId ? await sendSlack(channelId) : null
@@ -138,7 +139,7 @@ async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 
       const digest = await sendFleetDigest(channelId)
       if (!digest.ok) throw new Error(digest.error ?? 'Delivery failed')
       const runRecord = await store.recordReportRun(schedule.id, {
-        status: 'completed', format: schedule.format, record_count: digest.snapshot?.total ?? null, file_size_bytes: null,
+        status: 'completed', format: effectiveFormat(schedule.report_type, schedule.format), record_count: digest.snapshot?.total ?? null, file_size_bytes: null,
         error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
       })
       return { ok: true, runId: runRecord?.id, rows: digest.snapshot?.total ?? 0, filename: undefined }
@@ -149,7 +150,7 @@ async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 
       const result = await sendWindowsBriefing(channelId)
       if (!result.ok) throw new Error(result.error ?? 'Delivery failed')
       const runRecord = await store.recordReportRun(schedule.id, {
-        status: 'completed', format: schedule.format, record_count: result.devices ?? 0, file_size_bytes: null,
+        status: 'completed', format: effectiveFormat(schedule.report_type, schedule.format), record_count: result.devices ?? 0, file_size_bytes: null,
         error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
       })
       return { ok: true, runId: runRecord?.id, rows: result.devices ?? 0, filename: undefined }
@@ -160,7 +161,7 @@ async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 
       const result = await sendDuplicateDevicesReport(channelId)
       if (!result.ok) throw new Error(result.error ?? 'Delivery failed')
       const runRecord = await store.recordReportRun(schedule.id, {
-        status: 'completed', format: schedule.format, record_count: result.groups ?? 0, file_size_bytes: null,
+        status: 'completed', format: effectiveFormat(schedule.report_type, schedule.format), record_count: result.groups ?? 0, file_size_bytes: null,
         error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
       })
       return { ok: true, runId: runRecord?.id, rows: result.groups ?? 0, filename: undefined }
@@ -169,14 +170,14 @@ async function execute(schedule: ScheduledReportRecord, triggeredBy: 'manual' | 
     const delivery = await deliver(schedule, report.content, report.filename, report.overview)
     if (!delivery.ok) throw new Error(delivery.error ?? 'Delivery failed')
     const runRecord = await store.recordReportRun(schedule.id, {
-      status: 'completed', format: schedule.format, record_count: report.rows, file_size_bytes: report.content.length,
+      status: 'completed', format: effectiveFormat(schedule.report_type, schedule.format), record_count: report.rows, file_size_bytes: report.content.length,
       error_message: null, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
     })
     return { ok: true, runId: runRecord?.id, rows: report.rows, filename: report.filename }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await store.recordReportRun(schedule.id, {
-      status: 'failed', format: schedule.format, record_count: null, file_size_bytes: null,
+      status: 'failed', format: effectiveFormat(schedule.report_type, schedule.format), record_count: null, file_size_bytes: null,
       error_message: message, triggered_by: triggeredBy, started_at: startedAt, completed_at: new Date().toISOString(),
     })
     throw error

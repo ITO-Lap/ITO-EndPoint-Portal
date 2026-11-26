@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../api'
 import { SortableHeader } from '../ui/SortableHeader'
+import { ReportBuilderPage } from '../../pages/ReportBuilderPage'
 import type { ReportMeta, ReportResult, ReportColumn, ReportSummaryCard, IntegrationStatusItem } from '../../api'
 
 // ── Source tab config ──────────────────────────────────────────────────────────
@@ -25,15 +26,15 @@ const GRAPH_DOMAINS = [
     description: 'Device inventory, compliance policies, app deployment, OS patching, configuration profiles, and enrollment health via Microsoft Intune.',
     source: 'Microsoft Intune',
     iconPath: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-    bg:     'bg-orange-500',
-    light:  'bg-orange-50',
-    text:   'text-orange-700',
-    border: 'border-orange-500',
-    ring:   'ring-orange-200',
-    pill:   'bg-orange-100 text-orange-700',
-    selBorder: 'border-orange-500',
-    selRing:   'ring-2 ring-orange-200',
-    selHeader: 'bg-orange-500',
+    bg:     'bg-indigo-500',
+    light:  'bg-indigo-50',
+    text:   'text-indigo-700',
+    border: 'border-indigo-500',
+    ring:   'ring-indigo-200',
+    pill:   'bg-indigo-100 text-indigo-700',
+    selBorder: 'border-indigo-500',
+    selRing:   'ring-2 ring-indigo-200',
+    selHeader: 'bg-indigo-500',
   },
   {
     category: 'threat',
@@ -88,13 +89,13 @@ const GRAPH_DOMAINS = [
 // ── Category metadata ──────────────────────────────────────────────────────────
 
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  inventory:          { label: 'Inventory',          color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  inventory:          { label: 'Inventory',          color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   compliance:         { label: 'Compliance',         color: 'bg-green-50 text-green-700 border-green-200' },
   security:           { label: 'Security',           color: 'bg-red-50 text-red-700 border-red-200' },
   software:           { label: 'Software',           color: 'bg-lime-50 text-lime-700 border-lime-200' },
   health:             { label: 'Health',             color: 'bg-amber-50 text-amber-700 border-amber-200' },
   users:              { label: 'Users',              color: 'bg-slate-50 text-slate-700 border-slate-200' },
-  endpoint:           { label: 'Endpoint Mgmt',      color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  endpoint:           { label: 'Endpoint Mgmt',      color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   threat:             { label: 'Security & Threat',  color: 'bg-red-50 text-red-800 border-red-300' },
   identity:           { label: 'Identity & Users',   color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   audit:              { label: 'Compliance & Audit', color: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -104,7 +105,7 @@ const SUMMARY_COLORS: Record<ReportSummaryCard['color'], string> = {
   green:  'bg-green-50 border-green-200 text-green-800',
   red:    'bg-red-50 border-red-200 text-red-800',
   amber:  'bg-amber-50 border-amber-200 text-amber-800',
-  sky:    'bg-orange-50 border-orange-200 text-orange-800',
+  sky:    'bg-indigo-50 border-indigo-200 text-indigo-800',
   slate:  'bg-slate-50 border-slate-200 text-slate-800',
   violet: 'bg-lime-50 border-lime-200 text-lime-800',
 }
@@ -149,16 +150,16 @@ function CellValue({ col, value }: { col: ReportColumn; value: unknown }) {
       lc === 'warning'             ? 'bg-amber-100 text-amber-800' :
       lc === 'enabled'             ? 'bg-green-100 text-green-800' :
       lc === 'disabled'            ? 'bg-red-100 text-red-800' :
-      lc === 'windows'             ? 'bg-orange-100 text-orange-800' :
+      lc === 'windows'             ? 'bg-indigo-100 text-indigo-800' :
       lc === 'macos'               ? 'bg-slate-100 text-slate-800' :
-      lc === 'linux'               ? 'bg-orange-100 text-orange-800' :
+      lc === 'linux'               ? 'bg-indigo-100 text-indigo-800' :
       lc === 'active'              ? 'bg-teal-100 text-teal-800' :
       lc === 'inactive'            ? 'bg-slate-100 text-slate-600' :
       lc === 'critical'            ? 'bg-red-100 text-red-900 font-bold' :
       lc === 'high'                ? 'bg-orange-100 text-orange-800' :
       lc === 'medium'              ? 'bg-amber-100 text-amber-800' :
       lc === 'low'                 ? 'bg-green-100 text-green-700' :
-      lc === 'new'                 ? 'bg-orange-100 text-orange-800' :
+      lc === 'new'                 ? 'bg-indigo-100 text-indigo-800' :
       lc === 'in progress'         ? 'bg-amber-100 text-amber-800' :
       lc === 'resolved'            ? 'bg-green-100 text-green-800' :
       lc === 'dismissed'           ? 'bg-slate-100 text-slate-500' :
@@ -168,7 +169,7 @@ function CellValue({ col, value }: { col: ReportColumn; value: unknown }) {
       lc === 'up to date'          ? 'bg-green-100 text-green-800' :
       lc === 'overdue'             ? 'bg-red-100 text-red-800' :
       lc === 'pending restart'     ? 'bg-amber-100 text-amber-800' :
-      lc === 'update available'    ? 'bg-orange-100 text-orange-800' :
+      lc === 'update available'    ? 'bg-indigo-100 text-indigo-800' :
       lc === 'registered'          ? 'bg-green-100 text-green-800' :
       lc === 'not registered'      ? 'bg-red-100 text-red-800' :
       lc === 'capable'             ? 'bg-teal-100 text-teal-800' :
@@ -179,7 +180,7 @@ function CellValue({ col, value }: { col: ReportColumn; value: unknown }) {
       lc === 'denied'              ? 'bg-red-100 text-red-800' :
       lc === 'clean'               ? 'bg-green-100 text-green-800' :
       lc === 'threat found'        ? 'bg-red-100 text-red-900' :
-      lc === 'quarantined'         ? 'bg-orange-100 text-orange-800' :
+      lc === 'quarantined'         ? 'bg-indigo-100 text-indigo-800' :
       lc === 'yes'                 ? 'bg-red-100 text-red-800' :
       lc === 'no'                  ? 'bg-green-100 text-green-700' :
       'bg-slate-100 text-slate-700'
@@ -195,16 +196,20 @@ function CellValue({ col, value }: { col: ReportColumn; value: unknown }) {
 
   if (col.type === 'date') {
     if (!value) return <span className="text-slate-400">—</span>
+    let parts: { formatted: string; ago: string } | undefined
     try {
       const d = new Date(str)
-      const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      const ago = getRelativeTime(d)
-      return (
-        <span className="text-slate-600 text-sm" title={str}>
-          {formatted} <span className="text-slate-400 text-xs">({ago})</span>
-        </span>
-      )
-    } catch { return <span className="text-slate-600 text-sm">{str}</span> }
+      parts = {
+        formatted: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        ago: getRelativeTime(d),
+      }
+    } catch { /* invalid date — fall back to the raw string */ }
+    if (!parts) return <span className="text-slate-600 text-sm">{str}</span>
+    return (
+      <span className="text-slate-600 text-sm" title={str}>
+        {parts.formatted} <span className="text-slate-400 text-xs">({parts.ago})</span>
+      </span>
+    )
   }
 
   if (col.type === 'number') {
@@ -270,7 +275,7 @@ function SourceTabs({
             <span>{tab.label}</span>
             {tab.badge && (
               <span className={`rounded px-1 py-px text-[10px] font-bold tracking-wide ${
-                isActive ? 'bg-sky-200/60 text-sky-800' : 'bg-orange-100 text-orange-600'
+                isActive ? 'bg-sky-200/60 text-sky-800' : 'bg-indigo-100 text-indigo-600'
               }`}>{tab.badge}</span>
             )}
             {status && (
@@ -416,7 +421,7 @@ function ReportRunner({
                 {report.apiEndpoint}
               </span>
               {report.graphSource && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-orange-50 border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-700">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-xs font-medium text-indigo-700">
                   <svg className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
                   </svg>
@@ -511,11 +516,11 @@ function GraphDomainView({
       <div className="rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-5 flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <svg className="h-5 w-5 text-orange-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <svg className="h-5 w-5 text-indigo-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
             </svg>
             <h2 className="text-base font-semibold text-white">Microsoft Graph API Reports</h2>
-            <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wider bg-orange-500/30 text-orange-300">17 REPORTS</span>
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wider bg-indigo-500/30 text-indigo-300">17 REPORTS</span>
           </div>
           <p className="text-sm text-slate-400">
             Select a domain below to explore reports powered by the Microsoft Graph API across Intune, Defender, Entra ID, and Purview.
@@ -734,6 +739,7 @@ export function ReportsPage() {
   const [sortBy, setSortBy] = useState<string | undefined>(undefined)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [offset, setOffset] = useState(0)
+  const [showBuilder, setShowBuilder] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -777,6 +783,12 @@ export function ReportsPage() {
       setRunning(false)
     }
   }, [])
+
+  // Refresh means "recompute now": clear the server's cached copy of this report first, or it would answer from the cache.
+  const refreshSelected = useCallback(async (report: ReportMeta, newSortBy?: string, newSortDir?: 'asc' | 'desc') => {
+    await api.invalidateReport(report.id).catch(() => undefined)
+    await runSelected(report, 0, newSortBy, newSortDir)
+  }, [runSelected])
 
   const handleSelectReport = useCallback((report: ReportMeta) => {
     setSelectedReport(report)
@@ -826,8 +838,19 @@ export function ReportsPage() {
     : sourceFiltered.filter(r => r.category === selectedCategory)
   const activeSourceLabel = SOURCE_TABS.find(t => t.key === activeSource)?.label ?? 'All Sources'
 
+  if (showBuilder) return <ReportBuilderPage onBack={() => setShowBuilder(false)} />
+
   return (
     <div className="space-y-0">
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowBuilder(true)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+        >
+          Build custom report
+        </button>
+      </div>
       <SourceTabs
         active={activeSource}
         onChange={handleSourceChange}
@@ -853,7 +876,7 @@ export function ReportsPage() {
           onSort={handleSort}
           onPage={handlePage}
           onExport={handleExport}
-          onRefresh={() => selectedReport && runSelected(selectedReport, 0, sortBy, sortDir)}
+          onRefresh={() => { if (selectedReport) void refreshSelected(selectedReport, sortBy, sortDir) }}
         />
       ) : (
         /* Other sources: classic sidebar + runner layout */
@@ -943,7 +966,7 @@ export function ReportsPage() {
                 onSort={handleSort}
                 onPage={handlePage}
                 onExport={handleExport}
-                onRefresh={() => runSelected(selectedReport, 0, sortBy, sortDir)}
+                onRefresh={() => void refreshSelected(selectedReport, sortBy, sortDir)}
                 sourceLabel={activeSourceLabel}
               />
             )}

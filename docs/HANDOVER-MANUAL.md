@@ -1,6 +1,6 @@
 > Word version for download: [ITO-Endpoint-Handover-Manual.docx](ITO-Endpoint-Handover-Manual.docx). Keep both files in sync (edit the content, regenerate the .docx).
 
-# ITO Endpoint AI Copilot: project handover manual
+# EndPoint+: project handover manual
 
 _Everything a new owner needs to understand, run, deploy, maintain and troubleshoot the application. Prepared at the outgoing developer's departure. Version 1.0, October 2026._
 
@@ -13,7 +13,7 @@ These items affect whether the team can actually take over the work. They were v
 |---|---|---|
 | Large amount of work is not committed | About 170 files are modified, deleted or untracked in the working copy (App Intelligence, Stale Devices, Patch Operations, dashboard panels, schedulers, tests and more). | Review and commit this work to the shared repository before anything else. Until then it exists only on the previous developer's laptop. |
 | Remote is far behind | Local main is 28 commits ahead of origin/main. The last push to origin/main was 6 June 2026. | Push after the commit review. Confirm the pushed branch builds in CI or on a clean clone. |
-| Repository owner is a personal account | The remote is github.com/AKVERMA87/Automation-Dashboard, a personal account, not a Zinnia organization. | Transfer or mirror the repository into the approved Zinnia shared repository and update the remote. Add at least two maintainers. |
+| Repository owner is a personal account | The remote is github.com/AKVERMA87/Automation-Dashboard, a personal account, not a Verma organization. | Transfer or mirror the repository into the approved Verma shared repository and update the remote. Add at least two maintainers. |
 | Front-end tests failing | npm test: 25 of 129 tests fail across 2 files (securityPosturePage and a component test that renders without ToastProvider). Server tests pass: 472 passed, 7 skipped. | Fix or update these tests before enabling a CI gate. Back end and front end both build successfully. |
 | Hard-coded admin identity | server/src/routes/auth.ts and the PROFILE_USER_UPN default use avinash.verma@zinnia.com. The front end always runs as Global Admin. | Replace with the new owner or a group. See section 8 for the authentication model. |
 | Stray value in root .env | The root .env file (git-ignored) contains one line that is not a KEY=value pair and looks like a credential. | Delete the line and rotate that credential in its source system. |
@@ -22,7 +22,7 @@ These items affect whether the team can actually take over the work. They were v
 
 ## 2. What the application is
 
-ITO Endpoint AI Copilot is an internal dashboard for IT Operations. It connects to Microsoft Intune, Microsoft Entra ID and ManageEngine (Endpoint Central and MDM), shows device, patch, application and security posture, runs scheduled reports and rule-based automations, and provides an AI chat assistant (the Endpoint Operations Copilot). It can raise Jira tickets, create Confluence articles and post to Slack.
+EndPoint+ is an internal dashboard for IT Operations. It connects to Microsoft Intune, Microsoft Entra ID and ManageEngine (Endpoint Central and MDM), shows device, patch, application and security posture, runs scheduled reports and rule-based automations, and provides an AI chat assistant (the Endpoint Operations Copilot). It can raise Jira tickets, create Confluence articles and post to Slack.
 
 With no credentials configured, the application starts and shows empty states; each integration lights up when its credentials are supplied in server/.env or in Settings, Integrations.
 
@@ -242,7 +242,7 @@ package.json contains a heroku-postbuild script and the server sets trust proxy 
 | Action | Owner | Done |
 |---|---|---|
 | Commit all working-copy changes to a reviewed branch and push to the shared repository | [New owner] | [ ] |
-| Move or mirror the repository from the personal GitHub account to the approved Zinnia organization; add maintainers | [New owner / Engineering lead] | [ ] |
+| Move or mirror the repository from the personal GitHub account to the approved Verma organization; add maintainers | [New owner / Engineering lead] | [ ] |
 | Clean clone test: clone, follow section 9, run build and tests, confirm the app starts | [Second engineer] | [ ] |
 | Transfer ownership of the Azure app registration(s) and record the client secret expiry date | [Identity team] | [ ] |
 | Rotate all credentials the previous developer held (Azure, ManageEngine, Slack, Jira, Gemini, OpenAI, database) | [New owner] | [ ] |
@@ -267,6 +267,6 @@ package.json contains a heroku-postbuild script and the server sets trust proxy 
 
 ## 14. Documentation index and known corrections
 
-Start at docs/README.md. Key documents: docs/01-overview (architecture, tech stack), docs/03-backend (API reference, services), docs/04-integrations (one guide per integration), docs/06-development (setup, IIS deployment, DeployHub packaging, quick modifications), docs/07-features (feature guides), docs/08-design (design system and Zinnia brand tokens), docs/ROLES.md, and docs/plans/2026-10-20-patch-operations.md.
+Start at docs/README.md. Key documents: docs/01-overview (architecture, tech stack), docs/03-backend (API reference, services), docs/04-integrations (one guide per integration), docs/06-development (setup, IIS deployment, DeployHub packaging, quick modifications), docs/07-features (feature guides), docs/08-design (design system and Verma brand tokens), docs/ROLES.md, and docs/plans/2026-10-20-patch-operations.md.
 
 Corrections needed in existing files: CLAUDE.md, AGENTS.md and .github/copilot-instructions.md describe an OpenAI-only AI layer and mention Kandji; the Copilot now uses Gemini and Kandji was removed. docs/06-development/SETUP.md, step 4, describes a demo sign-in page that was removed. docs/01-overview/ARCHITECTURE.md shows the Copilot calling OpenAI. docs/README.md lists some pages (Intune Devices, Mac Devices) that are now combined as Managed Devices.

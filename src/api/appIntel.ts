@@ -245,7 +245,9 @@ async function request<T>(path: string, method: 'GET' | 'POST' = 'GET', payload?
 
 /** Downloads the CSV/Excel export of the filtered inventory, or of one app's devices when `key` is given. */
 async function downloadExport(f: Pick<AppListFilters, 'platform'> & Partial<AppListFilters>, format: 'csv' | 'xlsx', key?: string): Promise<void> {
-  const { page: _page, pageSize: _pageSize, ...rest } = f
+  const rest: Record<string, unknown> = { ...f }
+  delete rest.page
+  delete rest.pageSize
   const qs = new URLSearchParams({ format })
   for (const [k, v] of Object.entries(rest)) if (v !== undefined && v !== '') qs.set(k, String(v))
   if (key) qs.set('key', key)

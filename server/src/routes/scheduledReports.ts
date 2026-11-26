@@ -4,12 +4,15 @@
 // Execution is driven by server/src/services/scheduledReportRunner.ts.
 
 import { Router } from 'express'
+import { effectiveFormat } from '../services/reportFormats.js'
+import { requireCapability } from '../middleware/requireRole.js'
 import * as store from '../store/scheduledReportsStore.js'
 import type { ReportFormat, ReportType } from '../store/scheduledReportsStore.js'
 import { runScheduledReportNow } from '../services/scheduledReportRunner.js'
 import { asyncHandler } from '../middleware/errorHandler.js'
 
 const router = Router()
+router.use(requireCapability('pages.Scheduled Reports'))
 
 const SLACK_ONLY = new Set<string>(['fleet-digest', 'entra-duplicate-devices', 'windows-briefing'])
 const VALID_TYPES: ReportType[] = ['critical-patching', 'stale-devices', 'compliance', 'inventory', 'app-updates', 'fleet-digest', 'entra-duplicate-devices', 'windows-updates', 'windows-briefing']
@@ -62,7 +65,7 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 
   const report = await store.createReport({
-    name, report_type: report_type as ReportType, schedule_cron, format: format as ReportFormat,
+    name, report_type: report_type as ReportType, schedule_cron, format: effectiveFormat(report_type, format) as ReportFormat,
     recipients, filters, created_by: created_by ?? null,
   })
   res.status(201).json({ success: true, data: report })
@@ -99,7 +102,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (filters !== undefined) patch.filters = filters
   if (name !== undefined) patch.name = name
   if (schedule_cron !== undefined) patch.schedule_cron = schedule_cron
-  if (format !== undefined) patch.format = format
+  if (format !== undefined) patch.format = effectiveFormat(existing.report_type, format) // Excel-only report types stay Excel
   if (recipients !== undefined) patch.recipients = recipients
   if (is_active !== undefined) patch.is_active = is_active
 

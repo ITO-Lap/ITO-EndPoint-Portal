@@ -1,11 +1,12 @@
 // Windows Package Builder API. Uploaded installers are stored, hashed and READ (never executed) on this server.
-// Installing, validating and IntuneWinAppUtil packaging happen only on the separate Windows worker.
-// Nothing here publishes, assigns or deploys an application.
+// Installing/validating happens only on the separate Windows worker; the .intunewin is built natively here (zip + encrypt, nothing executed).
+// This module only PACKAGES applications. It has no publishing, assignment or deployment features.
 
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { createReadStream, existsSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { requireCapability } from '../middleware/requireRole.js'
 import { getJob, listJobs, recordJobEvent, saveJob, setJobState } from '../services/winPackager/jobStore.js'
@@ -17,11 +18,12 @@ import {
 import { analyzeArchive, analyzeInstaller } from '../services/winPackager/inspect.js'
 import { extractZip } from '../services/winPackager/zipSafe.js'
 import { applyPatch, configPatchSchema, configProblems, defaultConfig, outputFileName } from '../services/winPackager/config.js'
-import { ARTIFACT_NAMES, detectionScript, generateArtifacts, writeArtifacts } from '../services/winPackager/artifacts.js'
+import { exportOutput, outputDirFor, removeOutput } from '../services/winPackager/outputDir.js'
+import { buildIntuneWin } from '../services/winPackager/intunewin.js'
+import { ARTIFACT_NAMES, detectionScript, generateArtifacts, installScript, uninstallScript, writeArtifacts } from '../services/winPackager/artifacts.js'
 import type { ArtifactName } from '../services/winPackager/artifacts.js'
 import { createWorkerClient, evaluateSteps, workerConfig, WorkerError } from '../services/winPackager/worker.js'
 import { signedLink } from '../services/winPackager/signing.js'
-import { buildGuide, endpointCentralApiStatus } from '../services/winPackager/guides.js'
 import { running } from '../services/winPackager/running.js'
 import type { PackageJob } from '../services/winPackager/types.js'
 
@@ -52,7 +54,6 @@ const publicBase = (): string | null => {
   try { const u = new URL(raw); return u.protocol === 'https:' ? u.origin : null } catch { return null }
 }
 
-const MAX_ICON_BYTES = 512 * 1024
 const SAFE_ENTRY = /^(?:[A-Za-z0-9 _\-.()+]+\/)*[A-Za-z0-9 _\-.()+]+$/
 
 // ── Status ─────────────────────────────────────────────────────────────────────
@@ -65,10 +66,6 @@ router.get('/status', requireCapability('winPackager.read'), async (_req, res, n
         limits: packagerLimits(),
         windowsWorker: await workerClient().status(),
         workerLinksConfigured: publicBase() !== null,
-        publishing: {
-          intune: { enabled: false, reason: 'Publish to Intune is disabled until Microsoft Graph permissions and implementation are verified. Use the guided manual steps.' },
-          endpointCentral: endpointCentralApiStatus(),
-        },
       },
     })
   } catch (err) { next(err) }
@@ -219,29 +216,6 @@ router.put('/jobs/:id/config', requireCapability('winPackager.write'), async (re
   } catch (err) { next(err) }
 })
 
-router.put('/jobs/:id/icon', requireCapability('winPackager.write'), async (req, res, next) => {
-  try {
-    const job = loadJob(req, res); if (!job) return
-    const chunks: Buffer[] = []
-    let size = 0
-    for await (const chunk of req) {
-      size += (chunk as Buffer).length
-      if (size > MAX_ICON_BYTES) { fail(res, 413, 'Logo must be 512 KB or smaller.'); return }
-      chunks.push(chunk as Buffer)
-    }
-    const body = Buffer.concat(chunks)
-    const isPng = body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
-    const isJpg = body[0] === 0xff && body[1] === 0xd8
-    if (!isPng && !isJpg) { fail(res, 415, 'Logo must be a PNG or JPEG image.'); return }
-    const name = isPng ? 'icon.png' : 'icon.jpg'
-    if (job.iconFile && job.iconFile !== name) rmSync(join(jobDir(job.id), 'artifacts', job.iconFile), { force: true })
-    writeFileSync(join(jobDir(job.id), 'artifacts', name), body, { mode: 0o600 })
-    job.iconFile = name
-    await recordJobEvent(job, actorOf(req), 'edit', `Logo uploaded (${name}, ${body.length} bytes)`)
-    res.json({ success: true, data: job })
-  } catch (err) { next(err) }
-})
-
 // ── Validation (Windows worker) ────────────────────────────────────────────────
 
 function workerRequestLinks(job: PackageJob): { sourceUrl: string; uploadUrl: string } | null {
@@ -303,7 +277,7 @@ router.post('/jobs/:id/validate', requireCapability('winPackager.validate'), asy
 
 // ── Approval + package creation ────────────────────────────────────────────────
 
-/** Engineer sign-off on the reviewed configuration. This approves PACKAGING only — never publishing. */
+/** Engineer sign-off on the reviewed configuration. This approves PACKAGING only. */
 router.post('/jobs/:id/approve', requireCapability('winPackager.validate'), async (req, res, next) => {
   try {
     const job = loadJob(req, res); if (!job) return
@@ -357,47 +331,38 @@ router.post('/jobs/:id/package', requireCapability('winPackager.validate'), asyn
     }
     if (!existsSync(resolveInside(sourceDir, job.config.setupFile))) { fail(res, 409, 'The setup file is not in the source folder.'); return }
 
-    const worker = workerClient()
-    const status = await worker.status()
-    const links = workerRequestLinks(job)
-    if (status.state !== 'ready' || !links || !status.canPackage) {
-      const reason = status.state !== 'ready' ? (status.reason ?? 'Windows worker unavailable.') : !links ? 'WIN_PACKAGER_PUBLIC_URL (https) is not configured.' : 'The Windows worker has no IntuneWinAppUtil.exe configured.'
-      await recordJobEvent(job, actor, 'package-unavailable', reason)
-      await setJobState(job, 'api-unavailable', actor, reason)
-      fail(res, 503, `Windows worker cannot create the package: ${reason}`, { state: 'api-unavailable' })
-      return
-    }
-
     const outputName = outputFileName(job.config)
     const artifactsDir = join(jobDir(job.id), 'artifacts')
     rmSync(join(artifactsDir, outputName), { force: true })
     delete job.output
     await recordJobEvent(job, actor, 'package-start', outputName)
-    await setJobState(job, 'processing', actor, 'Creating the .intunewin package on the Windows worker.')
+    await setJobState(job, 'processing', actor, 'Creating the .intunewin package.')
     running.add(job.id)
     res.status(202).json({ success: true, data: job })
 
     const setupFile = job.config.setupFile
     void (async () => {
       try {
-        const result = await worker.createPackage({ jobId: job.id, setupFile, outputName, sourceUrl: links.sourceUrl, uploadUrl: links.uploadUrl })
         const file = join(artifactsDir, outputName)
-        if (!existsSync(file)) throw new WorkerError('The worker reported success but did not upload the package.')
+        // Built natively here: zipping + encrypting only, nothing from the source is executed.
+        const workDir = join(jobDir(job.id), 'tmp'); mkdirSync(workDir, { recursive: true })
+        const extraFiles = /\.(msix|appx)$/i.test(setupFile) ? [{ name: 'install.ps1', content: installScript(job.config!) }, { name: 'uninstall.ps1', content: uninstallScript(job.config!) }] : []
+        try { await buildIntuneWin({ sourceDir, setupFile, outputFile: file, workDir, extraFiles }) } finally { rmSync(workDir, { recursive: true, force: true }) }
         const size = statSync(file).size
         if (size > limits.maxIntuneBytes) { rmSync(file, { force: true }); throw new WorkerError('The created package exceeds the 30 GB Intune limit.') }
         const sha256 = await hashFile(file)
-        if (result.sha256 && result.sha256.toLowerCase() !== sha256) { rmSync(file, { force: true }); throw new WorkerError('Package hash reported by the worker does not match the uploaded file.') }
-        job.output = { fileName: outputName, sizeBytes: size, sha256, createdAt: new Date().toISOString(), ...withWorker(result.workerName ?? status.name) }
+        job.output = { fileName: outputName, sizeBytes: size, sha256, createdAt: new Date().toISOString(), workerName: 'built-in packager' }
         writeArtifacts(job)
         writeFileSync(join(artifactsDir, 'sha256.txt'), `${sha256}  ${outputName}\n${job.source.sha256}  ${job.source.fileName}\n`, 'utf-8')
         await recordJobEvent(job, actor, 'package-created', `${outputName} (${size} bytes, sha256 ${sha256})`)
         writeFileSync(join(artifactsDir, 'package.log'), job.events.map(e => `${e.at} ${e.actor} ${e.action}${e.detail ? ` ${e.detail}` : ''}`).join('\n') + '\n', 'utf-8')
+        try { job.output.exportDir = exportOutput(job) } catch (e) { await recordJobEvent(job, actor, 'export-failed', e instanceof Error ? e.message : 'unknown error') }
         const validated = job.validation?.outcome === 'validated'
         await setJobState(job, validated ? 'ready' : 'review-required', actor, validated ? 'Package created and validated.' : 'Package Created / Windows Installation Not Tested.')
       } catch (err) {
-        const message = err instanceof WorkerError ? err.message : 'Package creation failed unexpectedly.'
+        const message = `Package creation failed: ${err instanceof Error ? err.message : 'unexpected error'}`
         await recordJobEvent(job, actor, 'package-error', message)
-        await setJobState(job, err instanceof WorkerError && err.unavailable ? 'api-unavailable' : 'validation-failed', actor, message)
+        await setJobState(job, 'validation-failed', actor, message)
       } finally { running.delete(job.id) }
     })()
   } catch (err) { next(err) }
@@ -416,6 +381,50 @@ router.get('/jobs/:id/artifacts', requireCapability('winPackager.read'), (req, r
     { name: 'package.log', kind: 'log', available: !!job.output },
   ]
   res.json({ success: true, data: { files, output: job.output ?? null, sourceSha256: job.source.sha256 } })
+})
+
+// ── Output folder ──────────────────────────────────────────────────────────────
+
+/** Opening a folder only makes sense when the server runs on the engineer's own machine: loopback client, no proxy,
+ *  and not production (unless explicitly allowed). The path is always the job's own artifacts dir — never user input. */
+function canOpenFolder(req: Request): boolean {
+  const addr = req.socket.remoteAddress ?? ''
+  const loopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+  const allowed = process.env['NODE_ENV'] !== 'production' || process.env['WIN_PACKAGER_ALLOW_OPEN_FOLDER'] === 'true'
+  return loopback && allowed && !req.header('x-forwarded-for')
+}
+
+/** Folder where the deliverables live for the engineer. Re-exports if it is missing (e.g. packages built earlier). */
+function ensureExported(job: PackageJob): string {
+  const dir = job.output?.exportDir ?? outputDirFor(job)
+  if (job.output && !existsSync(join(dir, job.output.fileName))) {
+    job.output.exportDir = exportOutput(job)
+    saveJob(job)
+    return job.output.exportDir
+  }
+  return dir
+}
+
+router.get('/jobs/:id/output-folder', requireCapability('winPackager.read'), (req, res, next) => {
+  try {
+    const job = loadJob(req, res); if (!job) return
+    const path = job.output ? ensureExported(job) : outputDirFor(job)
+    res.json({ success: true, data: { path, fileName: job.output?.fileName ?? null, canOpen: canOpenFolder(req) && !!job.output } })
+  } catch (err) { next(err) }
+})
+
+router.post('/jobs/:id/output-folder/open', requireCapability('winPackager.read'), async (req, res, next) => {
+  try {
+    const job = loadJob(req, res); if (!job) return
+    if (!job.output) { fail(res, 409, 'No package has been created yet.'); return }
+    if (!canOpenFolder(req)) { fail(res, 403, 'The output folder can only be opened when the server runs on your own computer. Copy the path or download the files instead.'); return }
+    const dir = ensureExported(job)
+    if (!existsSync(dir)) { fail(res, 404, 'Output folder no longer exists.'); return }
+    const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+    execFile(opener, [dir], err => { if (err && process.platform !== 'win32') console.error('[winPackager] open folder failed:', err.message) })
+    await recordJobEvent(job, actorOf(req), 'open-output-folder')
+    res.json({ success: true, data: { path: dir } })
+  } catch (err) { next(err) }
 })
 
 router.get('/jobs/:id/artifacts/:name', requireCapability('winPackager.read'), async (req, res, next) => {
@@ -444,38 +453,28 @@ router.get('/jobs/:id/artifacts/:name', requireCapability('winPackager.read'), a
   } catch (err) { next(err) }
 })
 
-// ── Publishing guide & approval ────────────────────────────────────────────────
-
-router.get('/jobs/:id/guide', requireCapability('winPackager.read'), (req, res) => {
-  const job = loadJob(req, res); if (!job) return
-  res.json({ success: true, data: buildGuide(job) })
-})
-
-/** Records the engineer's explicit confirmation that THEY will publish manually. Does not publish anything. */
-router.post('/jobs/:id/publishing-approval', requireCapability('winPackager.publish'), async (req, res, next) => {
-  try {
-    const job = loadJob(req, res); if (!job) return
-    if (!job.output) { fail(res, 409, 'Create the package first.'); return }
-    if (req.body?.confirm !== true) { fail(res, 400, 'Explicit confirmation is required (confirm: true).'); return }
-    await recordJobEvent(job, actorOf(req), 'publish-approval', `Engineer confirmed manual publishing of ${job.output.fileName}${job.validation?.outcome === 'validated' ? '' : ' (not validated on Windows)'}`)
-    res.json({ success: true, data: job })
-  } catch (err) { next(err) }
-})
-
-/** Reserved for the future Graph integration. Disabled: it never publishes, assigns or deploys. */
-router.post('/jobs/:id/publish', requireCapability('winPackager.publish'), (_req, res) => {
-  fail(res, 501, 'Publish to Intune is disabled until Microsoft Graph permissions and implementation are verified. Use the guided manual publishing steps.')
-})
-
 // ── Delete / cleanup ───────────────────────────────────────────────────────────
 
+/** Delete acts on the OUTPUT folder: a job with a finished package loses its package files there (the uploaded
+ *  source and job stay, so it can be packaged again). A job that never produced a package is removed entirely. */
 router.delete('/jobs/:id', requireCapability('winPackager.validate'), async (req, res, next) => {
   try {
     const job = loadJob(req, res); if (!job) return
     if (running.has(job.id)) { fail(res, 409, 'A background operation is running for this job.'); return }
-    await recordJobEvent(job, actorOf(req), 'delete', `${job.source.fileName} workspace removed`)
+    const actor = actorOf(req)
+    if (job.output) {
+      const { dir, removed } = removeOutput(job)
+      rmSync(join(jobDir(job.id), 'artifacts', job.output.fileName), { force: true })
+      delete job.output
+      delete job.approval
+      await recordJobEvent(job, actor, 'delete-output', `${removed} file(s) removed from ${dir}`)
+      await setJobState(job, 'review-required', actor, 'Package deleted from the output folder. The uploaded source is kept.')
+      res.json({ success: true, data: { jobRemoved: false, job } })
+      return
+    }
+    await recordJobEvent(job, actor, 'delete', `${job.source.fileName} workspace removed`)
     removeJobWorkspace(job.id)
-    res.json({ success: true })
+    res.json({ success: true, data: { jobRemoved: true } })
   } catch (err) { next(err) }
 })
 

@@ -11,6 +11,7 @@ import { api } from '../api'
 import type { ApiDevice, ManageEngineFleetProfileResult, MacSecurityAppDevice, MacSecurityAppInventory } from '../api'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
 import { useColumnResize } from '../hooks/useColumnResize'
+import { useOptionalPermissions } from '../context/permissionsHooks'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
@@ -32,7 +33,7 @@ const DEVICE_COLS = [
   { key: 'checkin',    label: 'Last Check-in',      min: 100, default: 140 },
   { key: 'filevault',  label: 'FileVault',          min:  80, default: 100 },
   { key: 'compliance', label: 'MDM Status / Profiles', min: 120, default: 190 },
-  { key: 'blueprint',  label: 'Applied Policy', min: 100, default: 180 },
+  { key: 'logs',       label: 'Logs',               min:  70, default:  90, noResize: true },
 ] as const
 type DColKey = typeof DEVICE_COLS[number]['key']
 
@@ -131,21 +132,21 @@ function metricBar(label: string, value: number, assessed: number, total: number
   const pct = assessed > 0 ? Math.round((value / assessed) * 100) : null
   const barColor =
     color === 'emerald' ? 'bg-emerald-500' :
-    color === 'orange'  ? 'bg-orange-500'  :
+    color === 'orange'  ? 'bg-indigo-500'  :
     color === 'amber'   ? 'bg-amber-500'   :
     color === 'red'     ? 'bg-red-500'     : 'bg-slate-400'
   const textColor =
     color === 'emerald' ? 'text-emerald-600' :
-    color === 'orange'  ? 'text-orange-600'  :
+    color === 'orange'  ? 'text-indigo-600'  :
     color === 'amber'   ? 'text-amber-600'   :
     color === 'red'     ? 'text-red-600'     : 'text-slate-600'
   const borderColor =
     color === 'emerald' ? 'border-emerald-200' :
-    color === 'orange'  ? 'border-orange-200'  :
+    color === 'orange'  ? 'border-indigo-200'  :
     color === 'amber'   ? 'border-amber-200'   :
     color === 'red'     ? 'border-red-200'     : 'border-slate-200'
   return (
-    <button type="button" onClick={onClick} aria-label={`View device details for ${label}`} className={`bg-white rounded-2xl border ${borderColor} shadow-sm px-4 py-4 flex flex-col gap-3 text-left transition hover:shadow-md hover:border-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400`}>
+    <button type="button" onClick={onClick} aria-label={`View device details for ${label}`} className={`bg-white rounded-2xl border ${borderColor} shadow-sm px-4 py-4 flex flex-col gap-3 text-left transition hover:shadow-md hover:border-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {icon}
@@ -239,6 +240,30 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
 
 // ─── Devices Tab ───────────────────────────────────────────────────────────────
 
+function Chips({ label, items, active, onToggle }: {
+  label: string; items: { key: string; count: number }[]; active: string | null; onToggle: (k: string) => void
+}) {
+  if (!items.length) return null
+  return (
+    <div>
+      <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map(({ key, count }) => {
+          const isA = active === key
+          return (
+            <button key={key} type="button" onClick={() => onToggle(key)}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isA ? 'is-selected' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+              {key}
+              <span className={`rounded-full px-1 text-[0.58rem] font-bold ${isA ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+            </button>
+          )
+        })}
+        {active && <button type="button" onClick={() => onToggle(active)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-50 transition">Clear ×</button>}
+      </div>
+    </div>
+  )
+}
+
 function DevicesTab({
   devices,
   loading,
@@ -246,6 +271,7 @@ function DevicesTab({
   profileResultsLoading,
   profileResultsError,
   onSelectDevice,
+  onViewLogs,
 }: {
   devices: ApiDevice[]
   loading: boolean
@@ -253,7 +279,9 @@ function DevicesTab({
   profileResultsLoading: boolean
   profileResultsError: boolean
   onSelectDevice: (d: ApiDevice) => void
+  onViewLogs: (d: ApiDevice) => void
 }) {
+  const canLogs = useOptionalPermissions()?.['devices.logs'] === true
   const { widths: dw, startResize: dResize, totalWidth: dTotal } = useColumnResize<DColKey>(DEVICE_COLS, 'mac-devices')
   const [search, setSearch] = useState('')
   const [activeModel, setActiveModel] = useState<string | null>(null)
@@ -294,7 +322,6 @@ function DevicesTab({
       case 'compliance': return device.managementSource === 'ManageEngine'
         ? profileResultsLabel(profileResults[device.id], profileResultsLoading, profileResultsError).text
         : device.complianceState
-      case 'blueprint': return device.appliedPolicies?.join(', ')
       default: return ''
     }
   }, sortDirection) : filtered
@@ -316,7 +343,7 @@ function DevicesTab({
         ['Search', search.trim() || 'None'],
         ['Devices in fleet', String(devices.length)],
       ],
-      headers: ['Device', 'User', 'Serial Number', 'Model', 'macOS', 'Last Check-in', 'Enrolled', 'FileVault', 'MDM Status / Profiles', 'Profile Details', 'Applied Policy'],
+      headers: ['Device', 'User', 'Serial Number', 'Model', 'macOS', 'Last Check-in', 'Enrolled', 'FileVault', 'MDM Status / Profiles', 'Profile Details'],
       rows: sortedDevices.map(d => {
         const profile = d.managementSource === 'ManageEngine'
           ? profileResultsLabel(profileResults[d.id], profileResultsLoading, profileResultsError)
@@ -324,7 +351,7 @@ function DevicesTab({
         return [
           d.deviceName, d.user, d.serialNumber ?? '', d.model ? extractModelBase(d.model) : '', d.osVersion ?? '',
           d.lastCheckIn, d.enrollmentDate ? new Date(d.enrollmentDate).toLocaleDateString() : '',
-          filevaultState(d), profile.text, profile.title.replace(/\n/g, '; '), d.appliedPolicies?.join(', ') ?? '',
+          filevaultState(d), profile.text, profile.title.replace(/\n/g, '; '),
         ]
       }),
     })
@@ -336,30 +363,6 @@ function DevicesTab({
     </div>
   )
 
-  function Chips({ label, items, active, onToggle }: {
-    label: string; items: { key: string; count: number }[]; active: string | null; onToggle: (k: string) => void
-  }) {
-    if (!items.length) return null
-    return (
-      <div>
-        <p className="text-[0.6rem] font-semibold text-slate-400 uppercase tracking-wide mb-2">{label}</p>
-        <div className="flex flex-wrap gap-1.5">
-          {items.map(({ key, count }) => {
-            const isA = active === key
-            return (
-              <button key={key} type="button" onClick={() => onToggle(key)}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isA ? 'is-selected' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                {key}
-                <span className={`rounded-full px-1 text-[0.58rem] font-bold ${isA ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-              </button>
-            )
-          })}
-          {active && <button type="button" onClick={() => onToggle(active)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-50 transition">Clear ×</button>}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex flex-col gap-4">
@@ -369,7 +372,7 @@ function DevicesTab({
         {(activeModel || activeOS) && (
           <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
             <span className="text-xs text-slate-500">{filtered.length} of {devices.length} devices</span>
-            <button type="button" onClick={() => { setActiveModel(null); setActiveOS(null) }} className="text-xs font-medium text-orange-600 hover:text-orange-700">Clear all</button>
+            <button type="button" onClick={() => { setActiveModel(null); setActiveOS(null) }} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">Clear all</button>
           </div>
         )}
       </div>
@@ -379,7 +382,7 @@ function DevicesTab({
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search devices, users…"
-          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400" />
+          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400" />
         {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="h-3 w-3" /></button>}
       </div>
         <button type="button" onClick={handleExportExcel} disabled={filtered.length === 0}
@@ -401,12 +404,12 @@ function DevicesTab({
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-left">
-                  {DEVICE_COLS.map(col => col.key === 'actions' ? (
+                  {DEVICE_COLS.map(col => col.key === 'actions' || col.key === 'logs' ? (
                     <th key={col.key} className="px-4 py-3 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400" style={{ width: dw[col.key] }}>{col.label}</th>
                   ) : (
                     <SortableHeader key={col.key} label={col.label} sortKey={col.key} activeSortKey={sortKey} direction={sortDirection} onSort={handleSort}
                       className="relative px-4 py-3 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap overflow-hidden" >
-                        <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                        <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400/50 active:bg-indigo-500 transition-colors"
                           onMouseDown={e => dResize(col.key, e)} onClick={e => e.stopPropagation()} />
                     </SortableHeader>
                   ))}
@@ -430,7 +433,7 @@ function DevicesTab({
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden"><span className="truncate block">{d.model ? extractModelBase(d.model) : '—'}</span></td>
                       <td className="px-4 py-3 text-xs font-mono text-slate-500 overflow-hidden"><span className="truncate block">{d.osVersion}</span></td>
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden">
-                        <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }} aria-label={`View ${d.deviceName} details`} title="View device details" className="rounded-md p-1 text-slate-400 hover:bg-orange-50 hover:text-orange-600">
+                        <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }} aria-label={`View ${d.deviceName} details`} title="View device details" className="rounded-md p-1 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600">
                           <Info className="h-3.5 w-3.5" />
                         </button>
                       </td>
@@ -459,14 +462,10 @@ function DevicesTab({
                           ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[0.6rem] font-bold text-amber-700"><AlertTriangle className="h-2.5 w-2.5" />Warning</span>
                           : <span className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600"><ShieldAlert className="h-2.5 w-2.5" />Non-Compliant</span>}
                       </td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        {d.appliedPolicies && d.appliedPolicies.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 max-w-full">
-                            <Shield className="h-3 w-3 text-orange-400 flex-shrink-0" />
-                            <span className="truncate">{d.appliedPolicies[0]}</span>
-                            {d.appliedPolicies.length > 1 && <span className="text-[0.6rem] text-slate-400 flex-shrink-0">+{d.appliedPolicies.length - 1}</span>}
-                          </span>
-                        ) : <span className="text-xs text-slate-300">—</span>}
+                      <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden">
+                        {canLogs
+                          ? <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }} aria-label={`View logs for ${d.deviceName}`} title="Pull and export this device's log" className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 font-semibold text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"><FileText className="h-3 w-3" />Logs</button>
+                          : <span className="text-slate-300">—</span>}
                       </td>
                     </tr>
                   )
@@ -671,7 +670,7 @@ function ReportsTab({
             const c = colors[meta.color as keyof typeof colors]
             return (
               <button key={cat} type="button" onClick={() => setMacFilter(p => p === cat ? 'all' : cat)}
-                className={`bg-white rounded-2xl border shadow-sm px-4 py-3 text-left transition hover:shadow-md ${macFilter === cat ? 'ring-2 ring-orange-300' : ''} ${c.split(' ')[0]}`}>
+                className={`bg-white rounded-2xl border shadow-sm px-4 py-3 text-left transition hover:shadow-md ${macFilter === cat ? 'ring-2 ring-indigo-300' : ''} ${c.split(' ')[0]}`}>
                 <div className="flex items-center justify-between mb-1">
                   <span className={`text-2xl font-black ${c.split(' ')[1]}`}>{count}</span>
                   <span className={`rounded-full ${c.split(' ')[2]} px-1.5 py-0.5 text-[0.58rem] font-bold ${c.split(' ')[1]}`}>{pct}%</span>
@@ -705,7 +704,7 @@ function ReportsTab({
                 {RPT_MACOS_COLS.map(c => (
                   <SortableHeader key={c.key} label={c.label} sortKey={c.key} activeSortKey={macSortKey} direction={macSortDirection} onSort={handleMacSort}
                     className="relative px-4 py-2.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 overflow-hidden">
-                    <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                    <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400/50 active:bg-indigo-500 transition-colors"
                       onMouseDown={e => mrR(c.key, e)} onClick={e => e.stopPropagation()} />
                   </SortableHeader>
                 ))}
@@ -800,7 +799,7 @@ function ReportsTab({
                   {RPT_STALE_COLS.map(c => (
                     <SortableHeader key={c.key} label={c.label} sortKey={c.key} activeSortKey={staleSortKey} direction={staleSortDirection} onSort={handleStaleSort}
                       className="relative px-4 py-2.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 overflow-hidden">
-                      <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                      <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400/50 active:bg-indigo-500 transition-colors"
                         onMouseDown={e => stR(c.key, e)} onClick={e => e.stopPropagation()} />
                     </SortableHeader>
                   ))}
@@ -973,7 +972,7 @@ function MacSecurityAppInventoryModal({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
-          <div className="rounded-xl bg-orange-50 p-2 text-orange-600"><Shield className="h-4 w-4" /></div>
+          <div className="rounded-xl bg-indigo-50 p-2 text-indigo-600"><Shield className="h-4 w-4" /></div>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold text-slate-800">Zscaler &amp; CrowdStrike App Availability</h2>
             <p className="text-[0.65rem] text-slate-400">{inventory ? `${inventory.totalDevices} enrolled Macs · ${inventory.inventoryAvailableDevices} scanned · ${inventory.inventoryUnavailableDevices} unavailable` : 'Mac app inventory results'}</p>
@@ -986,14 +985,14 @@ function MacSecurityAppInventoryModal({
           <div className="grid grid-cols-2 gap-2 border-b border-slate-100 px-5 py-3 sm:grid-cols-5">
             <button type="button" aria-pressed={availabilityFilter === 'both'} onClick={() => setFilter('both')} className={`rounded-lg border px-3 py-2 text-left transition ${availabilityFilter === 'both' ? 'border-emerald-300 bg-emerald-100 ring-1 ring-emerald-200' : 'border-transparent bg-emerald-50 hover:border-emerald-200'}`}><p className="text-[0.6rem] font-semibold uppercase text-emerald-700">Both apps found</p><p className="text-sm font-bold text-slate-800">{inventory.bothAppsInstalled} <span className="text-xs font-medium text-slate-500">/ {assessed} scanned</span></p><p className="text-[0.62rem] text-slate-500">Zscaler + Falcon · View Macs</p></button>
             <button type="button" aria-pressed={availabilityFilter === 'zscaler'} onClick={() => setFilter('zscaler')} className={`rounded-lg border px-3 py-2 text-left transition ${availabilityFilter === 'zscaler' ? 'border-sky-300 bg-sky-100 ring-1 ring-sky-200' : 'border-transparent bg-sky-50 hover:border-sky-200'}`}><p className="text-[0.6rem] font-semibold uppercase text-sky-700">Zscaler detected</p><p className="text-sm font-bold text-slate-800">{inventory.zscalerInstalled} <span className="text-xs font-medium text-slate-500">/ {assessed} inventoried</span></p><p className="text-[0.62rem] text-slate-500">Not detected: {zscalerNotDetected} · View detected</p></button>
-            <button type="button" aria-pressed={availabilityFilter === 'crowdstrike'} onClick={() => setFilter('crowdstrike')} className={`rounded-lg border px-3 py-2 text-left transition ${availabilityFilter === 'crowdstrike' ? 'border-orange-300 bg-orange-100 ring-1 ring-orange-200' : 'border-transparent bg-orange-50 hover:border-orange-200'}`}><p className="text-[0.6rem] font-semibold uppercase text-orange-700">CrowdStrike detected</p><p className="text-sm font-bold text-slate-800">{inventory.crowdstrikeInstalled} <span className="text-xs font-medium text-slate-500">/ {assessed} inventoried</span></p><p className="text-[0.62rem] text-slate-500">Not detected: {crowdstrikeNotDetected} · View detected</p></button>
+            <button type="button" aria-pressed={availabilityFilter === 'crowdstrike'} onClick={() => setFilter('crowdstrike')} className={`rounded-lg border px-3 py-2 text-left transition ${availabilityFilter === 'crowdstrike' ? 'border-indigo-300 bg-indigo-100 ring-1 ring-indigo-200' : 'border-transparent bg-indigo-50 hover:border-indigo-200'}`}><p className="text-[0.6rem] font-semibold uppercase text-indigo-700">CrowdStrike detected</p><p className="text-sm font-bold text-slate-800">{inventory.crowdstrikeInstalled} <span className="text-xs font-medium text-slate-500">/ {assessed} inventoried</span></p><p className="text-[0.62rem] text-slate-500">Not detected: {crowdstrikeNotDetected} · View detected</p></button>
             <button type="button" aria-pressed={availabilityFilter === 'inventory-failed'} onClick={() => setFilter('inventory-failed')} className={`rounded-lg border px-3 py-2 text-left transition ${availabilityFilter === 'inventory-failed' ? 'border-amber-300 bg-amber-100 ring-1 ring-amber-200' : 'border-transparent bg-amber-50 hover:border-amber-200'}`}><p className="text-[0.6rem] font-semibold uppercase text-amber-700">Inventory request failed</p><p className="text-sm font-bold text-slate-800">{inventory.inventoryUnavailableDevices}</p><p className="text-[0.62rem] text-slate-500">Could not assess these Macs</p></button>
             <button type="button" aria-pressed={availabilityFilter === 'all'} onClick={() => setFilter('all')} className={`rounded-lg border px-3 py-2 text-left transition ${availabilityFilter === 'all' ? 'border-slate-300 bg-slate-100 ring-1 ring-slate-200' : 'border-transparent bg-slate-50 hover:border-slate-200'}`}><p className="text-[0.6rem] font-semibold uppercase text-slate-500">Total Macs</p><p className="text-sm font-bold text-slate-800">{inventory.totalDevices}</p><p className="text-[0.62rem] text-slate-500">Show all devices</p></button>
           </div>
         )}
         <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <div className="relative"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search device or user…" className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100" /></div>
-          {availabilityFilter !== 'all' && <button type="button" onClick={() => setFilter('all')} className="shrink-0 text-xs font-medium text-orange-600 hover:text-orange-700">Clear filter</button>}
+          <div className="relative"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search device or user…" className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100" /></div>
+          {availabilityFilter !== 'all' && <button type="button" onClick={() => setFilter('all')} className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-700">Clear filter</button>}
         </div>
         {error && <p className="px-5 py-3 text-xs text-red-600">Could not load app inventory: {error}</p>}
         <div className="min-h-0 flex-1 overflow-auto">
@@ -1021,7 +1020,7 @@ function MacSecurityAppInventoryModal({
           )}
         </div>
         {inventory && <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} itemLabel="device" />}
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3"><span className="text-[0.65rem] text-slate-400">App presence from MDM inventory; not sensor-health telemetry.</span><button type="button" onClick={onClose} className="rounded-lg bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600">Close</button></div>
+        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3"><span className="text-[0.65rem] text-slate-400">App presence from MDM inventory; not sensor-health telemetry.</span><button type="button" onClick={onClose} className="rounded-lg bg-indigo-500 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-600">Close</button></div>
       </div>
     </div>
   )
@@ -1095,6 +1094,7 @@ function SecurityTab({
   const [agentInventoryError, setAgentInventoryError] = useState<string | null>(null)
   const [showAgentInventory, setShowAgentInventory] = useState(false)
 
+  // Manual refresh from the details panel.
   async function loadAgentInventory() {
     setAgentInventoryLoading(true)
     setAgentInventoryError(null)
@@ -1107,8 +1107,22 @@ function SecurityTab({
     }
   }
 
+  // Flag loading during render when the inventory has to be (re)fetched; the effect only fetches.
+  const inventoryTarget = loading ? null : devices
+  const [prevInventoryTarget, setPrevInventoryTarget] = useState(inventoryTarget)
+  if (inventoryTarget !== prevInventoryTarget) {
+    setPrevInventoryTarget(inventoryTarget)
+    if (inventoryTarget) { setAgentInventoryLoading(true); setAgentInventoryError(null) }
+  }
+
   useEffect(() => {
-    if (!loading) void loadAgentInventory()
+    if (loading) return
+    let cancelled = false
+    fetchMacSecurityAppInventory(devices)
+      .then(inventory => { if (!cancelled) setAgentInventory(inventory) })
+      .catch((error: unknown) => { if (!cancelled) setAgentInventoryError(error instanceof Error ? error.message : 'Failed to load app inventory') })
+      .finally(() => { if (!cancelled) setAgentInventoryLoading(false) })
+    return () => { cancelled = true }
   }, [devices, loading])
 
   const agentInventoryById = useMemo(() => new Map(agentInventory?.devices.map(device => [device.deviceId, device]) ?? []), [agentInventory])
@@ -1181,8 +1195,8 @@ function SecurityTab({
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
         {metricBar('FileVault Encryption', secStats.filevaultOn, secStats.filevaultReported, total, 'emerald', <Lock className="h-3.5 w-3.5 text-emerald-500" />, () => onShowGap('FileVault Encryption Details', <Lock className="h-4 w-4 text-emerald-600" />, devices, 'emerald', 'security', 'filevault'))}
-        <button type="button" onClick={() => setShowAgentInventory(true)} className="bg-white rounded-2xl border border-orange-200 shadow-sm px-4 py-4 flex flex-col gap-3 text-left transition hover:shadow-md hover:border-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
-          <div className="flex items-center gap-2"><Shield className="h-3.5 w-3.5 text-orange-500" /><span className="text-xs font-semibold text-slate-700">Zscaler &amp; CrowdStrike Apps</span></div>
+        <button type="button" onClick={() => setShowAgentInventory(true)} className="bg-white rounded-2xl border border-indigo-200 shadow-sm px-4 py-4 flex flex-col gap-3 text-left transition hover:shadow-md hover:border-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
+          <div className="flex items-center gap-2"><Shield className="h-3.5 w-3.5 text-indigo-500" /><span className="text-xs font-semibold text-slate-700">Zscaler &amp; CrowdStrike Apps</span></div>
           <div className="flex items-baseline gap-3 text-[0.68rem]">
             <span className="font-semibold text-emerald-700">Both apps {agentInventoryLoading ? '…' : agentInventory ? `${agentInventory.bothAppsInstalled} found` : '—'}</span>
             <span className="font-semibold text-slate-500">{agentInventoryLoading ? '' : agentInventory ? `/ ${agentInventory.inventoryAvailableDevices} Macs scanned` : ''}</span>
@@ -1231,13 +1245,13 @@ function SecurityTab({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search devices…"
-            className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-xs text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400" />
+            className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-xs text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400" />
           {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="h-3 w-3" /></button>}
         </div>
         <div className="flex rounded-xl border border-slate-200 bg-slate-50 overflow-hidden text-xs">
           {(['All', 'At Risk', 'Secure'] as const).map(f => (
             <button key={f} type="button" onClick={() => { setRiskFilter(f); setGapFilter(null) }}
-              className={`px-3 py-2 font-medium transition ${riskFilter === f && !gapFilter ? (f === 'At Risk' ? 'bg-red-500 text-white' : 'bg-orange-500 text-white') : 'text-slate-600 hover:bg-slate-100'}`}>{f}</button>
+              className={`px-3 py-2 font-medium transition ${riskFilter === f && !gapFilter ? (f === 'At Risk' ? 'bg-red-500 text-white' : 'bg-indigo-500 text-white') : 'text-slate-600 hover:bg-slate-100'}`}>{f}</button>
           ))}
         </div>
         {gapFilter && (
@@ -1266,7 +1280,7 @@ function SecurityTab({
                   ) : (
                     <SortableHeader key={col.key} label={col.label} sortKey={col.key} activeSortKey={sortKey} direction={sortDirection} onSort={handleSort}
                       className="relative px-4 py-3 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap overflow-hidden" >
-                        <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/50 active:bg-orange-500 transition-colors"
+                        <span className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400/50 active:bg-indigo-500 transition-colors"
                           onMouseDown={e => sResize(col.key, e)} onClick={e => e.stopPropagation()} />
                     </SortableHeader>
                   ))}
@@ -1292,10 +1306,10 @@ function SecurityTab({
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden"><CopyText value={d.user} label="User"><span className="truncate block">{d.user}</span></CopyText></td>
                       <td className="px-4 py-3 overflow-hidden">
                         {fv === 'On'
-                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} FileVault details`} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"><CheckCircle className="h-2.5 w-2.5" />On</button>
+                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} FileVault details`} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"><CheckCircle className="h-2.5 w-2.5" />On</button>
                           : fv === 'Off'
-                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} FileVault details`} className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"><XCircle className="h-2.5 w-2.5" />Off</button>
-                          : <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} FileVault details`} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${fv === 'Pending' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}><Info className="h-2.5 w-2.5" />{fv}</button>
+                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} FileVault details`} className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"><XCircle className="h-2.5 w-2.5" />Off</button>
+                          : <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} FileVault details`} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${fv === 'Pending' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}><Info className="h-2.5 w-2.5" />{fv}</button>
                         }
                       </td>
                       {(['zscaler', 'crowdstrike'] as const).map(agent => {
@@ -1303,26 +1317,26 @@ function SecurityTab({
                         const label = agentInventoryLoading ? 'Checking…' : appInventory?.inventoryAvailable === false ? 'Inventory unavailable' : appInventory?.inventoryAvailable ? installed ? `Installed${appInventory[agent].version ? ` · ${appInventory[agent].version}` : ''}` : 'Not found' : 'Unknown'
                         const good = installed === true
                         const knownMissing = appInventory?.inventoryAvailable === true && !installed
-                        return <td key={agent} className="px-4 py-3 overflow-hidden"><span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${good ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : knownMissing ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{good ? <CheckCircle className="h-2.5 w-2.5" /> : knownMissing ? <AlertTriangle className="h-2.5 w-2.5" /> : <Info className="h-2.5 w-2.5" />}<span className="truncate">{label}</span></span></td>
+                        return <td key={agent} className="px-4 py-3 overflow-hidden"><span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${good ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : knownMissing ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{good ? <CheckCircle className="h-2.5 w-2.5" /> : knownMissing ? <AlertTriangle className="h-2.5 w-2.5" /> : <Info className="h-2.5 w-2.5" />}<span className="truncate">{label}</span></span></td>
                       })}
                       <td className="px-4 py-3 overflow-hidden">
                         {policyCount > 0
-                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'compliance') }} aria-label={`View ${d.deviceName} applied policies`} className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded"><Shield className="h-3 w-3 text-orange-400 flex-shrink-0" />{policyCount} polic{policyCount !== 1 ? 'ies' : 'y'}</button>
+                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'compliance') }} aria-label={`View ${d.deviceName} applied policies`} className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded"><Shield className="h-3 w-3 text-indigo-400 flex-shrink-0" />{policyCount} polic{policyCount !== 1 ? 'ies' : 'y'}</button>
                           : <span className="text-xs text-slate-300">—</span>
                         }
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 overflow-hidden"><span className="truncate block">{d.lastCheckIn}</span></td>
                       <td className="px-4 py-3 overflow-hidden">
                         {atRisk
-                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} security risk details`} className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"><AlertTriangle className="h-2.5 w-2.5" />At Risk</button>
-                          : <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} security details`} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"><CheckCircle className="h-2.5 w-2.5" />Secure</button>
+                          ? <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} security risk details`} className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.6rem] font-bold text-red-600 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"><AlertTriangle className="h-2.5 w-2.5" />At Risk</button>
+                          : <button type="button" onClick={e => { e.stopPropagation(); onSelectDetails(d, 'security') }} aria-label={`View ${d.deviceName} security details`} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[0.6rem] font-bold text-emerald-700 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"><CheckCircle className="h-2.5 w-2.5" />Secure</button>
                         }
                       </td>
                       <td className="px-4 py-3 overflow-hidden">
                         <div className="flex items-center gap-1.5">
                           <button type="button" onClick={e => { e.stopPropagation(); onSelectDevice(d) }}
                             title="Device details"
-                            className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-1 text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition">
+                            className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-1 text-indigo-600 hover:bg-indigo-100 hover:border-indigo-300 transition">
                             <Info className="h-3 w-3" />
                             <span className="text-[0.6rem] font-semibold">Info</span>
                           </button>
@@ -1416,7 +1430,7 @@ function KpiDrillModal({
     downloadCsv(`${title.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0,10)}.csv`, headers, rows as unknown as (string|number)[])
   }
 
-  const accentRing = accent === 'emerald' ? 'focus:ring-emerald-300' : accent === 'red' ? 'focus:ring-red-300' : accent === 'orange' ? 'focus:ring-orange-300' : 'focus:ring-slate-300'
+  const accentRing = accent === 'emerald' ? 'focus:ring-emerald-300' : accent === 'red' ? 'focus:ring-red-300' : accent === 'orange' ? 'focus:ring-indigo-300' : 'focus:ring-slate-300'
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
@@ -1432,7 +1446,7 @@ function KpiDrillModal({
             {metric === 'compliance' && <p className="mt-1 text-[0.62rem] text-amber-700">Warnings can indicate a policy issue or unavailable compliance details. Review each device reason below.</p>}
           </div>
           <button type="button" onClick={handleExport}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 transition mr-1">
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition mr-1">
             <Download className="h-3.5 w-3.5" />Export CSV
           </button>
           <button type="button" onClick={onClose}
@@ -1471,7 +1485,7 @@ function KpiDrillModal({
               <tbody>
                 {paginated.map((d, i) => (
                   <tr key={d.id} onClick={() => onSelectDevice(d)}
-                    className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-orange-50/60 ${i % 2 !== 0 ? 'bg-slate-50/40' : ''}`}>
+                    className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-indigo-50/60 ${i % 2 !== 0 ? 'bg-slate-50/40' : ''}`}>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <Apple className="h-3 w-3 text-slate-400 flex-shrink-0" />
@@ -1508,7 +1522,7 @@ function KpiDrillModal({
         <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
           <span className="text-[0.65rem] text-slate-400">click a row to view details</span>
           <button type="button" onClick={onClose}
-            className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600 transition shadow-sm">
+            className="rounded-xl bg-indigo-500 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-600 transition shadow-sm">
             Close
           </button>
         </div>
@@ -1525,7 +1539,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'reports',      label: 'Reports',     icon: <BarChart2 className="h-3.5 w-3.5" /> },
 ]
 
-export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }: Props) {
+export function MacDevicesPage({ onBack, embedded }: Props) {
   const [tab, setTab]                     = useState<Tab>('devices')
   const [devices, setDevices]             = useState<ApiDevice[]>([])
   const [loadingDevices, setLoadingDevices] = useState(true)
@@ -1534,12 +1548,11 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }
   const [profileResultsLoading, setProfileResultsLoading] = useState(false)
   const [profileResultsError, setProfileResultsError] = useState(false)
   const [panelDevice, setPanelDevice]     = useState<ApiDevice | null>(null)
-  const [panelInitialTab, setPanelInitialTab] = useState<'overview' | 'security' | 'compliance'>('overview')
+  const [panelInitialTab, setPanelInitialTab] = useState<'overview' | 'security' | 'compliance' | 'logs'>('overview')
   const [kpiModal, setKpiModal]           = useState<{ title: string; icon: React.ReactNode; devices: ApiDevice[]; accent: string; detailTab?: 'security' | 'compliance'; metric?: DeviceMetricDetail } | null>(null)
 
-  const fetchAll = () => {
-    setLoadingDevices(true)
-    api.fetchAllDevicesRaw({ platform: 'macOS', limit: 500 })
+  const requestDevices = () => {
+    return api.fetchAllDevicesRaw({ platform: 'macOS', limit: 500 })
       .then(r => {
         setDevices(r.devices)
         setFetchError(null)
@@ -1563,7 +1576,13 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }
       .finally(() => setLoadingDevices(false))
   }
 
-  useEffect(() => { fetchAll() }, [])
+  const fetchAll = () => {
+    setLoadingDevices(true)
+    void requestDevices()
+  }
+
+  // loadingDevices is already true on first render.
+  useEffect(() => { void requestDevices() }, [])
 
   const stats = useMemo(() => {
     const total        = devices.length
@@ -1591,8 +1610,8 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }
         <div className="flex items-center justify-end gap-2">
           {apiStatusPill}
           <button type="button" onClick={fetchAll}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition ${isLoading ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-orange-500' : ''}`} />Refresh
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition ${isLoading ? 'border-indigo-300 bg-indigo-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-indigo-500' : ''}`} />Refresh
           </button>
         </div>
       ) : (
@@ -1613,8 +1632,8 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }
           <div className="ml-auto flex items-center gap-2">
             {apiStatusPill}
             <button type="button" onClick={fetchAll}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition ${isLoading ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-orange-500' : ''}`} />Refresh
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition ${isLoading ? 'border-indigo-300 bg-indigo-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-indigo-500' : ''}`} />Refresh
             </button>
           </div>
         </div>
@@ -1639,10 +1658,10 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }
         </button>
         <button type="button" disabled={loadingDevices}
           onClick={() => setTab('security')}
-          className="bg-white rounded-2xl border border-orange-200 shadow-sm px-4 py-3 flex items-center gap-3 text-left w-full transition hover:shadow-md hover:border-orange-400 disabled:cursor-default group">
-          <div className="rounded-xl bg-orange-100 p-2 flex-shrink-0 group-hover:bg-orange-200 transition"><Shield className="h-4 w-4 text-orange-600" /></div>
+          className="bg-white rounded-2xl border border-indigo-200 shadow-sm px-4 py-3 flex items-center gap-3 text-left w-full transition hover:shadow-md hover:border-indigo-400 disabled:cursor-default group">
+          <div className="rounded-xl bg-indigo-100 p-2 flex-shrink-0 group-hover:bg-indigo-200 transition"><Shield className="h-4 w-4 text-indigo-600" /></div>
           <div>
-            <p className="text-lg font-black text-orange-600">Apps</p>
+            <p className="text-lg font-black text-indigo-600">Apps</p>
             <p className="text-[0.62rem] text-slate-400 font-medium">Zscaler + CrowdStrike</p>
           </div>
         </button>
@@ -1661,7 +1680,7 @@ export function MacDevicesPage({ onBack, onViewDevice: _onViewDevice, embedded }
       </div>
 
       {/* ── Tab content ── */}
-      {tab === 'devices'      && <DevicesTab      devices={devices} loading={loadingDevices} profileResults={profileResults} profileResultsLoading={profileResultsLoading} profileResultsError={profileResultsError} onSelectDevice={d => { setPanelInitialTab('overview'); setPanelDevice(d) }} />}
+      {tab === 'devices'      && <DevicesTab      devices={devices} loading={loadingDevices} profileResults={profileResults} profileResultsLoading={profileResultsLoading} profileResultsError={profileResultsError} onSelectDevice={d => { setPanelInitialTab('overview'); setPanelDevice(d) }} onViewLogs={d => { setPanelInitialTab('logs'); setPanelDevice(d) }} />}
       {tab === 'security'     && <SecurityTab     devices={devices} loading={loadingDevices} onSelectDevice={d => { setPanelInitialTab('overview'); setPanelDevice(d) }} onSelectDetails={(d, detailTab) => { setPanelInitialTab(detailTab); setPanelDevice(d) }} onShowGap={(title, icon, affectedDevices, accent, detailTab, metric) => setKpiModal({ title, icon, devices: affectedDevices, accent, detailTab, metric })} />}
       {tab === 'reports'      && <ReportsTab      devices={devices} />}
 

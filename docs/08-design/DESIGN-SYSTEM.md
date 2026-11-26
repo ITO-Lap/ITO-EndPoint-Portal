@@ -1,9 +1,9 @@
-# ITO Endpoint Design System — Apple Glass + Zinnia Brand
+# EndPoint+ Design System — Apple Glass + Verma Brand
 
 > **Theme:** Apple Glass / Glassmorphism  
-> **Brand:** Zinnia Technologies  
+> **Brand:** Verma Technologies  
 > **CSS file:** `src/index.css`  
-> **Logo component:** `src/components/ui/ZinniaLogo.tsx`
+> **Logo component:** `src/components/ui/AkvermaLogo.tsx`
 
 ---
 
@@ -13,10 +13,10 @@ All brand colors are defined as CSS custom properties in `src/index.css`:
 
 ```css
 :root {
-  --z-orange:   #F46C00;   /* Zinnia primary */
-  --z-coral:    #FB471F;   /* Zinnia secondary */
-  --z-gold:     #FFC600;   /* Zinnia accent */
-  --z-gradient: linear-gradient(135deg, #FFC600 0%, #F46C00 50%, #FB471F 100%);
+  --brand-primary:   #4F46E5;   /* Verma primary */
+  --brand-secondary:    #06B6D4;   /* Verma secondary */
+  --brand-accent:     #22D3EE;   /* Verma accent */
+  --z-gradient: linear-gradient(135deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%);
 }
 ```
 
@@ -24,12 +24,12 @@ All brand colors are defined as CSS custom properties in `src/index.css`:
 
 ## Color Palette
 
-### Zinnia Brand
+### Verma Brand
 | Token | Hex | Usage |
 |---|---|---|
-| `--z-orange` | `#F46C00` | Primary buttons, active states, accents |
-| `--z-coral` | `#FB471F` | Gradient end, hover states |
-| `--z-gold` | `#FFC600` | Gradient start, warm accents |
+| `--brand-primary` | `#4F46E5` | Primary buttons, active states, accents |
+| `--brand-secondary` | `#06B6D4` | Gradient end, hover states |
+| `--brand-accent` | `#22D3EE` | Gradient start, warm accents |
 
 ### Water Glow (Interaction)
 | Token | Value | Usage |
@@ -43,7 +43,7 @@ All brand colors are defined as CSS custom properties in `src/index.css`:
 | Color | Hex | Usage |
 |---|---|---|
 | Compliant / Healthy | `#10B981` | Green — positive status |
-| Warning | `#F59E0B` | Amber — attention needed |
+| Warning | `#818CF8` | Amber — attention needed |
 | Non-Compliant | `#EF4444` | Red — action required |
 | Informational | `#0EA5E9` | Blue — neutral info |
 | Purple accent | `#7C5CFC` | AI features, analytics |
@@ -81,8 +81,8 @@ Applied to all interactive elements for consistent hover/active feedback:
 ## Button Variants
 
 ```tsx
-// Primary — Zinnia orange gradient
-<Button variant="solid" />        // bg: linear-gradient(135deg, #F46C00, #FB471F)
+// Primary — Verma orange gradient
+<Button variant="solid" />        // bg: linear-gradient(135deg, #4F46E5, #06B6D4)
 
 // Water/Blue — for informational actions  
 <Button variant="water" />        // bg: linear-gradient(135deg, #0EA5E9, #6366F1)
@@ -119,7 +119,7 @@ All badges are `rounded-full` pills with translucent glass backgrounds.
 <DashboardCard
   title="Card Title"
   icon={SomeIcon}
-  accent={true}           // shows Zinnia gradient top bar
+  accent={true}           // shows Verma gradient top bar
   accentColor="#0EA5E9"  // override color (optional)
   action={<button>...</button>}
 >
@@ -139,7 +139,7 @@ Cards use `.glass` surface, `rounded-2xl` (16px), and a `2.5px` gradient top acc
 
 The `glass-bg` class applies a slow 20s animated gradient (`pearl-drift` keyframe):
 ```
-#EFF6FF → #F5F3FF → #F0F9FF → #FFF7F0 → #F0FAFB → #EFF6FF
+#EFF6FF → #F5F3FF → #F0F9FF → #F5F3FF → #F0FAFB → #EFF6FF
 ```
 
 ---
@@ -184,22 +184,22 @@ The `glass-bg` class applies a slow 20s animated gradient (`pearl-drift` keyfram
 
 ---
 
-## Zinnia Logo Components
+## Verma Logo Components
 
-All available in `src/components/ui/ZinniaLogo.tsx`:
+All available in `src/components/ui/AkvermaLogo.tsx`:
 
 ```tsx
-<ZinniaIcon className="h-10 w-auto" />           // petals only
-<ZinniaWordmark size="md" />                       // "zinnia" text only
-<ZinniaHorizontal iconSize="sm" wordmarkSize="sm" subtitle="ITO Endpoint" />  // side-by-side
-<ZinniaVertical iconSize="lg" wordmarkSize="xl" subtitle="ITO Endpoint" />    // stacked
-<ZinniaBadge />                                    // compact watermark
+<EndpointPlusIcon className="h-10 w-auto" />           // petals only
+<EndpointPlusWordmark size="md" />                       // "zinnia" text only
+<EndpointPlusHorizontal iconSize="sm" wordmarkSize="sm" subtitle="IT Operations" />  // side-by-side
+<EndpointPlusVertical iconSize="lg" wordmarkSize="xl" subtitle="IT Operations" />    // stacked
+<EndpointPlusBadge />                                    // compact watermark
 ```
 
-**Logo colors (official Zinnia brand):**
+**Logo colors (official Verma brand):**
 - Red petal: `#E8172D`
-- Orange petal: `#F46C00`
-- Yellow petal: `#FFB800`
+- Orange petal: `#4F46E5`
+- Yellow petal: `#22D3EE`
 - Wordmark: `#6D6E71` (warm gray), `font-bold`
 
 ---
@@ -208,7 +208,7 @@ All available in `src/components/ui/ZinniaLogo.tsx`:
 
 ```
 Group header:   text-[0.55rem] font-black uppercase tracking-[0.18em]
-Active item:    linear-gradient(90deg, #F46C00, #FB471F) + box-shadow glow
+Active item:    linear-gradient(90deg, #4F46E5, #06B6D4) + box-shadow glow
 Hover item:     water-glow or orange-tinted bg for Automation group
 Icon size:      h-7 w-7 rounded-xl
 ```
@@ -256,8 +256,8 @@ Toast style: `.glass-strong` with colored left accent bar + icon. Rendered via `
 
 Features:
 - Sticky frosted header
-- Orange hover row highlight (`#fff7f0`)
-- Sort button hover → `color: #F46C00`
+- Orange hover row highlight (`#F5F3FF`)
+- Sort button hover → `color: #4F46E5`
 - Separator on sort header hover
 
 Pagination: `.z-pagination` wrapper with prev/next buttons.
@@ -309,7 +309,7 @@ status chips: translucent colored backgrounds (rgba)
 |---|---|
 | Use `rounded-full` for buttons and badges | Use `rounded-lg` for buttons |
 | Use water-glow on ALL interactive elements | Skip hover effects on clickable items |
-| Use Zinnia gradient for primary CTAs | Use flat orange (`bg-[#F46C00]`) without gradient |
+| Use Verma gradient for primary CTAs | Use flat orange (`bg-[#4F46E5]`) without gradient |
 | Use `glass` class for card surfaces | Use plain `bg-white` without blur |
 | Follow `text-slate-700` / `text-slate-400` hierarchy | Use `text-black` or `text-gray-500` |
 | Import icons from `lucide-react` | Add icon libraries |

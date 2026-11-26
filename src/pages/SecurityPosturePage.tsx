@@ -5,12 +5,13 @@ import {
   FileDown, HelpCircle,
 } from 'lucide-react'
 import { api } from '../api'
-import type { PillarDeviceList, PillarDevicesParams, PosturePillar, PosturePillarDevice, PostureSource, SecurityPostureResult } from '../api'
+import type { MissingPatch, MissingPatchesResponse, PillarDeviceList, PillarDevicesParams, PosturePillar, PosturePillarDevice, PostureSource, SecurityPostureResult } from '../api'
 import { EndpointProtectionCoverage } from '../components/security/EndpointProtectionCoverage'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { deriveRisks, describeSegment, devicesToCsv, scoreBand, type PostureRisk, type RiskSeverity, type SegmentStatus } from '../lib/securityPosture'
 import { CopyText } from '../components/ui/CopyText'
+import { Modal } from '../components/ui/Modal'
 
 // ─── Remediation step library ──────────────────────────────────────────────────
 
@@ -129,13 +130,13 @@ const PILLAR_META: Record<PosturePillar['id'], { icon: typeof Shield; bar: strin
   encryption: { icon: HardDrive,      bar: 'bg-emerald-500', iconBg: 'bg-emerald-100', icon_c: 'text-emerald-600' },
   patching:   { icon: Download,       bar: 'bg-amber-500',   iconBg: 'bg-amber-100',   icon_c: 'text-amber-600'   },
   compliance: { icon: ClipboardCheck, bar: 'bg-green-500',   iconBg: 'bg-green-100',   icon_c: 'text-green-600'   },
-  checkin:    { icon: Clock,          bar: 'bg-orange-500',  iconBg: 'bg-orange-100',  icon_c: 'text-orange-600'  },
+  checkin:    { icon: Clock,          bar: 'bg-indigo-500',  iconBg: 'bg-indigo-100',  icon_c: 'text-indigo-600'  },
 }
 
 const SOURCE_TABS: { id: PostureSource; label: string; icon: typeof Globe }[] = [
   { id: 'all',          label: 'All Sources',      icon: Globe   },
   { id: 'intune',       label: 'Microsoft Intune', icon: Monitor },
-  { id: 'manageengine', label: 'ManageEngine',     icon: Server  },
+  { id: 'manageengine', label: 'ManageEngine / Endpoint Central', icon: Server  },
 ]
 
 function scoreColor(score: number | null): { stroke: string; text: string; bg: string; border: string } {
@@ -181,7 +182,7 @@ function cisBadge(status: CisControl['status']): string {
 
 function cisCoverageColor(coverage: number): string {
   if (coverage >= 90) return 'bg-emerald-500'
-  if (coverage >= 75) return 'bg-orange-500'
+  if (coverage >= 75) return 'bg-indigo-500'
   if (coverage >= 60) return 'bg-amber-500'
   return 'bg-red-500'
 }
@@ -231,11 +232,11 @@ function PillarCard({ pillar, isSelected, onClick }: { pillar: PosturePillar; is
       onClick={onClick}
       aria-expanded={isSelected}
       aria-label={`${pillar.label}: ${pillar.scorePct === null ? 'no data' : `${pillar.scorePct}%`}. ${isSelected ? 'Hide' : 'Show'} details`}
-      className={`text-left bg-white rounded-2xl border shadow-sm px-4 py-4 flex flex-col gap-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${isSelected ? 'is-selected' : 'border-slate-200 hover:border-orange-200'}`}
+      className={`text-left bg-white rounded-2xl border shadow-sm px-4 py-4 flex flex-col gap-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${isSelected ? 'is-selected' : 'border-slate-200 hover:border-indigo-200'}`}
     >
       <div className="flex items-start gap-2.5">
         <div className={`rounded-xl p-2 ${isSelected ? 'bg-sky-100' : meta.iconBg} flex-shrink-0 transition-colors`}>
-          <Icon className={`h-4 w-4 ${isSelected ? 'text-orange-600' : meta.icon_c}`} />
+          <Icon className={`h-4 w-4 ${isSelected ? 'text-indigo-600' : meta.icon_c}`} />
         </div>
         <div className="min-w-0">
           <p className="text-xs font-bold text-slate-800">{pillar.label}</p>
@@ -289,7 +290,7 @@ function PillarCard({ pillar, isSelected, onClick }: { pillar: PosturePillar; is
           <span className="text-[0.62rem] text-slate-400">not reported</span>
         </div>
         <div className="ml-auto flex items-center gap-1 text-[0.6rem] text-slate-400">
-          <ChevronDown className={`h-3 w-3 transition-transform ${isSelected ? 'rotate-180 text-orange-500' : ''}`} />
+          <ChevronDown className={`h-3 w-3 transition-transform ${isSelected ? 'rotate-180 text-indigo-500' : ''}`} />
           {isSelected ? 'close' : 'details'}
         </div>
       </div>
@@ -315,7 +316,7 @@ const sameSegment = (a: Segment, b: Segment): boolean =>
 function CountButton({ n, label, active, tone, onClick }: { n: number; label: string; active: boolean; tone: string; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} disabled={n === 0} aria-pressed={active} aria-label={label}
-      className={`rounded-md px-1.5 py-0.5 font-semibold tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 disabled:cursor-default disabled:opacity-50 ${tone} ${active ? 'bg-orange-100 ring-1 ring-orange-400' : 'hover:bg-slate-100 underline decoration-dotted underline-offset-2'}`}>
+      className={`rounded-md px-1.5 py-0.5 font-semibold tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-default disabled:opacity-50 ${tone} ${active ? 'bg-indigo-100 ring-1 ring-indigo-400' : 'hover:bg-slate-100 underline decoration-dotted underline-offset-2'}`}>
       {n.toLocaleString()}
     </button>
   )
@@ -344,7 +345,7 @@ function BreakdownTable({ title, dimension, rows, segment, onSelect }: {
               <div className="flex items-center justify-between gap-2 text-[0.65rem] mb-1">
                 <button type="button" onClick={() => onSelect(target())} aria-pressed={isActive()}
                   aria-label={`${r.key}: show all ${total.toLocaleString()} in-scope devices`}
-                  className={`font-semibold rounded-md px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${isActive() ? 'bg-orange-100 text-orange-800' : 'text-slate-700 hover:bg-slate-100'}`}>
+                  className={`font-semibold rounded-md px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${isActive() ? 'bg-indigo-100 text-indigo-800' : 'text-slate-700 hover:bg-slate-100'}`}>
                   {r.key}
                 </button>
                 <span className="text-slate-400 flex items-center gap-0.5 flex-wrap justify-end">
@@ -367,37 +368,193 @@ function BreakdownTable({ title, dimension, rows, segment, onSelect }: {
   )
 }
 
-// ─── Finding cell: summary + itemised findings (e.g. the missing patches) ──────
+// ─── Finding cell: clickable summary that opens a details modal ────────────────
 
-const ITEMS_COLLAPSED = 3
+function FindingCell({ row, pillarId, onOpen }: { row: PosturePillarDevice; pillarId: PosturePillar['id']; onOpen: (row: PosturePillarDevice) => void }) {
+  const count = row.items?.length ?? 0
+  return (
+    <button type="button" onClick={() => onOpen(row)} aria-haspopup="dialog" aria-label={`View finding details for ${row.deviceName} (${pillarId})`}
+      className="text-left text-slate-700 hover:text-indigo-700 hover:underline decoration-dotted underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
+      {row.detail}
+      {count > 0 && <span className="ml-1 text-[0.65rem] font-semibold text-indigo-700">({count.toLocaleString()} listed)</span>}
+    </button>
+  )
+}
 
-function FindingCell({ row }: { row: PosturePillarDevice }) {
-  const [itemsVisible, setItemsVisible] = useState(false)
-  const [showAll, setShowAll] = useState(false)
-  const items = row.items ?? []
-  const shown = showAll ? items : items.slice(0, ITEMS_COLLAPSED)
+const PATCH_TABS: MissingPatch['severity'][] = ['Critical', 'Important', 'Moderate', 'Low', 'Unrated']
+const TAB_TONE: Record<string, string> = {
+  Critical: 'border-red-300 bg-red-50 text-red-700', Important: 'border-orange-300 bg-orange-50 text-orange-700',
+  Moderate: 'border-amber-300 bg-amber-50 text-amber-700', Low: 'border-slate-300 bg-slate-50 text-slate-600', Unrated: 'border-slate-300 bg-slate-50 text-slate-600',
+}
+const fmtDate = (iso: string | null): string => { const d = iso ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString() : '—' }
+
+/** One tab per severity (Critical · Important · Moderate · Low), each listing every missing patch of that severity. */
+function MissingPatchTabs({ patches, reported }: { patches: MissingPatch[]; reported?: string }) {
+  const groups = PATCH_TABS.map(sev => ({ sev, list: patches.filter(p => p.severity === sev) }))
+  const tabs = groups.filter(g => g.sev !== 'Unrated' || g.list.length > 0)
+  const [picked, setPicked] = useState<string | null>(null)
+  const active = tabs.find(g => g.sev === picked) ?? tabs.find(g => g.list.length > 0) ?? tabs[0]!
   return (
     <div>
-      <p className="text-slate-700">{row.detail}</p>
-      {items.length > 0 && (
-        <>
-          <button type="button" onClick={() => { setItemsVisible(visible => !visible); setShowAll(false) }} aria-expanded={itemsVisible}
-            className="mt-1 text-[0.65rem] font-semibold text-orange-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
-            {itemsVisible ? 'Hide missing patches' : `Show ${items.length.toLocaleString()} missing critical patch${items.length === 1 ? '' : 'es'}`}
+      <h3 className="mb-1.5 text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">Missing patches ({patches.length.toLocaleString()})</h3>
+      <div role="tablist" aria-label="Missing patches by severity" className="flex flex-wrap gap-1.5">
+        {tabs.map(g => (
+          <button key={g.sev} type="button" role="tab" aria-selected={active.sev === g.sev} onClick={() => setPicked(g.sev)}
+            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${active.sev === g.sev ? TAB_TONE[g.sev] : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+            {g.sev} ({g.list.length.toLocaleString()})
           </button>
-          {itemsVisible && <>
-            <ul className="mt-1 space-y-0.5 list-disc pl-4 text-[0.65rem] text-slate-500" aria-label="Missing critical patches">
-              {shown.map((it, i) => <li key={i}>{it}</li>)}
-            </ul>
-            {items.length > ITEMS_COLLAPSED && (
-              <button type="button" onClick={() => setShowAll(open => !open)} aria-expanded={showAll}
-                className="mt-0.5 text-[0.65rem] font-semibold text-orange-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
-                {showAll ? 'Show fewer' : `+${items.length - ITEMS_COLLAPSED} more`}
+        ))}
+      </div>
+      <div role="tabpanel" aria-label={`${active.sev} patches`} className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-slate-100">
+        {active.list.length === 0 ? <p className="p-3 text-slate-400">No {active.sev.toLowerCase()} patches missing.</p> : (
+          <ul className="divide-y divide-slate-100">
+            {active.list.map(p => (
+              <li key={p.patchId} className="px-3 py-2">
+                <div className="font-semibold text-slate-700 break-words">{[p.kb, (p.description || p.name).trim()].filter(Boolean).join(' — ')}</div>
+                <div className="mt-0.5 flex flex-wrap gap-x-3 text-[0.65rem] text-slate-400">
+                  <span>{p.category}</span>{p.vendor && <span>{p.vendor}</span>}<span>Released {fmtDate(p.releasedAt)}</span>
+                  {p.rebootRequirement && <span>Reboot: {p.rebootRequirement}</span>}{p.deploymentStatus && <span>{p.deploymentStatus}</span>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {reported && <p className="mt-1.5 text-[0.65rem] text-slate-400">Endpoint Central scan reported: {reported}. Lists include OS, third-party, driver and BIOS patches.</p>}
+    </div>
+  )
+}
+
+type PatchLoad = { key: string; state: 'loading' | 'done' | 'error'; patches: MissingPatch[] }
+
+function FindingDetailModal({ row, pillar, onClose }: { row: PosturePillarDevice | null; pillar: PosturePillar; onClose: () => void }) {
+  const steps = getPillarSteps(pillar.id)
+  const rowItems = row?.items ?? []
+  // The fleet-wide name list can be empty (rate-limited, not yet loaded) — then read this one device's patches on demand.
+  const expandable = !!row && pillar.id === 'patching' && row.status === 'fail'
+  const [openFor, setOpenFor] = useState<string | null>(null)   // row id whose patch breakdown is expanded
+  const expanded = !expandable || openFor === row!.id            // other findings show their detail straight away
+  const needsLoad = expandable && expanded && !!row!.patchResourceId
+  const loadKey = needsLoad ? `${row!.id}:${row!.patchResourceId}` : ''
+  const [load, setLoad] = useState<PatchLoad | null>(null)
+  useEffect(() => {
+    if (!loadKey) return
+    let live = true
+    const resourceId = loadKey.slice(loadKey.indexOf(':') + 1)
+    api.fetchMissingPatches(resourceId, 'all')
+      .then((r: MissingPatchesResponse) => { if (live) setLoad({ key: loadKey, state: r.status === 'ok' ? 'done' : 'error', patches: r.patches }) })
+      .catch(() => { if (live) setLoad({ key: loadKey, state: 'error', patches: [] }) })
+    return () => { live = false }
+  }, [loadKey])
+  const loaded = load?.key === loadKey ? load : null
+  const loading = needsLoad && !loaded
+  const items = rowItems
+  const fields: [string, string][] = row ? [
+    ['Device', row.deviceName], ['User', row.user], ['Platform', row.platform],
+    ['Source', row.source], ['Serial number', row.serialNumber || '—'], ['Check', pillar.label],
+  ] : []
+  return (
+    <Modal open={!!row} onClose={onClose} size="lg" title={row ? `${row.deviceName} — ${pillar.label}` : ''} description={row?.detail}>
+      {row && (
+        <div className="space-y-4 text-xs text-slate-700">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${STATUS_STYLE[row.status].chip}`}>{STATUS_STYLE[row.status].label}</span>
+            {expandable ? (
+              <button type="button" aria-expanded={expanded} onClick={() => setOpenFor(expanded ? null : row.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 -ml-1 font-semibold text-slate-800 underline decoration-dotted underline-offset-4 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
+                {row.detail}
+                <span aria-hidden className={`text-[0.6rem] text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
+                <span className="sr-only">{expanded ? 'Hide missing patches' : 'Show missing patches'}</span>
               </button>
-            )}
-          </>}
-        </>
+            ) : <span className="font-semibold">{row.detail}</span>}
+          </div>
+          {expandable && !expanded && <p className="-mt-2 text-[0.65rem] text-slate-400">Click the finding above to see which patches are missing.</p>}
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+            {fields.map(([k, v]) => (
+              <div key={k}><dt className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">{k}</dt><dd className="break-words">{v}</dd></div>
+            ))}
+          </dl>
+          {(row.facts?.length ?? 0) > 0 && (
+            <div>
+              <h3 className="mb-1 text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">Device details</h3>
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+                {row.facts!.map(f => (
+                  <div key={f.label}><dt className="text-[0.65rem] text-slate-400">{f.label}</dt><dd className="break-words">{f.value}</dd></div>
+                ))}
+              </dl>
+            </div>
+          )}
+          {!expanded ? null : loading ? (
+            <p role="status" className="rounded-lg bg-slate-50 p-3 text-slate-500">Loading missing patches from Endpoint Central…</p>
+          ) : loaded && loaded.patches.length > 0 ? (
+            <MissingPatchTabs patches={loaded.patches} reported={row.facts?.find(f => f.label === 'Missing patches')?.value} />
+          ) : items.length > 0 ? (
+            <div>
+              <h3 className="mb-1 text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">Missing critical patches ({items.length.toLocaleString()})</h3>
+              <ul className="list-disc space-y-0.5 pl-4 text-slate-600">{items.map((it, i) => <li key={i}>{it}</li>)}</ul>
+              {loaded?.state === 'error' && <p className="mt-2 text-slate-400">The full list (important, moderate, low) could not be loaded just now — reopen this panel to retry.</p>}
+            </div>
+          ) : row.status === 'fail' && pillar.id === 'patching' ? (
+            <p className="rounded-lg bg-slate-50 p-3 text-slate-500">
+              {loaded?.state === 'error'
+                ? 'Endpoint Central could not return this device\'s patch list just now (it may be rate-limited). The counts above are from the last scan — reopen this panel to retry.'
+                : row.patchResourceId ? 'Endpoint Central returned no patch list for this device; only the counts above were reported.'
+                : 'No Endpoint Central patch record is linked to this device, so only the counts above were reported.'}
+            </p>
+          ) : null}
+          {row.status === 'fail' && steps.length > 0 && (
+            <div>
+              <h3 className="mb-1 text-[0.65rem] font-bold uppercase tracking-wide text-slate-400">Recommended remediation</h3>
+              <ol className="list-decimal space-y-0.5 pl-4 text-slate-600">{steps.map((st, i) => <li key={i}>{st}</li>)}</ol>
+            </div>
+          )}
+        </div>
       )}
+    </Modal>
+  )
+}
+
+// ─── Endpoint Central agent coverage (rollout progress) ─────────────────────────
+
+type Coverage = NonNullable<SecurityPostureResult['coverage']>
+const pctOf = (c: { devices: number; withAgent: number }): number | null => (c.devices ? (c.withAgent / c.devices) * 100 : null)
+
+function AgentCoverageCard({ coverage }: { coverage: Coverage }) {
+  const history = coverage.history ?? []
+  // Compare against the earliest reading within 30 days of the latest one, so the change reads as "since <date>".
+  const latest = history[history.length - 1]
+  const base = latest ? history.find(h => h !== latest && Date.parse(latest.date) - Date.parse(h.date) <= 30 * 86_400_000) : undefined
+  const rows: { key: 'windows' | 'macos'; label: string }[] = [{ key: 'windows', label: 'Windows' }, { key: 'macos', label: 'macOS' }]
+  return (
+    <div className="sm:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
+      <p className="text-[0.65rem] font-semibold text-slate-500 uppercase tracking-wide">Endpoint Central agent coverage</p>
+      <p className="text-[0.65rem] text-slate-400 mb-2">Devices with an Endpoint Central agent record (patch-assessable). Updates automatically as agents are installed.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+        {rows.map(({ key, label }) => {
+          const now = pctOf(coverage[key])
+          const before = base ? pctOf(base[key]) : null
+          const delta = now !== null && before !== null ? now - before : null
+          return (
+            <div key={key}>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="font-semibold text-slate-700">{label}</span>
+                <span className="text-slate-500">
+                  {coverage[key].withAgent.toLocaleString()} / {coverage[key].devices.toLocaleString()}
+                  {now !== null && <b className="ml-1.5 text-slate-800">{now.toFixed(1)}%</b>}
+                  {delta !== null && Math.abs(delta) >= 0.05 && (
+                    <span className={`ml-1.5 font-semibold ${delta > 0 ? 'text-emerald-600' : 'text-red-600'}`} title={`vs ${base!.date}`}>
+                      {delta > 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)} pts since {base!.date}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="mt-1 h-2 rounded-full bg-slate-100 overflow-hidden" role="progressbar" aria-label={`${label} agent coverage`} aria-valuenow={Math.round(now ?? 0)} aria-valuemin={0} aria-valuemax={100}>
+                <div className="h-2 rounded-full bg-sky-500 transition-all duration-700" style={{ width: `${now ?? 0}%` }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -419,6 +576,7 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
   const [list, setList] = useState<PillarDeviceList | null>(null)
   const [listState, setListState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [reload, setReload] = useState(0)
+  const [selectedRow, setSelectedRow] = useState<PosturePillarDevice | null>(null)
   const seq = useRef(0)
 
   useEffect(() => {
@@ -456,15 +614,15 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
   const statusTile = (status: SegmentStatus, n: number, tone: string) => (
     <button type="button" onClick={() => select({ ...(segment.platform ? { platform: segment.platform } : {}), ...(segment.sourceKey ? { sourceKey: segment.sourceKey } : {}), status })}
       aria-pressed={segment.status === status} disabled={n === 0} aria-label={`Show ${n.toLocaleString()} ${STATUS_STYLE[status].label.toLowerCase()} devices`}
-      className={`rounded-xl border px-3 py-2.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 disabled:opacity-60 ${tone} ${segment.status === status ? 'ring-2 ring-orange-400' : 'hover:shadow-sm'}`}>
+      className={`rounded-xl border px-3 py-2.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:opacity-60 ${tone} ${segment.status === status ? 'ring-2 ring-indigo-400' : 'hover:shadow-sm'}`}>
       <p className="text-lg font-black">{n.toLocaleString()}</p>
       <p className="text-[0.58rem] font-medium opacity-70">{STATUS_STYLE[status].label}</p>
     </button>
   )
 
   return (
-    <section aria-label={`${pillar.label} details`} className="bg-white rounded-2xl border border-orange-200 shadow-md overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3.5 bg-orange-50 border-b border-orange-100">
+    <section aria-label={`${pillar.label} details`} className="bg-white rounded-2xl border border-indigo-200 shadow-md overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 bg-indigo-50 border-b border-indigo-100">
         <div className="flex items-center gap-2.5">
           <div className={`rounded-xl p-2 ${meta.iconBg}`}><Icon className={`h-4 w-4 ${meta.icon_c}`} /></div>
           <div>
@@ -473,7 +631,7 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
           </div>
         </div>
         <button type="button" onClick={onClose} aria-label={`Close ${pillar.label} details`}
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-100 hover:text-slate-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-100 hover:text-slate-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -483,6 +641,16 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
           <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
             <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-[0.68rem] text-amber-800">{pillar.unavailableReason}</p>
+          </div>
+        )}
+
+        {pillar.unmatchedAgents && pillar.unmatchedAgents.windows + pillar.unmatchedAgents.macos > 0 && (
+          <div role="status" className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5">
+            <Info className="h-3.5 w-3.5 text-sky-600 flex-shrink-0 mt-0.5" />
+            <p className="text-[0.68rem] text-sky-800">
+              Endpoint Central reports {pillar.unmatchedAgents.windows.toLocaleString()} Windows and {pillar.unmatchedAgents.macos.toLocaleString()} Mac
+              system(s) that match no device in the inventory (agent-only or renamed). They are not included in any count or score here.
+            </p>
           </div>
         )}
 
@@ -507,7 +675,7 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
                 <li key={f.label}>
                   <button type="button" onClick={() => { setQuery(f.label); setDebounced(f.label); select({ status: 'fail' }) }}
                     aria-label={`${f.label} — missing on ${f.devices.toLocaleString()} devices — show devices`}
-                    className="w-full flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-1.5 text-left text-xs hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                    className="w-full flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-1.5 text-left text-xs hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                     <span className="text-slate-700 min-w-0 break-words">{f.label}</span>
                     <span className="flex-shrink-0 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[0.62rem] font-bold text-red-700">{f.devices.toLocaleString()} devices</span>
                   </button>
@@ -526,12 +694,12 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
         <div aria-live="polite">
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <p className="text-[0.65rem] font-bold text-slate-700 uppercase tracking-wide">
-              Showing: <span className="text-orange-700 normal-case">{describeSegment(segment)}</span>
+              Showing: <span className="text-indigo-700 normal-case">{describeSegment(segment)}</span>
               {list && <span className="text-slate-400 normal-case font-semibold"> — {list.total.toLocaleString()} device{list.total === 1 ? '' : 's'}</span>}
             </p>
             {!isDefault && (
               <button type="button" onClick={() => { setQuery(''); setDebounced(''); select(DEFAULT_SEGMENT) }}
-                className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[0.62rem] font-semibold text-orange-700 hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[0.62rem] font-semibold text-indigo-700 hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                 Reset filter
               </button>
             )}
@@ -539,10 +707,10 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
               <span className="sr-only">Search devices</span>
               <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
               <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search device, user, serial, patch…"
-                className="rounded-lg border border-slate-200 py-1 pl-7 pr-2 text-xs w-60 focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                className="rounded-lg border border-slate-200 py-1 pl-7 pr-2 text-xs w-60 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
             </label>
             <button type="button" disabled={!list?.total} onClick={exportCsv}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <FileDown className="h-3 w-3" />Export CSV
             </button>
           </div>
@@ -582,7 +750,7 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
                       <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full border px-2 py-0.5 text-[0.6rem] font-bold ${STATUS_STYLE[d.status].chip}`}>{STATUS_STYLE[d.status].label}</span>
                       </td>
-                      <td className="px-3 py-2"><FindingCell row={d} /></td>
+                      <td className="px-3 py-2"><FindingCell row={d} pillarId={pillar.id} onOpen={setSelectedRow} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -593,10 +761,10 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
           {list && list.totalPages > 1 && (
             <div className="mt-2 flex items-center justify-end gap-2 text-xs text-slate-500">
               <button type="button" disabled={list.page <= 1} onClick={() => { setListState('loading'); setPage(list.page - 1) }}
-                className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Previous</button>
+                className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Previous</button>
               <span>Page {list.page} of {list.totalPages}</span>
               <button type="button" disabled={list.page >= list.totalPages} onClick={() => { setListState('loading'); setPage(list.page + 1) }}
-                className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Next</button>
+                className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Next</button>
             </div>
           )}
         </div>
@@ -604,19 +772,20 @@ function PillarDetailPanel({ pillar, source, onClose }: { pillar: PosturePillar;
         {/* Remediation */}
         <div>
           <div className="flex items-center gap-1.5 mb-2">
-            <Wrench className="h-3.5 w-3.5 text-orange-500" />
+            <Wrench className="h-3.5 w-3.5 text-indigo-500" />
             <p className="text-[0.65rem] font-bold text-slate-700 uppercase tracking-wide">Remediation Steps</p>
           </div>
           <ol className="space-y-1.5">
             {steps.map((step, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="flex-shrink-0 h-4 w-4 rounded-full bg-orange-100 text-orange-700 text-[0.55rem] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                <span className="flex-shrink-0 h-4 w-4 rounded-full bg-indigo-100 text-indigo-700 text-[0.55rem] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                 <p className="text-[0.65rem] text-slate-600 leading-snug">{step}</p>
               </li>
             ))}
           </ol>
         </div>
       </div>
+      <FindingDetailModal row={selectedRow} pillar={pillar} onClose={() => setSelectedRow(null)} />
     </section>
   )
 }
@@ -688,8 +857,8 @@ export function SecurityPosturePage() {
       {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-orange-100 p-2.5 flex-shrink-0">
-            <Shield className="h-6 w-6 text-orange-600" />
+          <div className="rounded-2xl bg-indigo-100 p-2.5 flex-shrink-0">
+            <Shield className="h-6 w-6 text-indigo-600" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Security Posture</h1>
@@ -697,7 +866,7 @@ export function SecurityPosturePage() {
           </div>
         </div>
         <button type="button" onClick={refresh} disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh
         </button>
       </div>
@@ -727,11 +896,11 @@ export function SecurityPosturePage() {
             const count = !data ? null : tab.id === 'all' ? data.sourceCounts.intune + data.sourceCounts.manageengine : data.sourceCounts[tab.id]
             return (
               <button key={tab.id} type="button" role="tab" aria-selected={active} onClick={() => changeSource(tab.id)}
-                className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${active ? 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
+                className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${active ? 'border-indigo-400 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
                 <Icon className="h-3.5 w-3.5 flex-shrink-0" />
                 <span>{tab.label}</span>
                 {count !== null && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold ${active ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}`}>{count.toLocaleString()}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold ${active ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{count.toLocaleString()}</span>
                 )}
               </button>
             )
@@ -760,6 +929,14 @@ export function SecurityPosturePage() {
               <p className="text-[0.6rem] text-slate-400 font-medium">Letter Grade</p>
             </div>
           </div>
+          {data?.enrichment && (!data.enrichment.patchLoaded || data.enrichment.mdmDetailsUnread > 0 || data.enrichment.mdmDetailsStale > 0) && (
+            <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[0.6rem] text-amber-800">
+              Partial data:
+              {!data.enrichment.patchLoaded && ' Patch Manager could not be loaded (patching shows not reported).'}
+              {data.enrichment.mdmDetailsUnread > 0 && ` ${data.enrichment.mdmDetailsUnread.toLocaleString()} Mac(s) have unreadable MDM details (not reported).`}
+              {data.enrichment.mdmDetailsStale > 0 && ` ${data.enrichment.mdmDetailsStale.toLocaleString()} Mac(s) show last-known MDM values (latest sync could not read them).`}
+            </p>
+          )}
           {data && (
             <p className="text-[0.6rem] text-slate-400 text-center">
               Weighted average of {data.overall.assessedPillars} of {data.overall.totalPillars} pillars that could be assessed
@@ -776,12 +953,12 @@ export function SecurityPosturePage() {
             <p className="text-3xl font-black text-red-600">{needAttention}</p>
             <p className="text-[0.65rem] text-slate-400">Need attention</p>
           </div>
-          <div className="bg-white rounded-2xl border border-orange-200 shadow-sm px-4 py-3 flex flex-col gap-2">
+          <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm px-4 py-3 flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-xl bg-orange-100 p-2"><Shield className="h-4 w-4 text-orange-600" /></div>
+              <div className="rounded-xl bg-indigo-100 p-2"><Shield className="h-4 w-4 text-indigo-600" /></div>
               <p className="text-xs font-semibold text-slate-600">Failing Checks</p>
             </div>
-            <p className="text-3xl font-black text-orange-600">{failingChecks.toLocaleString()}</p>
+            <p className="text-3xl font-black text-indigo-600">{failingChecks.toLocaleString()}</p>
             <p className="text-[0.65rem] text-slate-400">Across pillars — a device can fail several</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col gap-2">
@@ -793,12 +970,14 @@ export function SecurityPosturePage() {
             <p className="text-[0.65rem] text-slate-400">Device checks with no data from the source</p>
           </div>
 
+          {data?.coverage && <AgentCoverageCard coverage={data.coverage} />}
+
           <div className="sm:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
             <p className="text-[0.65rem] font-semibold text-slate-500 uppercase tracking-wide mb-3">Pillar Health Overview</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
               {pillars.map(p => (
                 <button key={p.id} type="button" onClick={() => viewDevices(p.id)} aria-label={`Open ${p.label} details`}
-                  className="flex items-center gap-2 rounded-lg text-left hover:bg-slate-50 px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                  className="flex items-center gap-2 rounded-lg text-left hover:bg-slate-50 px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                   <span className="text-[0.62rem] font-semibold text-slate-500 w-28 shrink-0 truncate">{p.label}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <div className={`h-1.5 rounded-full ${PILLAR_META[p.id].bar}`} style={{ width: `${p.scorePct ?? 0}%` }} />
@@ -853,7 +1032,7 @@ export function SecurityPosturePage() {
               return (
                 <div key={risk.pillarId}>
                   <button type="button" onClick={() => setExpandedRisk(isExpanded ? null : risk.pillarId)} aria-expanded={isExpanded}
-                    className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-400 ${isExpanded ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
+                    className={`w-full flex items-start gap-3 px-5 py-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400 ${isExpanded ? 'bg-indigo-50/60' : 'hover:bg-slate-50/60'}`}>
                     <span className={`flex-shrink-0 mt-1.5 h-2 w-2 rounded-full ${sc.dot}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -862,24 +1041,24 @@ export function SecurityPosturePage() {
                       </div>
                       <p className="text-xs text-slate-700 font-medium leading-snug">{risk.title}</p>
                     </div>
-                    <ChevronDown className={`flex-shrink-0 h-3.5 w-3.5 text-slate-400 mt-1 transition-transform ${isExpanded ? 'rotate-180 text-orange-500' : ''}`} />
+                    <ChevronDown className={`flex-shrink-0 h-3.5 w-3.5 text-slate-400 mt-1 transition-transform ${isExpanded ? 'rotate-180 text-indigo-500' : ''}`} />
                   </button>
                   {isExpanded && (
-                    <div className="px-5 pb-4 bg-orange-50/40 border-t border-orange-100">
+                    <div className="px-5 pb-4 bg-indigo-50/40 border-t border-indigo-100">
                       <div className="pt-3 flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-1.5">
-                          <Wrench className="h-3 w-3 text-orange-500" />
+                          <Wrench className="h-3 w-3 text-indigo-500" />
                           <p className="text-[0.6rem] font-bold text-slate-600 uppercase tracking-wide">Recommended Remediation</p>
                         </div>
                         <button type="button" onClick={() => viewDevices(risk.pillarId)}
-                          className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-[0.65rem] font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                          className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[0.65rem] font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                           View {risk.count.toLocaleString()} devices
                         </button>
                       </div>
                       <ol className="space-y-1.5">
                         {steps.slice(0, 4).map((step, j) => (
                           <li key={j} className="flex items-start gap-2">
-                            <span className="flex-shrink-0 h-4 w-4 rounded-full bg-orange-100 text-orange-700 text-[0.55rem] font-bold flex items-center justify-center mt-0.5">{j + 1}</span>
+                            <span className="flex-shrink-0 h-4 w-4 rounded-full bg-indigo-100 text-indigo-700 text-[0.55rem] font-bold flex items-center justify-center mt-0.5">{j + 1}</span>
                             <p className="text-[0.65rem] text-slate-600 leading-snug">{step}</p>
                           </li>
                         ))}

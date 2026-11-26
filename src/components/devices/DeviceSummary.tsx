@@ -16,7 +16,7 @@ function CopyButton({ text, label, onCopy }: { text: string; label: string; onCo
       type="button"
       onClick={() => onCopy?.(text, label)}
       aria-label={`Copy ${label}`}
-      className="ml-1 rounded p-0.5 text-slate-400 opacity-0 group-hover/row:opacity-100 hover:text-orange-600 hover:bg-orange-50 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-orange-300 transition"
+      className="ml-1 rounded p-0.5 text-slate-400 opacity-0 group-hover/row:opacity-100 hover:text-indigo-600 hover:bg-indigo-50 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-indigo-300 transition"
     >
       <Copy className="h-2.5 w-2.5" />
     </button>
@@ -146,7 +146,7 @@ export function DeviceSummary({ device, onSyncNow, syncLoading = false, onCopy }
             <div className="flex items-center justify-between gap-2 py-1.5">
               <span className="text-[0.68rem] text-slate-500">Platform</span>
               <div className="flex items-center gap-1 text-[0.68rem] font-semibold text-slate-900">
-                <Monitor className="h-3 w-3 text-orange-600 flex-shrink-0" />
+                <Monitor className="h-3 w-3 text-indigo-600 flex-shrink-0" />
                 <span>{device.platform}</span>
               </div>
             </div>
@@ -171,7 +171,7 @@ export function DeviceSummary({ device, onSyncNow, syncLoading = false, onCopy }
             <button
               onClick={onSyncNow}
               disabled={syncLoading}
-              className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {syncLoading ? (
                 <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">

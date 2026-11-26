@@ -180,7 +180,7 @@ Relevant test files:
   Microsoft's login endpoint up to 7 times. Fixed in `graphApi.ts`'s `getToken()` by tracking one
   in-flight token promise per tenant and having concurrent callers await it instead of each starting
   their own request — regression-tested in `graphApiRetry.test.ts`.
-- **Validated against a live tenant** (this org's Zinnia Intune tenant, using the already-configured
+- **Validated against a live tenant** (this org's Verma Intune tenant, using the already-configured
   `INTUNE_TENANT_ID`/`INTUNE_CLIENT_ID`/`INTUNE_CLIENT_SECRET`): all 9 categories fetched successfully
   with zero `categoryErrors`, confirming the app registration already has all four required
   permissions granted — including `DeviceManagementServiceConfig.Read.All` for Autopilot, which

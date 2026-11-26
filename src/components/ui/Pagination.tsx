@@ -37,7 +37,7 @@ export function Pagination({ page, totalPages, onPageChange, totalItems, pageSiz
       </p>
       <div className="flex items-center gap-1">
         <button type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1}
-          className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300"
+          className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-indigo-300"
           aria-label="Previous page">
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
@@ -45,14 +45,14 @@ export function Pagination({ page, totalPages, onPageChange, totalItems, pageSiz
           <span key={`ellipsis-${i}`} className="px-1.5 text-[0.68rem] text-slate-400">…</span>
         ) : (
           <button key={p} type="button" onClick={() => onPageChange(p)}
-            className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+            className={`rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
               p === page ? 'is-selected' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
             }`}>
             {p}
           </button>
         ))}
         <button type="button" onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages}
-          className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-orange-300"
+          className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-indigo-300"
           aria-label="Next page">
           <ChevronRight className="h-3.5 w-3.5" />
         </button>

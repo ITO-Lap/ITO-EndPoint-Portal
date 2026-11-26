@@ -25,13 +25,14 @@
 import { isDbAvailable, query } from '../db/index.js'
 import * as scheduledReportsStore from '../store/scheduledReportsStore.js'
 import { credentialsFromEnv, getManagedDevices, getCompliancePolicies, getConfigurationProfiles } from './graphApi.js'
-import { batchComputeRiskScores } from './riskScoring.js'
+import { batchComputeRiskScores, fleetRiskSummary } from './riskScoring.js'
 import { detectConflicts, conflictSummary } from './policyConflict.js'
 import { getLatestSyncRun, getChangeHistory } from './securityPoliciesStore.js'
-import { scanFleet, buildPlatformCoverage } from '../security-agents/service.js'
 import { fetchAllDevices } from '../routes/devices.js'
 import { fetchLiveDevices } from '../routes/automations.js'
-import { getAppsFor } from '../routes/securityInventory.js'
+import { getCoverageSnapshot } from '../routes/securityInventory.js'
+import { getPostureResult, getPillarDeviceList, getPostureDiagnostics } from '../routes/securityPosture.js'
+import { getMissingPatches, PatchApiError, isPatchApiConfigured } from './endpointCentralPatch.js'
 import { getUserIntelligence } from '../routes/users.js'
 import { getRoleActivityEventsLive, listQuerySchema as roleActivityQuerySchema, liveBrowseMaxDays } from '../routes/roleActivity.js'
 import { listAllItems } from './intuneScriptsConfigGraph.js'
@@ -40,7 +41,6 @@ import { createJiraIssue, isJiraConfigured, type JiraIssueInput } from './jira.j
 import { sendTeamsMessage, isTeamsConfigured } from './teams.js'
 import { runAutomationRule } from './automationEngine.js'
 import { getRuleById } from '../data/mockAutomations.js'
-import type { Device, AppStatus } from '../types.js'
 
 // ─── Shared types ──────────────────────────────────────────────────────────
 
@@ -50,6 +50,14 @@ export interface CopilotCitation {
   freshness: string     // ISO timestamp of when the underlying tool call ran
   /** Present only for a public web source. */
   url?: string
+  /** What kind of source this is: project documentation, live tool data, or the public web (absent on older records). */
+  kind?: 'doc' | 'live' | 'web'
+  /** Documentation citations only: which indexed document/section the statement came from. */
+  docId?: string
+  chunkId?: string
+  title?: string
+  section?: string
+  path?: string
 }
 
 export interface ToolContext {
@@ -150,6 +158,8 @@ const getRiskScores: ToolDefinition = {
     return {
       result: {
         count: scores.length,
+        // The list is the riskiest devices of the whole fleet; these counts cover every device.
+        fleet: fleetRiskSummary(devices),
         scores: scores.map(s => ({
           deviceId: s.deviceId, deviceName: s.deviceName, userEmail: s.userEmail,
           overallScore: s.overallScore, riskLevel: s.riskLevel,
@@ -249,29 +259,141 @@ const getRoleActivity: ToolDefinition = {
 
 const getEndpointProtectionCoverage: ToolDefinition = {
   name: 'get_endpoint_protection_coverage',
-  description: 'Get CrowdStrike Falcon and Zscaler coverage percentages for physical Windows and macOS devices (excludes VDI). Wraps the Security Posture coverage scan.',
+  description: 'Get CrowdStrike Falcon and Zscaler coverage percentages for physical Windows and macOS devices (excludes VDI), as shown on the Security Posture page. Uses the shared cached fleet scan; if the first scan is still running it returns its progress instead of data.',
   rbac: 'read',
   parameters: { type: 'object', properties: {} },
   run: async () => {
-    const { devices } = await fetchAllDevices()
-    const devicesWithApps: Array<{ device: Device; apps: AppStatus[] }> = []
-    const CONCURRENCY = 8
-    for (let i = 0; i < devices.length; i += CONCURRENCY) {
-      const batch = devices.slice(i, i + CONCURRENCY)
-      const settled = await Promise.allSettled(batch.map(d => getAppsFor(d)))
-      settled.forEach((s, idx) => {
-        devicesWithApps.push({ device: batch[idx]!, apps: s.status === 'fulfilled' ? s.value : [] })
-      })
-    }
+    const snap = getCoverageSnapshot()
     const scanTime = now()
-    const statuses = scanFleet(devicesWithApps, scanTime)
-    const windows = buildPlatformCoverage(statuses, 'Windows')
-    const macos = buildPlatformCoverage(statuses, 'macOS')
-    const citations: CopilotCitation[] = [
-      { source: 'internal', recordId: 'coverage:windows', freshness: scanTime },
-      { source: 'internal', recordId: 'coverage:macos', freshness: scanTime },
-    ]
-    return { result: { windows, macos, scanTime }, citations }
+    if (snap.state === 'scanning') {
+      return { result: { scanning: true, progress: snap.progress, note: 'The first fleet scan is still running; ask again in a few minutes.' }, citations: [{ source: 'internal', recordId: 'coverage:scan', freshness: scanTime }] }
+    }
+    const { windows, macos, scanTime: scannedAt, stale } = snap.result
+    return {
+      result: { windows, macos, scanTime: scannedAt, stale: stale === true },
+      citations: [
+        { source: 'internal', recordId: 'coverage:windows', freshness: scannedAt },
+        { source: 'internal', recordId: 'coverage:macos', freshness: scannedAt },
+      ],
+    }
+  },
+}
+
+// ─── Security Posture tools (read-only) ──────────────────────────────────────
+
+const POSTURE_PILLARS = ['encryption', 'patching', 'compliance', 'checkin']
+const POSTURE_SOURCES = ['all', 'intune', 'manageengine']
+
+const getSecurityPosture: ToolDefinition = {
+  name: 'get_security_posture',
+  description: 'Get the Security Posture summary shown on the Security Posture page: overall score and grade, the four pillars (Disk Encryption, Critical Patching, MDM Compliance, MDM Check-in) with passing / failing / not-reported counts, Windows and macOS Endpoint Central agent coverage, and data-health notes (stale MDM details, Patch Manager availability). Windows devices are in both Intune and Endpoint Central; macOS devices are only in Endpoint Central.',
+  rbac: 'read',
+  parameters: { type: 'object', properties: { source: { type: 'string', enum: POSTURE_SOURCES, description: "Which devices to include: 'all' (default), 'intune' or 'manageengine'." } } },
+  run: async (args) => {
+    const source = asString(args.source, 'all')
+    if (!POSTURE_SOURCES.includes(source)) throw new Error(`source must be one of: ${POSTURE_SOURCES.join(', ')}`)
+    const r = await getPostureResult(source as 'all' | 'intune' | 'manageengine')
+    const grade = r.overall.score === null ? null : r.overall.score >= 90 ? 'A' : r.overall.score >= 80 ? 'B' : r.overall.score >= 70 ? 'C' : 'D'
+    return {
+      result: {
+        generatedAt: r.generatedAt, source: r.source, deviceCount: r.deviceCount,
+        overall: { ...r.overall, grade },
+        pillars: r.pillars.map(p => ({
+          id: p.id, label: p.label, weight: p.weight, scorePct: p.scorePct, inScope: p.inScope,
+          passing: p.passing, failing: p.failing, notReported: p.notReported, unavailableReason: p.unavailableReason,
+          byPlatform: p.byPlatform, topFindings: p.topFindings.slice(0, 5), unmatchedAgents: p.unmatchedAgents,
+        })),
+        agentCoverage: r.coverage ? { windows: r.coverage.windows, macos: r.coverage.macos } : null,
+        dataHealth: r.enrichment,
+      },
+      citations: [{ source: 'internal', recordId: `security-posture:${source}`, freshness: r.generatedAt }],
+    }
+  },
+}
+
+const listPostureDevices: ToolDefinition = {
+  name: 'list_posture_devices',
+  description: 'List the devices behind a Security Posture pillar number, with each device\'s verdict (pass, fail or unknown = not reported), the one-line finding, the source the verdict is based on, and its patch resource id. Filter by status, platform or text. Use this for "which devices have encryption off", "which Macs are missing critical patches" or "show failing check-ins".',
+  rbac: 'read',
+  parameters: {
+    type: 'object',
+    properties: {
+      pillar: { type: 'string', enum: POSTURE_PILLARS, description: 'encryption, patching, compliance or checkin.' },
+      status: { type: 'string', enum: ['pass', 'fail', 'unknown'], description: 'Verdict filter. Default: fail.' },
+      platform: { type: 'string', enum: ['Windows', 'macOS'], description: 'Optional platform filter.' },
+      query: { type: 'string', description: 'Optional text search (device, user, serial, finding).' },
+      limit: { type: 'number', description: 'Max rows. Default 20, max 50.' },
+    },
+    required: ['pillar'],
+  },
+  run: async (args) => {
+    const pillar = asString(args.pillar)
+    if (!POSTURE_PILLARS.includes(pillar)) throw new Error(`pillar must be one of: ${POSTURE_PILLARS.join(', ')}`)
+    const status = asString(args.status, 'fail')
+    if (!['pass', 'fail', 'unknown'].includes(status)) throw new Error('status must be pass, fail or unknown')
+    const limit = Math.min(Math.max(Number(args.limit ?? 20) || 20, 1), 50)
+    const platform = asString(args.platform)
+    const q = asString(args.query)
+    const list = await getPillarDeviceList({
+      pillarId: pillar as 'encryption', status: status as 'pass', page: 1, pageSize: limit,
+      ...(platform ? { platform } : {}), ...(q ? { q } : {}),
+    })
+    const freshness = now()
+    return {
+      result: {
+        pillar, status, total: list.total, returned: list.rows.length,
+        devices: list.rows.map(d => ({
+          id: d.id, deviceName: d.deviceName, user: d.user, platform: d.platform, source: d.source, serialNumber: d.serialNumber,
+          status: d.status, finding: d.detail, verdictBasedOn: d.facts?.find(f => f.label === 'Verdict based on')?.value,
+          patchResourceId: d.patchResourceId,
+        })),
+      },
+      citations: list.rows.slice(0, 10).map(d => ({ source: 'internal', recordId: `posture:${pillar}:${d.id}`, freshness })),
+    }
+  },
+}
+
+const getDeviceMissingPatches: ToolDefinition = {
+  name: 'get_device_missing_patches',
+  description: 'Get the full list of missing patches for ONE device from Endpoint Central Patch Manager, grouped by severity (Critical, Important, Moderate, Low) with KB number, description, category and release date. Needs the device\'s patchResourceId, which list_posture_devices returns for Patching and Check-in findings.',
+  rbac: 'read',
+  parameters: {
+    type: 'object',
+    properties: {
+      patchResourceId: { type: 'string', description: 'Endpoint Central Patch Manager resource id (patchResourceId from list_posture_devices).' },
+      view: { type: 'string', enum: ['all', 'critical', 'os', 'app'], description: 'Which patches to return. Default: all.' },
+    },
+    required: ['patchResourceId'],
+  },
+  run: async (args) => {
+    const id = asString(args.patchResourceId).trim()
+    if (!id) throw new Error('patchResourceId is required')
+    const view = asString(args.view, 'all')
+    if (!['all', 'critical', 'os', 'app'].includes(view)) throw new Error('view must be all, critical, os or app')
+    if (!isPatchApiConfigured()) throw new Error('Endpoint Central is not configured')
+    try {
+      const r = await getMissingPatches(id, view as 'all')
+      const bySeverity: Record<string, Array<{ kb: string | null; description: string; category: string; releasedAt: string | null }>> = {}
+      for (const p of r.patches) (bySeverity[p.severity] ??= []).push({ kb: p.kb, description: (p.description || p.name).slice(0, 200), category: p.category, releasedAt: p.releasedAt })
+      const counts = Object.fromEntries(Object.entries(bySeverity).map(([k, v]) => [k, v.length]))
+      return { result: { patchResourceId: id, view, total: r.patches.length, counts, patches: bySeverity }, citations: [{ source: 'ManageEngine', recordId: id, freshness: r.fetchedAt }] }
+    } catch (e) {
+      if (e instanceof PatchApiError && e.kind === 'scope_required') throw new Error('Endpoint Central rejected the token: the PatchMgmt read scope is missing.', { cause: e })
+      throw new Error(`Endpoint Central could not return the patch list right now (it may be rate-limited): ${e instanceof Error ? e.message : e}`, { cause: e })
+    }
+  },
+}
+
+const getPostureDiagnosticsTool: ToolDefinition = {
+  name: 'get_posture_diagnostics',
+  description: 'Get how Security Posture reconciled its sources: devices by platform, how many Windows devices matched an Endpoint Central agent and by which key (resource id, serial, MAC, host name), Patch Manager coverage, ambiguous host names, unmatched agent rows, and the latest ManageEngine MDM detail-read health (requested, recovered, failed, throttling reasons). Counts only; no device names.',
+  rbac: 'read',
+  parameters: { type: 'object', properties: {} },
+  run: async () => {
+    const { diag, mdmDetailReads } = await getPostureDiagnostics()
+    const counts: Record<string, unknown> = { ...diag }
+    delete counts['samples']                       // device names stay in the admin-only diagnostics endpoint
+    return { result: { ...counts, mdmDetailReads }, citations: [{ source: 'internal', recordId: 'security-posture:diagnostics', freshness: now() }] }
   },
 }
 
@@ -575,6 +697,10 @@ export const COPILOT_TOOLS: ToolDefinition[] = [
   getSecurityPolicyStatus,
   getRoleActivity,
   getEndpointProtectionCoverage,
+  getSecurityPosture,
+  listPostureDevices,
+  getDeviceMissingPatches,
+  getPostureDiagnosticsTool,
   getScheduledReports,
   getAuditLog,
   getUserIntelligenceTool,

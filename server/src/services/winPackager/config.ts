@@ -3,15 +3,7 @@
 
 import { z } from 'zod'
 import { checkCommand } from './commands.js'
-import type { PackageAnalysis, PackageConfig, PackageJob, ReturnCode } from './types.js'
-
-export const DEFAULT_RETURN_CODES: ReturnCode[] = [
-  { code: 0, type: 'success' },
-  { code: 1707, type: 'success' },
-  { code: 3010, type: 'softReboot' },
-  { code: 1641, type: 'hardReboot' },
-  { code: 1618, type: 'retry' },
-]
+import type { PackageAnalysis, PackageConfig, PackageJob } from './types.js'
 
 const GUID = /^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$/
 const APPX_NAME = /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,127}$/
@@ -29,11 +21,6 @@ const detectionSchema = z.object({
   guidance: text(500).optional(),
 }).strict()
 
-const returnCodeSchema = z.object({
-  code: z.number().int().min(-2147483648).max(2147483647),
-  type: z.enum(['success', 'softReboot', 'hardReboot', 'retry', 'failed']),
-}).strict()
-
 /** Fields the engineer may edit. Unknown keys are rejected rather than silently dropped. */
 export const configPatchSchema = z.object({
   appName: text(128),
@@ -45,12 +32,6 @@ export const configPatchSchema = z.object({
   detection: detectionSchema,
   installBehavior: z.enum(['system', 'user']),
   architecture: z.enum(['x64', 'x86', 'arm64']),
-  minimumOs: text(64),
-  restartBehavior: z.enum(['none', 'allow', 'force', 'intune-decides']),
-  returnCodes: z.array(returnCodeSchema).max(40),
-  dependencies: text(2000),
-  supersedenceNotes: text(2000),
-  assignmentNotes: text(2000),
   setupFile: text(200),
   acknowledgedUnverifiedCommands: z.boolean(),
 }).partial().strict()
@@ -69,12 +50,6 @@ export function defaultConfig(a: PackageAnalysis, fallbackName: string): Package
     detection: { ...a.detection },
     installBehavior: 'system',
     architecture: a.architecture ?? 'x64',
-    minimumOs: a.minOsVersion ? `Windows ${a.minOsVersion}` : 'Windows 10 1809',
-    restartBehavior: 'intune-decides',
-    returnCodes: DEFAULT_RETURN_CODES.map(r => ({ ...r })),
-    dependencies: '',
-    supersedenceNotes: '',
-    assignmentNotes: '',
     setupFile: a.installerFile,
     acknowledgedUnverifiedCommands: false,
   }

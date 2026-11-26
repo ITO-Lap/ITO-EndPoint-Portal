@@ -110,7 +110,7 @@ export function RequestDialog({ appKey, appName, kind, onClose, onDone }: Props)
           <button type="button" onClick={onClose} disabled={sending} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300">{created ? 'Close' : 'Cancel'}</button>
           {!created && (
             <button type="button" onClick={() => void send()} disabled={blocked || sending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <Send className="h-3.5 w-3.5" />{sending ? 'Sending…' : copy.action}
             </button>
           )}

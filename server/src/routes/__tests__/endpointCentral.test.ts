@@ -13,10 +13,11 @@ vi.mock('../../services/manageEngine.js', () => ({
 
 import router from '../endpointCentral.js'
 import { clearMissingPatchCache } from '../../services/endpointCentralPatch.js'
+import type { Json } from '../../test/json.js'
 
-function get(url: string): Promise<{ status: number; text: string; json: any }> {
+function get(url: string): Promise<{ status: number; text: string; json: Json }> {
   return new Promise((resolve, reject) => {
-    http.get(url, res => {
+    http.get(url, { headers: { 'x-user-role': 'Global Admin' } }, res => {
       let b = ''
       res.on('data', c => { b += c })
       res.on('end', () => resolve({ status: res.statusCode ?? 0, text: b, json: JSON.parse(b) }))

@@ -10,7 +10,7 @@ import { IssueCategories } from './IssueCategories'
 import { PolicyDetailsModal } from './PolicyDetailsModal'
 import { LiveDataBar } from './LiveDataBar'
 import { AllDevicesDrawer } from '../devices/AllDevicesDrawer'
-import { useToast } from '../ui/ToastProvider'
+import { useToast } from '../ui/toastHooks'
 import { useDashboardState } from '../../hooks/useDashboardState'
 import { getComplianceRowsForDevice } from '../../data/dashboardData'
 import type { StatCardData, RunbookData, ComplianceSegment, IssueCategory, DeviceData, ComplianceDetailRow } from '../../types'
@@ -20,10 +20,11 @@ import { QuickSlackSchedules } from './QuickSlackSchedules'
 import { PatchPriorityPanel } from './PatchPriorityPanel'
 import { ApplicationUpdatesPanel } from './ApplicationUpdatesPanel'
 import { SecurityWatchRow } from './SecurityWatchRow'
+import { SyncStatusCard } from './SyncStatusCard'
 import { OperationalQueueTable } from './OperationalQueueTable'
 import { setNotificationScheduleActor } from '../../api/notificationSchedule'
-import { canEditSlackSchedules } from '../../lib/permissions'
-import { usePermissions } from '../../context/PermissionsContext'
+import { canEditSlackSchedules, hasPermission } from '../../lib/permissions'
+import { usePermissions } from '../../context/permissionsHooks'
 
 function NoDeviceCard() {
   return (
@@ -79,6 +80,7 @@ export function DashboardContent({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [policyRow, setPolicyRow] = useState<ComplianceDetailRow | null>(null)
   const [allDevicesOpen, setAllDevicesOpen] = useState(false)
+  const [drawerFilter, setDrawerFilter] = useState<{ compliance: '' | 'Compliant' | 'Warning' | 'Non-Compliant'; issueCategory: string | null }>({ compliance: '', issueCategory: null })
 
   const {
     runbookModalOpen,
@@ -119,7 +121,7 @@ export function DashboardContent({
 
   const handleStatCardClick = (cardTitle: string) => {
     if (cardTitle === 'Total Devices') {
-      setAllDevicesOpen(true)
+      setDrawerFilter({ compliance: '', issueCategory: null }); setAllDevicesOpen(true)
       return
     }
     const pageMap: Record<string, string> = {
@@ -134,16 +136,16 @@ export function DashboardContent({
     }
   }
 
+  // Clicking a status or category opens the device list already filtered to it (counts match the card).
   const handleDonutSegmentClick = (label: string) => {
-    const next = selectedDonutLabel === label ? null : label
-    setSelectedDonutLabel(next)
-    if (next) notify('info', 'Filter', `Compliance filter: ${next}`)
+    if (label !== 'Compliant' && label !== 'Warning' && label !== 'Non-Compliant') return
+    setSelectedDonutLabel(label); setSelectedCategory(null)
+    setDrawerFilter({ compliance: label, issueCategory: null }); setAllDevicesOpen(true)
   }
 
   const handleCategoryClick = (label: string) => {
-    const next = selectedCategory === label ? null : label
-    setSelectedCategory(next)
-    if (next) notify('info', 'Filter', `Filtering by: ${label}`)
+    setSelectedCategory(label); setSelectedDonutLabel(null)
+    setDrawerFilter({ compliance: '', issueCategory: label }); setAllDevicesOpen(true)
   }
 
   return (
@@ -158,6 +160,8 @@ export function DashboardContent({
           onRefresh={onRefresh ?? (() => {})}
           onNavigate={onNavigate}
         />
+
+        <SyncStatusCard canManage={hasPermission(viewerRole, permissions, 'sync.manage')} />
 
         {/* Endpoint Command Center — Action Center, quick widgets, security watch, operational queue */}
         <ActionCenter onNavigate={onNavigate} />
@@ -268,9 +272,11 @@ export function DashboardContent({
 
       <AllDevicesDrawer
         open={allDevicesOpen}
-        onClose={() => setAllDevicesOpen(false)}
+        onClose={() => { setAllDevicesOpen(false); setSelectedDonutLabel(null); setSelectedCategory(null) }}
         onViewDevice={onDeviceChange}
         sourceCounts={sourceCounts}
+        initialCompliance={drawerFilter.compliance}
+        initialIssueCategory={drawerFilter.issueCategory}
       />
     </>
   )

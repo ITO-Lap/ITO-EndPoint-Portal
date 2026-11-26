@@ -14,6 +14,7 @@ import { buildCriticalPatchOverview } from '../criticalPatchReport.js'
 import { buildInventoryOverview, buildComplianceOverview } from '../complianceInventoryReport.js'
 import { buildUpdatesOverview } from '../appIntel/updateReport.js'
 import type { GraphManagedDevice } from '../graphApi.js'
+import type { Json } from '../../test/json.js'
 
 const field = (o: { fields: Array<{ label: string; value: string | number }> }, label: string) => o.fields.find(f => f.label === label)?.value
 
@@ -27,13 +28,13 @@ describe('reportOverview helpers', () => {
 
   it('builds blocks with header, fields, action and footer, capped at 10 fields, with no initial comment shape', () => {
     const fields = Array.from({ length: 12 }, (_, i) => ({ label: `L${i}`, value: i * 1000 }))
-    const { text, blocks } = buildOverviewMessage({ title: 'T', fields, action: 'Do it', footnote: 'Src' }, '2026-10-27') as { text: string; blocks: Array<Record<string, any>> }
+    const { text, blocks } = buildOverviewMessage({ title: 'T', fields, action: 'Do it', footnote: 'Src' }, '2026-10-27') as { text: string; blocks: Array<Record<string, Json>> }
     expect(blocks.map(b => b.type)).toEqual(['header', 'section', 'section', 'context'])
     expect(blocks[0]!.text.text).toBe('T · 2026-10-27')
     expect(blocks[1]!.fields).toHaveLength(10)
     expect(blocks[1]!.fields[1].text).toBe('*L1*\n1,000')
     expect(blocks[2]!.text.text).toContain('Do it')
-    expect(blocks[3]!.elements[0].text).toBe('Src · ITO Endpoint')
+    expect(blocks[3]!.elements[0].text).toBe('Src · EndPoint+')
     expect(text).toBe('T 2026-10-27: L0 0')
   })
 

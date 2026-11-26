@@ -116,7 +116,7 @@ Only one explicit retention setting exists: `retention_days` (default 90) on `in
 | Credentials, tokens | Admin input / env | Secret | `.env`, `integration-credentials.json`, `session-secret` |
 | AI prompts and tool results | Copilot, risk scoring | May include device/user context | Sent to Google / OpenAI; stored in `copilot_*` tables when a DB exists |
 
-Zinnia operates in a regulated insurance context. This portal handles **employee device and identity data, not customer policy data**; no customer PII was found in the code reviewed (*Inferred from the data sources; confirm with Security/Privacy*). Reports posted to Slack and files uploaded there inherit Slack's retention and access rules — restrict channels accordingly.
+Verma operates in a regulated insurance context. This portal handles **employee device and identity data, not customer policy data**; no customer PII was found in the code reviewed (*Inferred from the data sources; confirm with Security/Privacy*). Reports posted to Slack and files uploaded there inherit Slack's retention and access rules — restrict channels accordingly.
 
 ## 5. Import, export and report generation
 

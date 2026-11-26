@@ -39,7 +39,7 @@ export function buildBriefingMessage(intel: WindowsIntel, fleet: WindowsFleetSum
       { type: 'mrkdwn', text: `*Devices missing updates*\n${fleet.devicesAffected} of ${fleet.devicesChecked}` }, { type: 'mrkdwn', text: `*KEV CVEs touching the fleet*\n${ex.kevClock.length}` },
     ] }] : [{ type: 'section', text: { type: 'mrkdwn', text: '_Fleet exposure unavailable right now (Endpoint Central or Microsoft data not reachable)._' } }]),
     { type: 'section', text: { type: 'mrkdwn', text: `*Recommended actions*\n${lines.map((l, i) => `${i + 1}. ${l}`).join('\n')}` } },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Sources: Microsoft MSRC, CISA KEV, endoflife.date, Endpoint Central, Intune · ITO Endpoint' }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Sources: Microsoft MSRC, CISA KEV, endoflife.date, Endpoint Central, Intune · EndPoint+' }] },
   ]
   return { text: `Windows Patch Tuesday briefing: next release ${fmt(next.date)} (${when})`, blocks }
 }

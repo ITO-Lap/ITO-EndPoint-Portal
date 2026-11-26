@@ -116,7 +116,7 @@ export function buildDigestMessage(current: FleetSnapshot, baseline: FleetSnapsh
     { type: 'section', fields },
     ...(actions.length ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Top actions*\n${actions.map((a, i) => `${i + 1}. ${a}`).join('\n')}` } }] : []),
     ...(notes ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Data quality*\n${notes}` } }] : []),
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `Compared ${compared} · ITO Endpoint` }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `Compared ${compared} · EndPoint+` }] },
   ]
   return { text: `Endpoint Fleet Health ${current.date}: ${rate}% compliant, ${current.nonCompliant} non-compliant, ${current.stale} stale`, blocks }
 }

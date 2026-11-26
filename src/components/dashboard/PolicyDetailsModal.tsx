@@ -46,7 +46,7 @@ export function PolicyDetailsModal({ open, onClose, device }: PolicyDetailsModal
             <ol className="space-y-1.5">
               {device.nextSteps.map((step, i) => (
                 <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700">
-                  <span className="grid h-4 w-4 flex-shrink-0 place-items-center rounded-full bg-orange-100 text-[0.55rem] font-bold text-orange-700">
+                  <span className="grid h-4 w-4 flex-shrink-0 place-items-center rounded-full bg-indigo-100 text-[0.55rem] font-bold text-indigo-700">
                     {i + 1}
                   </span>
                   {step}

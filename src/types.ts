@@ -9,6 +9,7 @@ export interface NavItem {
   active?: boolean
   group: string      // navigation section group label
   badge?: string     // optional chip (e.g. "New", count string)
+  parent?: string    // when set, the item is listed under this expandable parent label in the sidebar
 }
 
 export interface StatCardData {

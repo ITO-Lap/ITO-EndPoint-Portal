@@ -116,7 +116,7 @@ export function ReportBuilderPage({ onBack }: { onBack: () => void }) {
           className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition ${
             done
               ? 'bg-emerald-500 text-white'
-              : 'bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60'
+              : 'bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-60'
           }`}
         >
           {exporting ? (

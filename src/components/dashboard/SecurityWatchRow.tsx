@@ -45,9 +45,11 @@ export function SecurityWatchRow({ onNavigate }: SecurityWatchRowProps) {
       }
       if (coverage.status === 'fulfilled') {
         const c = coverage.value
-        setCoverageGap(c.windows.falconMissing + c.windows.zscalerMissing + c.macos.falconMissing + c.macos.zscalerMissing)
+        // Still scanning (no result yet): leave the card empty rather than reading fields that are not there.
+        if (!('scanning' in c)) setCoverageGap(c.windows.falconMissing + c.windows.zscalerMissing + c.macos.falconMissing + c.macos.zscalerMissing)
       }
-      if (risk.status === 'fulfilled') setHighRisk(risk.value.summary.critical + risk.value.summary.high)
+      // With nothing connected the API answers without a summary: leave the card empty instead of throwing.
+      if (risk.status === 'fulfilled' && risk.value?.summary) setHighRisk(risk.value.summary.critical + risk.value.summary.high)
       setLoading(false)
     }
     void load()

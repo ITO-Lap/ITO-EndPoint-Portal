@@ -1,4 +1,4 @@
-# ITO Endpoint AI Copilot — Developer Reference
+# EndPoint+ — Developer Reference
 
 > Quick orientation for contributors. Full docs live in `docs/`.
 
@@ -8,7 +8,7 @@
 
 Enterprise IT endpoint management dashboard. IT admins connect their MDM sources (Intune, ManageEngine), and the dashboard shows compliance status, device health, issues, and AI-powered remediation runbooks — all in one place.
 
-**Stack:** React 19 + TypeScript + Tailwind 4 (frontend) · Express + TypeScript (backend) · OpenAI GPT-4o-mini (AI layer)
+**Stack:** React 19 + TypeScript + Tailwind 4 (frontend) · Express + TypeScript (backend) · Google Gemini (Ocean assistant) + OpenAI (`server/src/services/openai.ts`)
 
 ---
 
@@ -107,6 +107,7 @@ docs/                       All project documentation (start here)
 | Add a new integration | `server/src/services/` + `server/src/store/integrationStore.ts` |
 | Change theme/colors | `src/index.css` (Tailwind config) |
 | Change user roles | `src/types.ts` → `UserToolRole`, `docs/ROLES.md` |
+| Add or change a page or feature | Update its doc in `docs/07-features/`, the row in `src/lib/docsPageIndex.ts` and the matching section in `src/components/docs/FeatureSections.tsx` (a test fails if a sidebar page is undocumented). Ocean answers only from `docs/`, so re-index after editing |
 
 ---
 

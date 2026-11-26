@@ -8,13 +8,13 @@ interface StatCardProps {
 
 function resolveColor(accent: string, iconBg: string): string {
   const combined = accent + iconBg
-  if (combined.includes('orange') || combined.includes('red-6')) return '#F46C00'
+  if (combined.includes('orange') || combined.includes('red-6')) return '#4F46E5'
   if (combined.includes('emerald') || combined.includes('green')) return '#10B981'
   if (combined.includes('red') || combined.includes('rose'))      return '#EF4444'
-  if (combined.includes('amber') || combined.includes('yellow'))  return '#F59E0B'
+  if (combined.includes('amber') || combined.includes('yellow'))  return '#818CF8'
   if (combined.includes('violet') || combined.includes('purple')) return '#8B5CF6'
   if (combined.includes('blue') || combined.includes('cyan'))     return '#0EA5E9'
-  return '#F46C00'
+  return '#4F46E5'
 }
 
 export function StatCard({ data, onClick, selected = false }: StatCardProps) {

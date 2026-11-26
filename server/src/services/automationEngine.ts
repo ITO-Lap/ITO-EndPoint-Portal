@@ -301,7 +301,7 @@ async function handleExecuteRunbook(
       result: `AI runbook generated for ${device.deviceName}: ${analysis.suggestedRunbook}`,
       detail: { runbookSteps: analysis.steps },
     }
-  } catch (err) {
+  } catch {
     const fallback = generateFallbackAnalysis(device)
     return {
       type: action.type, label: action.label, status: 'success',

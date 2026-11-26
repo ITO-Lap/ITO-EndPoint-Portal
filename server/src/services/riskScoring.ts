@@ -157,15 +157,36 @@ Respond with JSON only: { "summary": "2 sentence assessment", "actionItems": ["a
   }
 }
 
+/**
+ * The N riskiest devices of the WHOLE fleet. Every device gets the cheap rule-based score first (no network),
+ * the list is cut to the top N, and only those N get the optional AI summary. (It used to score the first N
+ * devices Graph happened to return, so on a larger fleet the real top risks could be missed.)
+ */
 export async function batchComputeRiskScores(
   devices: GraphManagedDevice[],
   openai: OpenAI | null,
   options: { limit?: number; useAi?: boolean } = {}
 ): Promise<DeviceRiskScore[]> {
   const { limit = 100, useAi = true } = options
-  const slice = devices.slice(0, limit)
-
-  // Compute rule-based scores in parallel, AI enrichment batched to avoid rate limits
-  const scores = await Promise.all(slice.map(d => computeRiskScore(d, openai, useAi)))
+  const riskiest = devices
+    .map(device => ({ device, score: ruleBasedScore(device).score }))
+    .sort((a, b) => b.score - a.score) // stable: ties keep the order Graph returned
+    .slice(0, limit)
+  const scores = await Promise.all(riskiest.map(r => computeRiskScore(r.device, openai, useAi)))
   return scores.sort((a, b) => b.overallScore - a.overallScore)
+}
+
+export interface FleetRiskSummary { critical: number; high: number; medium: number; low: number; avgScore: number; totalDevices: number }
+
+/** Risk-level counts across every device (rule-based, no network), so headline numbers do not depend on the Top-N size. */
+export function fleetRiskSummary(devices: GraphManagedDevice[]): FleetRiskSummary {
+  const summary: FleetRiskSummary = { critical: 0, high: 0, medium: 0, low: 0, avgScore: 0, totalDevices: devices.length }
+  let total = 0
+  for (const device of devices) {
+    const { score } = ruleBasedScore(device)
+    summary[toRiskLevel(score)]++
+    total += score
+  }
+  summary.avgScore = devices.length ? Math.round(total / devices.length) : 0
+  return summary
 }

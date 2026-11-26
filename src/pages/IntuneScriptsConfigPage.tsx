@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search, X, Download, FileCode2, RefreshCw, Package,
   CheckCircle2, XCircle, Copy, Check,
@@ -15,7 +15,7 @@ import { Badge } from '../components/ui/Badge'
 import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
-import { useToast } from '../components/ui/ToastProvider'
+import { useToast } from '../components/ui/toastHooks'
 
 const PAGE_SIZE = 25
 const PLATFORMS = ['windows', 'macos', 'ios', 'android', 'linux'] as const
@@ -70,9 +70,11 @@ function DetailDrawer({ compositeId, onClose }: { compositeId: string; onClose: 
   const [downloading, setDownloading] = useState(false)
   const { notify } = useToast()
 
+  const [prevCompositeId, setPrevCompositeId] = useState(compositeId)
+  if (compositeId !== prevCompositeId) { setPrevCompositeId(compositeId); setLoading(true) }
+
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     intuneScriptsConfigApi.getItemDetail(compositeId)
       .then(res => { if (!cancelled) setDetail(res.data) })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load details') })
@@ -194,29 +196,38 @@ export function IntuneScriptsConfigTab({ viewerRole, userEmail }: Props) {
   const [exportingAll, setExportingAll] = useState(false)
   const { notify } = useToast()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await intuneScriptsConfigApi.listItems({
-        search: search.trim() || undefined,
-        category: category === 'all' ? undefined : category,
-        platform: platform === 'all' ? undefined : platform,
-        page, pageSize: PAGE_SIZE, sortBy: sortKey, sortDirection,
-      })
-      setItems(res.data)
-      setTotal(res.pagination.total)
-      setConfigured(res.configured)
-      setCategoryErrors(res.categoryErrors)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Intune scripts & configurations')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, category, platform, page, sortKey, sortDirection])
+  const listParams = useMemo(() => ({
+    search: search.trim() || undefined,
+    category: category === 'all' ? undefined : category,
+    platform: platform === 'all' ? undefined : platform,
+    page, pageSize: PAGE_SIZE, sortBy: sortKey, sortDirection,
+  }), [search, category, platform, page, sortKey, sortDirection])
 
-  useEffect(() => { void load() }, [load])
-  useEffect(() => { setPage(1) }, [search, category, platform])
+  const applyList = useCallback((res: Awaited<ReturnType<typeof intuneScriptsConfigApi.listItems>>) => {
+    setItems(res.data)
+    setTotal(res.pagination.total)
+    setConfigured(res.configured)
+    setCategoryErrors(res.categoryErrors)
+  }, [])
+
+  // Reset to page 1 when the filters change, and flag loading when the query changes — both during render,
+  // so the fetch effect never sets state synchronously.
+  const [prevFilters, setPrevFilters] = useState({ search, category, platform })
+  if (prevFilters.search !== search || prevFilters.category !== category || prevFilters.platform !== platform) {
+    setPrevFilters({ search, category, platform })
+    setPage(1)
+  }
+  const [prevListParams, setPrevListParams] = useState(listParams)
+  if (prevListParams !== listParams) { setPrevListParams(listParams); setLoading(true); setError(null) }
+
+  useEffect(() => {
+    let cancelled = false
+    intuneScriptsConfigApi.listItems(listParams)
+      .then(res => { if (!cancelled) applyList(res) })
+      .catch((err: unknown) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load Intune scripts & configurations') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [listParams, applyList])
 
   const toggleSelect = (id: string) => setSelectedIds(prev => {
     const next = new Set(prev)

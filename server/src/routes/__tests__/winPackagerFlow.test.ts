@@ -13,9 +13,11 @@ vi.mock('../../services/roleResolution.js', () => ({ permissionsForRole: async (
 
 import router, { cleanupOldJobs } from '../winPackager.js'
 import workerRouter from '../winPackagerWorker.js'
+import { outputRoot } from '../../services/winPackager/outputDir.js'
 import { jobDir } from '../../services/winPackager/workspace.js'
+import type { Json } from '../../test/json.js'
 
-const ALL = { 'winPackager.read': true, 'winPackager.write': true, 'winPackager.validate': true, 'winPackager.publish': true }
+const ALL = { 'winPackager.read': true, 'winPackager.write': true, 'winPackager.validate': true }
 const GUID = '{12345678-ABCD-4EF0-9876-0123456789AB}'
 const msi = () => makeMsi({ properties: { ProductCode: GUID, ProductVersion: '2.4.6', Manufacturer: 'Contoso', ProductName: 'Contoso Tool' } })
 
@@ -45,8 +47,8 @@ const api = (path: string, init: RequestInit = {}) =>
 const json = (body: unknown): RequestInit => ({ method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 const post = (body: unknown = {}): RequestInit => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 const upload = (name: string, body: Buffer) => api('/jobs', { method: 'POST', headers: { 'x-file-name': encodeURIComponent(name), 'content-type': 'application/octet-stream' }, body: new Uint8Array(body) })
-type Job = { id: string; state: string; stateReason?: string; analysis?: any; config?: any; validation?: any; output?: any; events: Array<{ action: string }> }
-const read = async (res: Response) => (await res.json()) as { success: boolean; data: any; error?: string; problems?: string[] }
+type Job = { id: string; state: string; stateReason?: string; analysis?: Json; config?: Json; validation?: Json; output?: Json; events: Array<{ action: string }> }
+const read = async (res: Response) => (await res.json()) as { success: boolean; data: Json; error?: string; problems?: string[] }
 const newJob = async (name = 'tool.msi', body = msi()): Promise<Job> => (await read(await upload(name, body))).data
 async function waitFor(id: string, pred: (j: Job) => boolean): Promise<Job> {
   for (let i = 0; i < 100; i++) {
@@ -76,7 +78,7 @@ describe('upload + inspection', () => {
     const job = await newJob('bundle.zip', zip)
     expect(job.state).toBe('review-required')
     expect(job.config).toBeUndefined()
-    expect(job.analysis.archiveEntries.filter((e: any) => e.kind).map((e: any) => e.name)).toEqual(['bundle/setup.msi'])
+    expect(job.analysis.archiveEntries.filter((e: Json) => e.kind).map((e: Json) => e.name)).toEqual(['bundle/setup.msi'])
 
     expect((await api(`/jobs/${job.id}/select-installer`, post({ entry: 'notes.txt' }))).status).toBe(400)
     expect((await api(`/jobs/${job.id}/select-installer`, post({ entry: '../../etc/passwd' }))).status).toBe(400)
@@ -104,15 +106,6 @@ describe('configuration', () => {
     expect(res.problems?.join()).toMatch(/shell operators/)
     expect((await api(`/jobs/${job.id}/artifacts/install.ps1`)).status).toBe(422)
   })
-  it('stores a logo outside the source folder and rejects non-images', async () => {
-    const job = await newJob()
-    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)])
-    const ok = await read(await api(`/jobs/${job.id}/icon`, { method: 'PUT', body: new Uint8Array(png) }))
-    expect(ok.data.iconFile).toBe('icon.png')
-    expect(existsSync(join(jobDir(job.id), 'artifacts', 'icon.png'))).toBe(true)
-    expect(existsSync(join(jobDir(job.id), 'source', 'icon.png'))).toBe(false)
-    expect((await api(`/jobs/${job.id}/icon`, { method: 'PUT', body: new Uint8Array(Buffer.from('GIF89a')) })).status).toBe(415)
-  })
 })
 
 describe('without a Windows worker (honest degradation)', () => {
@@ -124,38 +117,59 @@ describe('without a Windows worker (honest degradation)', () => {
     expect(res.data.validation.outcome).toBe('not-tested')
     expect(res.data.validation.message).toMatch(/Package Created \/ Windows Installation Not Tested/)
   })
-  it('requires approval, refuses untested approval unless explicit, and cannot create a package', async () => {
+  it('requires approval, refuses untested approval unless explicit, then builds the package without any worker', async () => {
     const job = await newJob()
     expect((await api(`/jobs/${job.id}/package`, post())).status).toBe(409)
     expect((await api(`/jobs/${job.id}/approve`, post())).status).toBe(409)
     expect((await api(`/jobs/${job.id}/approve`, post({ acceptUntested: true }))).status).toBe(200)
-    const pkg = await api(`/jobs/${job.id}/package`, post())
-    expect(pkg.status).toBe(503)
-    expect((await pkg.json() as { state: string }).state).toBe('api-unavailable')
+    expect((await api(`/jobs/${job.id}/package`, post())).status).toBe(202)
+    const done = await waitFor(job.id, j => j.state !== 'processing')
+    expect(done.state).toBe('review-required') // built, but never installed on Windows
+    expect(done.stateReason).toMatch(/Windows Installation Not Tested/)
+    expect(done.output).toMatchObject({ fileName: 'Contoso-Tool-2.4.6-x64.intunewin', workerName: 'built-in packager' })
+    const dl = await api(`/jobs/${job.id}/artifacts/package`)
+    expect(dl.status).toBe(200)
+    expect(Buffer.from(await dl.arrayBuffer()).subarray(0, 2).toString()).toBe('PK')
   })
-  it('serves generated artifacts, a not-ready guide, and keeps publishing disabled', async () => {
+  it('serves generated artifacts and has no publishing endpoints', async () => {
     const job = await newJob()
     const install = await api(`/jobs/${job.id}/artifacts/install.ps1`)
     expect(install.status).toBe(200)
     expect(await install.text()).toContain("msiexec")
     const info = JSON.parse(await (await api(`/jobs/${job.id}/artifacts/package-info.json`)).text())
     expect(info.validated).toBe(false)
-    expect((await read(await api(`/jobs/${job.id}/guide`))).data.ready).toBe(false)
-    expect((await api(`/jobs/${job.id}/publish`, post({ confirm: true }))).status).toBe(501)
-    expect((await api(`/jobs/${job.id}/publishing-approval`, post({ confirm: true }))).status).toBe(409)
-    expect((await api(`/jobs/${job.id}/artifacts/package`)).status).toBe(404)
+    for (const gone of ['guide', 'publish', 'publishing-approval', 'icon']) expect((await api(`/jobs/${job.id}/${gone}`, post({ confirm: true }))).status).toBe(404)
+    expect((await api(`/jobs/${job.id}/artifacts/package`)).status).toBe(404) // nothing built yet
+  })
+})
+
+describe('output folder', () => {
+  it('reports the artifacts path, refuses to open before a package exists, and needs a loopback client afterwards', async () => {
+    const job = await newJob()
+    const info = (await read(await api(`/jobs/${job.id}/output-folder`))).data
+    expect(info.path).toBe(join(outputRoot(), 'Contoso Tool')) // <output root>/<application name>, not the internal workspace
+    expect(info.path).not.toContain('win-packager/' + job.id)
+    expect(info.canOpen).toBe(false)
+    expect((await api(`/jobs/${job.id}/output-folder/open`, post())).status).toBe(409)
+    // A proxied request (x-forwarded-for) is never treated as the local machine.
+    await api(`/jobs/${job.id}/approve`, post({ acceptUntested: true }))
+    await api(`/jobs/${job.id}/package`, post())
+    await waitFor(job.id, j => j.state !== 'processing')
+    const after = (await read(await api(`/jobs/${job.id}/output-folder`))).data
+    expect(existsSync(join(after.path, 'Contoso-Tool-2.4.6-x64.intunewin'))).toBe(true)
+    expect(existsSync(join(after.path, 'install.ps1'))).toBe(true)
+    const proxied = await api(`/jobs/${job.id}/output-folder/open`, { ...post(), headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.5' } })
+    expect(proxied.status).toBe(403)
   })
 })
 
 describe('RBAC', () => {
   it.each([
-    ['upload', { 'winPackager.read': true }, (id: string) => upload('a.msi', msi()), 403],
+    ['upload', { 'winPackager.read': true }, () => upload('a.msi', msi()), 403],
     ['config', { 'winPackager.read': true }, (id: string) => api(`/jobs/${id}/config`, json({ description: 'x' })), 403],
     ['validate', { 'winPackager.read': true, 'winPackager.write': true }, (id: string) => api(`/jobs/${id}/validate`, post()), 403],
     ['package', { 'winPackager.read': true, 'winPackager.write': true }, (id: string) => api(`/jobs/${id}/package`, post()), 403],
-    ['publish approval', { 'winPackager.read': true, 'winPackager.validate': true }, (id: string) => api(`/jobs/${id}/publishing-approval`, post({ confirm: true })), 403],
     ['read', {}, (id: string) => api(`/jobs/${id}`), 403],
-    ['guide', {}, (id: string) => api(`/jobs/${id}/guide`), 403],
     ['download', {}, (id: string) => api(`/jobs/${id}/artifacts/source`), 403],
   ])('blocks %s without the capability', async (_n, granted, call, status) => {
     const job = await newJob()
@@ -166,7 +180,7 @@ describe('RBAC', () => {
 
 // ── With a (fake) Windows worker ───────────────────────────────────────────────
 
-interface FakeWorker { validateSteps?: any[]; packageBytes?: Buffer; claimedHash?: string; unreachable?: boolean; canPackage?: boolean; calls: string[] }
+interface FakeWorker { validateSteps?: Json[]; packageBytes?: Buffer; claimedHash?: string; unreachable?: boolean; canPackage?: boolean; calls: string[] }
 
 function installWorker(fake: FakeWorker): void {
   process.env['WIN_PACKAGER_WORKER_URL'] = 'https://worker.test'
@@ -204,7 +218,7 @@ const PASS = ['install', 'detect-after-install', 'uninstall', 'detect-after-unin
 const intunewin = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(200, 7)])
 
 describe('with a Windows worker', () => {
-  it('validates, approves, packages and publishes only on explicit confirmation', async () => {
+  it('validates, approves and packages', async () => {
     const fake: FakeWorker = { validateSteps: PASS, packageBytes: intunewin, calls: [] }
     installWorker(fake)
     expect((await read(await api('/status'))).data.windowsWorker).toEqual({ configured: true, state: 'ready', name: 'WIN-BUILD-01', canPackage: true })
@@ -219,26 +233,16 @@ describe('with a Windows worker', () => {
     expect((await api(`/jobs/${job.id}/package`, post())).status).toBe(202)
     const packaged = await waitFor(job.id, j => j.state !== 'processing')
     expect(packaged.state).toBe('ready')
-    expect(packaged.output).toMatchObject({ fileName: 'Contoso-Tool-2.4.6-x64.intunewin', sizeBytes: intunewin.length })
+    expect(packaged.output).toMatchObject({ fileName: 'Contoso-Tool-2.4.6-x64.intunewin' })
     expect(existsSync(join(jobDir(job.id), 'artifacts', 'Contoso-Tool-2.4.6-x64.intunewin'))).toBe(true)
 
     const dl = await api(`/jobs/${job.id}/artifacts/package`)
     expect(dl.status).toBe(200)
-    expect(Buffer.from(await dl.arrayBuffer()).equals(intunewin)).toBe(true)
+    expect(Buffer.from(await dl.arrayBuffer()).length).toBe(packaged.output.sizeBytes)
     expect((await (await api(`/jobs/${job.id}/artifacts/sha256.txt`)).text())).toContain(packaged.output.sha256)
 
-    const guide = (await read(await api(`/jobs/${job.id}/guide`))).data
-    expect(guide.ready).toBe(true)
-    expect(guide.banner).toBeUndefined()
-    expect(guide.endpointCentralApi.message).toMatch(/not configured — use guided manual publishing/)
-
-    // Publishing is never automatic: the explicit approval only records intent, the API publish stays disabled.
-    expect((await api(`/jobs/${job.id}/publishing-approval`, post({}))).status).toBe(400)
-    expect((await api(`/jobs/${job.id}/publishing-approval`, post({ confirm: true }))).status).toBe(200)
-    expect((await api(`/jobs/${job.id}/publish`, post({ confirm: true }))).status).toBe(501)
-
     const final = (await read(await api(`/jobs/${job.id}`))).data as Job
-    expect(final.events.map(e => e.action)).toEqual(expect.arrayContaining(['upload', 'inspect', 'validate-result', 'approve', 'package-created', 'download', 'publish-approval']))
+    expect(final.events.map(e => e.action)).toEqual(expect.arrayContaining(['upload', 'inspect', 'validate-result', 'approve', 'package-created', 'download']))
   })
 
   it('records Validation Failed when uninstall fails — never validated', async () => {
@@ -260,36 +264,6 @@ describe('with a Windows worker', () => {
     expect(res.data.validation.outcome).toBe('not-tested')
   })
 
-  it('rejects a package whose reported hash does not match the uploaded bytes', async () => {
-    installWorker({ validateSteps: PASS, packageBytes: intunewin, claimedHash: 'a'.repeat(64), calls: [] })
-    const job = await newJob()
-    await api(`/jobs/${job.id}/approve`, post({ acceptUntested: true }))
-    await api(`/jobs/${job.id}/package`, post())
-    const done = await waitFor(job.id, j => j.state !== 'processing')
-    expect(done.output).toBeUndefined()
-    expect(done.stateReason).toMatch(/hash/)
-    expect(existsSync(join(jobDir(job.id), 'artifacts', 'Contoso-Tool-2.4.6-x64.intunewin'))).toBe(false)
-  })
-
-  it('rejects a non-zip package upload from the worker', async () => {
-    installWorker({ validateSteps: PASS, packageBytes: Buffer.from('MZ not a package'), calls: [] })
-    const job = await newJob()
-    await api(`/jobs/${job.id}/approve`, post({ acceptUntested: true }))
-    await api(`/jobs/${job.id}/package`, post())
-    const done = await waitFor(job.id, j => j.state !== 'processing')
-    expect(done.output).toBeUndefined()
-    expect(['api-unavailable', 'validation-failed']).toContain(done.state)
-  })
-
-  it('refuses packaging when the worker has no IntuneWinAppUtil', async () => {
-    installWorker({ packageBytes: intunewin, canPackage: false, calls: [] })
-    const job = await newJob()
-    await api(`/jobs/${job.id}/approve`, post({ acceptUntested: true }))
-    const res = await api(`/jobs/${job.id}/package`, post())
-    expect(res.status).toBe(503)
-    expect((await res.json() as { error: string }).error).toMatch(/IntuneWinAppUtil/)
-  })
-
   it('creating an untested package yields Review Required, not Ready', async () => {
     installWorker({ packageBytes: intunewin, calls: [] })
     const job = await newJob()
@@ -298,7 +272,6 @@ describe('with a Windows worker', () => {
     const done = await waitFor(job.id, j => j.state !== 'processing')
     expect(done.state).toBe('review-required')
     expect(done.stateReason).toMatch(/Windows Installation Not Tested/)
-    expect((await read(await api(`/jobs/${job.id}/guide`))).data.banner).toMatch(/Not Tested/)
   })
 
   it('editing a command after packaging clears validation, approval and the package', async () => {
@@ -364,5 +337,20 @@ describe('lifecycle', () => {
     const j2 = await newJob()
     expect((await api(`/jobs/${j2.id}`, { method: 'DELETE' })).status).toBe(200)
     expect(existsSync(jobDir(j2.id))).toBe(false)
+  })
+  it('delete removes the package from the OUTPUT folder and keeps the uploaded job', async () => {
+    const job = await newJob('keep.msi')
+    await api(`/jobs/${job.id}/approve`, post({ acceptUntested: true }))
+    await api(`/jobs/${job.id}/package`, post())
+    await waitFor(job.id, j => j.state !== 'processing')
+    const out = (await read(await api(`/jobs/${job.id}/output-folder`))).data.path as string
+    expect(existsSync(join(out, 'Contoso-Tool-2.4.6-x64.intunewin'))).toBe(true)
+    const res = await read(await api(`/jobs/${job.id}`, { method: 'DELETE' }))
+    expect(res.data.jobRemoved).toBe(false)
+    expect(existsSync(join(out, 'Contoso-Tool-2.4.6-x64.intunewin'))).toBe(false)
+    expect(existsSync(out)).toBe(false) // empty app folder is removed
+    expect(existsSync(jobDir(job.id))).toBe(true)
+    const after = (await read(await api(`/jobs/${job.id}`))).data as Job & { approval?: unknown }
+    expect(after.output).toBeUndefined(); expect(after.approval).toBeUndefined()
   })
 })

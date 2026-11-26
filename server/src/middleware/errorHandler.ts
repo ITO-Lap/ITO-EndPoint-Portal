@@ -6,6 +6,8 @@ export interface ApiError extends Error {
   code?: string
 }
 
+// Express recognises an error handler by its four parameters, so `_next` must stay even though it is unused.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function errorHandler(err: ApiError | ZodError, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof ZodError) {
     const first = err.issues[0]

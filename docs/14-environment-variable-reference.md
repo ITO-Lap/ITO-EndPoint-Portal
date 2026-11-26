@@ -10,18 +10,20 @@
 | `PORT` | O | | HTTP port, default `4000` | Choose; IIS `web.config` expects 4000 | `index.ts` |
 | `NODE_ENV` | P | | `production` enables 200 req/15 min limit, hides error stacks, enforces TLS flag on the DB pool, disables local audit storage fallback | Set by the service installer / host | `index.ts`, `errorHandler.ts`, `db/index.ts` |
 | `DATA_DIR` | P | | Folder for runtime data (schedules, roles, notifications, caches, session key). Absolute path outside the deployed folder, writable by the service account. Default: `%ProgramData%\ito-endpoint` on Windows, `server/data` otherwise | Create the folder, grant the service account modify rights | `store/dataDir.ts` |
-| `DATABASE_URL` | O | S | PostgreSQL connection string (scheme, user, password, host, port, db). Without it the DB-backed features fall back to files or degrade | From the database provider | `db/index.ts` |
+| `DATABASE_URL` | O | S | PostgreSQL connection string (scheme, user, password, host, port, db). Optional: also settable in Settings -> Integrations -> PostgreSQL (the saved setting wins; both are read once at start). Without it the tool runs on local files with the same behaviour ([17](17-database-sync-architecture.md)) | From the database provider | `db/index.ts` |
 
 ## 2. Portal sign-in and sessions
 
 | Variable | Req | S | Purpose / format | Notes | Used in |
 |---|---|---|---|---|---|
+| `SYNC_RETIRE_AFTER_MISSES` | O | | Complete syncs a device may be missing from before it is marked inactive (default 2). Needs `DATABASE_URL` | Raise to tolerate flaky APIs | `store/deviceStore.ts` |
 | `AUTH_ALLOWED_EMAILS` | P | | Comma-separated e-mails that are Global Admin once Microsoft verifies them (default is the project owner) | Keep the list short | `services/session.ts`, `routes/auth.ts` |
 | `SESSION_SECRET` | P | S | Signing key for session JWTs. If unset, a random key is created in `DATA_DIR/session-secret` | Set explicitly for multi-instance or predictable rotation | `services/session.ts` |
 | `AUTH_REDIRECT_URI` | P (behind proxy) | | Full callback URL registered as a Web redirect URI on the Entra app, e.g. `https://<host>/api/auth/callback` | Defaults to localhost in dev or is derived from the request host | `routes/auth.ts` |
 | `FRONTEND_URL` | P (behind proxy) | | Site origin the browser returns to after sign-in | Same host as above | `routes/auth.ts` |
 | `AUTH_IT_ADMIN_GROUP` / `AUTH_IT_ADMIN_GROUP_ID` | O | | Entra group name (case-insensitive) / Object ID for IT Admin | ID survives renames | `routes/auth.ts` |
 | `AUTH_HELPDESK_GROUP` / `AUTH_HELPDESK_GROUP_ID` | O | | Same for Helpdesk (Desktop team) | | `routes/auth.ts` |
+| _(no variable)_ | | | Sessions last at most 9 hours, end after the auto sign-out inactivity time (Settings -> Security, default 60 minutes, saved in `DATA_DIR/session-settings.json`) and end on every server restart. Single server process: the inactivity record is in memory | Run one server instance, or move activity tracking to a shared store first | `services/session.ts`, `store/sessionSettings.ts` |
 | `AUTH_PASSWORD` | O | S | Enables e-mail + password sign-in | Development only | `services/session.ts` |
 | `AUTH_PASSWORDLESS` | O | | `true` = e-mail-only sign-in | **Never in production** | `services/session.ts`, `index.ts` |
 | `AUTH_ENFORCED` | O | | `false` disables the API gate | **Never in production** | `services/session.ts`, `requireSession.ts` |
@@ -44,8 +46,13 @@
 | `MANAGEENGINE_CLIENT_SECRET` | Y | S | Zoho client secret | Zoho API console | same |
 | `MANAGEENGINE_REFRESH_TOKEN` | Y | S | Long-lived refresh token with the scopes in [13 §2](13-api-permission-matrix.md) | Generated from the self-client | same |
 | `MANAGEENGINE_API_DOMAIN` | Y | | MDM API base URL | From the ManageEngine tenant | same, `services/manageEngine.ts` |
-| `MANAGEENGINE_FETCH_CONCURRENCY` | O | | Parallel per-device detail calls | Tune if rate-limited | `services/manageEngine.ts` |
+| `MANAGEENGINE_FETCH_CONCURRENCY` | O | | Max parallel per-device detail calls (default `8`; narrows automatically on 429) | Tune if rate-limited | `services/manageEngine.ts` |
+| `MANAGEENGINE_DETAIL_TTL_MIN` | O | | Minutes a Mac's cached MDM details count as fresh (default `360`); only older ones are re-read each sync, oldest first, to stay inside the shared rate limit | | `services/manageEngine.ts` |
+| `MANAGEENGINE_DETAIL_BUDGET_MS` | O | | Max time (default `35000`) the per-device MDM detail reads, including retries, may take inside one fleet sync; unreadable devices keep last-known values | | `services/mdmDetailReader.ts` |
 | `ENDPOINT_CENTRAL_BASE_URL` / `ENDPOINT_CENTRAL_PATCH_URL` | O | | Patch Manager host (default `https://endpointcentral.manageengine.com`) | | `endpointCentralPatch.ts`, `endpointCentralSoftware.ts`, `patchOperations.ts` |
+| `POSTURE_CHECKIN_RULE` | O | | Security Posture check-in for devices with two contact signals (MDM/Intune + Endpoint Central agent): `either` (default, freshest wins), `both` (every signal must be within 7 days), `mdm-only` (ignore the agent) | | `services/securityPosture.ts` |
+| `POSTURE_CHECKIN_DAYS` | O | | Security Posture: days since last contact that still counts as checked in (default `7`, 1–365) | | `services/securityPosture.ts` |
+| `MDM_DETAIL_MAX_STALE_DAYS` | O | | How long last-known Mac MDM details (FileVault, compliance) may stand in when a sync cannot read them (default `7`, 1–90) | | `services/mdmDetailCarryOver.ts` |
 | `MAC_ADMIN_REPORT_KEY` | O | S | Shared secret (16+ chars) the Mac script sends as `x-report-key`; unset = ingest disabled | Generate randomly | `services/macAdminAccess.ts` |
 
 ## 4b. Windows Package Builder
@@ -53,12 +60,11 @@
 | Variable | Req | S | Purpose / format | How to obtain | Used in |
 |---|---|---|---|---|---|
 | `WIN_PACKAGER_MAX_UPLOAD_MB` | O | | Upload limit in MB (default 2048; capped at the 30 GB Intune limit) | Choose | `winPackager/workspace.ts` |
+| `WIN_PACKAGER_OUTPUT_DIR` | O | | Base folder for finished packages; each app gets its own subfolder (default `~/Desktop/win-packager`) | Choose | `winPackager/outputDir.ts` |
 | `WIN_PACKAGER_RETENTION_DAYS` | O | | Delete finished job workspaces older than this (default 14) | Choose | `routes/winPackager.ts` |
 | `WIN_PACKAGER_WORKER_URL` | O | | HTTPS base URL of the Windows worker. Unset = "API Unavailable"; installers are never run on this server | Worker host owner | `winPackager/worker.ts` |
 | `WIN_PACKAGER_WORKER_TOKEN` | O | S | Bearer token the worker validates; also the HMAC key for the worker's signed source/output links. Never sent to the browser | Generate a long random value; configure the same on the worker | `winPackager/worker.ts`, `signing.ts` |
 | `WIN_PACKAGER_PUBLIC_URL` | O | | HTTPS URL of this server as the worker reaches it (for signed links) | Deployment URL | `routes/winPackager.ts` |
-| `MAC_PACKAGE_BUILDER_DIST_DIR` | O | | Absolute folder with published macOS builds (`.dmg`/`.pkg`/`.zip`) offered on the Mac Package Builder page. Unset = no downloads; the page shows build-from-source steps | Create the folder; copy a trusted build into it | `services/macPackager.ts` |
-| `ENDPOINT_CENTRAL_SOFTWARE_API_URL` / `ENDPOINT_CENTRAL_SOFTWARE_API_VERIFIED` | O | | Only when a separate software-distribution API host and permissions are verified (`VERIFIED=true`). Otherwise the guide shows "Endpoint Central publishing API not configured" | Endpoint Central admin | `winPackager/guides.ts` |
 
 ## 5. Slack, Teams, Jira, Confluence
 
@@ -83,6 +89,12 @@
 | `OPENAI_API_KEY` | O | S | Rule builder, risk narrative | `services/openai.ts` |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | O | key = S | Copilot | `copilotEngine.ts`, `integrationStore.ts` |
 | `GEMINI_ENABLE_GOOGLE_SEARCH` | O | | `false` blocks web grounding | `store/integrationStore.ts` |
+| `OCEAN_DOCS_ROOT` | O | | Folder containing `README.md` and `docs/` for Ocean to index | `services/ocean/indexer.ts` |
+| `OCEAN_AUTO_REINDEX_HOURS` | O | | Background re-scan interval for Ocean (default 6; `0` = off) | `services/ocean/indexer.ts` |
+| `OCEAN_CHAT_RATE_LIMIT_PER_MIN`, `OCEAN_AI_TIMEOUT_MS` | O | | Per-user chat limit (default 20) and AI timeout (default 45000 ms) | `routes/copilot.ts`, `services/copilotEngine.ts` |
+| `OCEAN_WEB_SEARCH_PROVIDER` | O | | Web fallback provider: `microsoft-learn` (default, no key), `brave`, `google-cse`, `off` | `services/ocean/webSearch.ts` |
+| `BRAVE_SEARCH_API_KEY` | O | S | Needed only for the `brave` provider | `services/ocean/webSearch.ts` |
+| `GOOGLE_CSE_KEY`, `GOOGLE_CSE_ID` | O | key = S | Needed only for the `google-cse` provider | `services/ocean/webSearch.ts` |
 | `GITHUB_TOKEN` | O | S | Read-only token for winget lookups (5,000/h) | `appIntel/latestVersion.ts` |
 | `NVD_API_KEY` | O | S | Faster CVE lookups | `appIntel/cve.ts` |
 

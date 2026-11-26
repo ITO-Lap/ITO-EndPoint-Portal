@@ -1,4 +1,6 @@
 import type { MacAppClassification, MacAppSource } from './macAppClassification.js'
+import { readDetailsResilient, recordDetailReadStats } from './mdmDetailReader.js'
+import { detailCacheEnabled, loadDetailCache, planDetailReads, saveDetailCache } from '../store/mdmDetailCache.js'
 import type { Device, AppStatus } from '../types.js'
 import type { RuntimeManageEngineConfig } from '../store/integrationStore.js'
 import { getManageEngineConfig } from '../store/integrationStore.js'
@@ -24,6 +26,11 @@ let tokenCache: TokenCache | null = null
 // data folder) so a restart reuses it until it expires.
 const TOKEN_FILE = dataFile('manageengine-token.json')
 const persistToken = (t: TokenCache): void => { try { writeFileAtomic(TOKEN_FILE, JSON.stringify(t), 0o600) } catch { /* best effort */ } }
+/** Removes the saved token AND its backup copy — readJsonFile() falls back to `<file>.bak`, which would otherwise bring
+ *  a revoked token straight back and leave every call failing with 401 until it expired. */
+function clearPersistedToken(): void {
+  for (const f of [TOKEN_FILE, `${TOKEN_FILE}.bak`]) { try { rmSync(f, { force: true }) } catch { /* ignore */ } }
+}
 function loadPersistedToken(clientId: string): TokenCache | null {
   const t = readJsonFile<TokenCache>(TOKEN_FILE)
   return t && t.clientId === clientId && typeof t.token === 'string' && typeof t.expiresAt === 'number' && Date.now() < t.expiresAt - 60_000 ? t : null
@@ -59,6 +66,11 @@ async function requestAccessToken(cfg: RuntimeManageEngineConfig): Promise<{ acc
   }
 }
 
+// Zoho revokes older access tokens whenever a new one is minted for the same refresh token. Without single-flight,
+// a burst of concurrent requests that all hit 401 each minted their own token and revoked each other's — a storm
+// that left every call failing with 401. One mint at a time; everyone else waits for and shares its result.
+let mintInFlight: Promise<string> | null = null
+
 export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<string> {
   if (tokenCache && tokenCache.clientId === cfg.clientId && Date.now() < tokenCache.expiresAt - 60_000) {
     return tokenCache.token
@@ -66,17 +78,20 @@ export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<st
   const persisted = loadPersistedToken(cfg.clientId)
   if (persisted) { tokenCache = persisted; return persisted.token }
 
-  const data = await requestAccessToken(cfg)
-  if (!data.access_token) throw new Error(`ManageEngine auth failed: ${data.error ?? 'no access_token returned'}`)
-
-  tokenCache = {
-    token:     data.access_token,
-    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
-    clientId:  cfg.clientId,
-    scope:     data.scope ?? '',
-  }
-  persistToken(tokenCache)
-  return tokenCache.token
+  if (mintInFlight) return mintInFlight
+  mintInFlight = (async () => {
+    const data = await requestAccessToken(cfg)
+    if (!data.access_token) throw new Error(`ManageEngine auth failed: ${data.error ?? 'no access_token returned'}`)
+    tokenCache = {
+      token:     data.access_token,
+      expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+      clientId:  cfg.clientId,
+      scope:     data.scope ?? '',
+    }
+    persistToken(tokenCache)
+    return tokenCache.token
+  })()
+  try { return await mintInFlight } finally { mintInFlight = null }
 }
 
 /**
@@ -84,17 +99,22 @@ export async function getAccessToken(cfg: RuntimeManageEngineConfig): Promise<st
  * process mints one for the same refresh token (or the token expires early), which
  * surfaces as 401 INVALID_OAUTHTOKEN on a still-cached token. Drop the cache, mint a
  * fresh token and retry once; a second 401 is a genuine auth/scope problem.
+ * The cache is only dropped if it still holds the token that just failed — a concurrent request may already have
+ * replaced it with a good one, and discarding that would trigger yet another mint.
  */
 export async function zohoFetch(cfg: RuntimeManageEngineConfig, url: string, init: RequestInit = {}): Promise<Response> {
   const call = async () => {
     const token = await getAccessToken(cfg)
-    return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Zoho-oauthtoken ${token}` } })
+    const res = await fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Zoho-oauthtoken ${token}` } })
+    return { res, token }
   }
-  const res = await call()
-  if (res.status !== 401) return res
-  tokenCache = null
-  try { rmSync(TOKEN_FILE, { force: true }) } catch { /* ignore */ }
-  return call()
+  const first = await call()
+  if (first.res.status !== 401) return first.res
+  if (tokenCache?.token === first.token) {
+    tokenCache = null
+    clearPersistedToken()
+  }
+  return (await call()).res
 }
 
 /** Scopes granted to the current ManageEngine OAuth token (empty if none reported). */
@@ -108,7 +128,11 @@ async function meGet<T>(cfg: RuntimeManageEngineConfig, path: string): Promise<T
   const res = await zohoFetch(cfg, `${base}/api/v1/${path}`)
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`ManageEngine API ${res.status} on ${path}: ${body.slice(0, 300)}`)
+    const err = new Error(`ManageEngine API ${res.status} on ${path}: ${body.slice(0, 300)}`) as Error & { status: number; retryAfterMs?: number }
+    err.status = res.status
+    const ra = Number(res.headers.get('retry-after'))
+    if (Number.isFinite(ra) && ra > 0) err.retryAfterMs = ra * 1000
+    throw err
   }
   return res.json() as Promise<T>
 }
@@ -323,7 +347,9 @@ function mapMEDevice(d: MEDevice, detail: MEDeviceDetail | null): Device {
 // knob is the only lever available, tunable without a code change if the
 // fleet grows past ~800-1000 devices and 30s isn't enough headroom — raise
 // cautiously, Zoho may rate-limit a too-aggressive burst.
-const CONCURRENCY = Number(process.env.MANAGEENGINE_FETCH_CONCURRENCY) || 16
+const CONCURRENCY = Number(process.env.MANAGEENGINE_FETCH_CONCURRENCY) || 8
+/** Upper bound for detail reads inside one fleet sync (the ManageEngine source has a 60s deadline in routes/devices.ts). */
+const DETAIL_READ_BUDGET_MS = Number(process.env.MANAGEENGINE_DETAIL_BUDGET_MS) || 35_000
 
 // mdm/devices defaults to 50 records per page (limit unset) and never returns more than one page
 // on its own — callers must follow `paging.next`/increment `offset` until metadata.total_record_count
@@ -347,14 +373,37 @@ async function fetchAllMEDevices(cfg: RuntimeManageEngineConfig): Promise<MEDevi
   return all
 }
 
-async function fetchDetailsBatched(cfg: RuntimeManageEngineConfig, ids: string[]): Promise<Map<string, MEDeviceDetail | null>> {
-  const result = new Map<string, MEDeviceDetail | null>()
-  for (let i = 0; i < ids.length; i += CONCURRENCY) {
-    const batch = ids.slice(i, i + CONCURRENCY)
-    const settled = await Promise.allSettled(batch.map(id => meGet<MEDeviceDetail>(cfg, `mdm/devices/${id}`)))
-    settled.forEach((s, idx) => result.set(batch[idx]!, s.status === 'fulfilled' ? s.value : null))
+let detailReadChain: Promise<unknown> = Promise.resolve()
+
+/** Reads run one at a time: a second caller (e.g. a report) waits for the first and then finds its cached results,
+ *  instead of doubling the call volume against a shared rate limit. */
+function fetchDetailsBatched(cfg: RuntimeManageEngineConfig, ids: string[]): Promise<Map<string, MEDeviceDetail | null>> {
+  const run = detailReadChain.catch(() => undefined).then(() => readDetails(cfg, ids))
+  detailReadChain = run
+  return run
+}
+
+async function readDetails(cfg: RuntimeManageEngineConfig, ids: string[]): Promise<Map<string, MEDeviceDetail | null>> {
+  const cache = loadDetailCache()
+  const ttlMs = (Number(process.env.MANAGEENGINE_DETAIL_TTL_MIN) || 360) * 60_000
+  const now = Date.now()
+  const plan = detailCacheEnabled() ? planDetailReads(ids, cache, now, ttlMs) : { fresh: new Map<string, unknown>(), toRead: ids }
+
+  // Retries with adaptive concurrency / Retry-After, so throttling never silently turns a device into "no data".
+  const { results, stats } = await readDetailsResilient(plan.toRead, id => meGet<MEDeviceDetail>(cfg, `mdm/devices/${id}`), { concurrency: CONCURRENCY, budgetMs: DETAIL_READ_BUDGET_MS })
+  recordDetailReadStats({ ...stats, fromCache: plan.fresh.size })
+
+  const out = new Map<string, MEDeviceDetail | null>()
+  for (const [id, d] of plan.fresh) out.set(id, d as MEDeviceDetail)
+  for (const [id, d] of results) {
+    out.set(id, d)
+    if (d !== null) cache[id] = { readAt: Date.now(), detail: d }
   }
-  return result
+  saveDetailCache(cache, new Set(ids))
+  if (stats.failed > 0 || stats.recovered > 0 || plan.fresh.size > 0) {
+    console.warn(`[manageEngine] MDM details: ${ids.length} devices · ${plan.fresh.size} fresh in cache · ${stats.requested} read now (${stats.firstTry} first try · ${stats.recovered} recovered by retry · ${stats.failed} unreadable, ended at concurrency ${stats.endConcurrency}). Failure reasons: ${JSON.stringify(stats.reasons)}`)
+  }
+  return out
 }
 
 export async function getManageEngineDevices(cfg?: RuntimeManageEngineConfig): Promise<Device[]> {

@@ -13,7 +13,7 @@ import { AuditEventDetailDrawer } from '../components/role-activity/AuditEventDe
 import { detectLocalTimezone } from '../lib/timezone'
 import type { UserToolRole } from '../types'
 import { hasPermission } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/permissionsHooks'
 
 // Matches the server's default ROLE_ACTIVITY_LIVE_BROWSE_MAX_DAYS
 // (server/.env.example, server/src/routes/roleActivity.ts) — hardcoded here
@@ -120,7 +120,7 @@ export function RoleActivityAuditPage({ viewerRole, userEmail, onBack }: Props) 
   const [pageSize, setPageSize] = useState(25)
   const [sortField, setSortField] = useState('occurredAt')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<RoleActivityEvent | null>(null)
@@ -132,34 +132,64 @@ export function RoleActivityAuditPage({ viewerRole, userEmail, onBack }: Props) 
     roleActivityApi.filterOptions().then(res => setFilterOptions(res.data)).catch(() => {})
   }, [])
 
+  const eventsQuery = useMemo(() => ({
+    startUtc: range.startUtc.toISOString(), endUtc: range.endUtc.toISOString(), timezone: range.timezone,
+    source, page, pageSize, sortField, sortDirection, ...filters,
+  }), [range, source, filters, page, pageSize, sortField, sortDirection])
+
+  const applyEvents = useCallback((res: Awaited<ReturnType<typeof roleActivityApi.listEvents>>) => {
+    setEvents(res.data)
+    setSummary(res.summary)
+    setTotal(res.pagination.total)
+    setSourceErrors(res.sourceErrors ?? {})
+    setSourceNotes(res.sourceNotes ?? {})
+    setLastRefreshed(new Date())
+  }, [])
+
+  const applyEventsError = useCallback((err: unknown) => {
+    const message = err instanceof Error ? err.message : 'Failed to load role activity events'
+    setError(message)
+    setSourceErrors({})
+    setSourceNotes({})
+  }, [])
+
+  // Manual refresh (and the table's own refresh button).
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await roleActivityApi.listEvents({
-        startUtc: range.startUtc.toISOString(), endUtc: range.endUtc.toISOString(), timezone: range.timezone,
-        source, page, pageSize, sortField, sortDirection, ...filters,
-      })
-      setEvents(res.data)
-      setSummary(res.summary)
-      setTotal(res.pagination.total)
-      setSourceErrors(res.sourceErrors ?? {})
-      setSourceNotes(res.sourceNotes ?? {})
-      setLastRefreshed(new Date())
+      applyEvents(await roleActivityApi.listEvents(eventsQuery))
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load role activity events'
-      setError(message)
-      setSourceErrors({})
-      setSourceNotes({})
+      applyEventsError(err)
     } finally {
       setLoading(false)
     }
-  }, [range, source, filters, page, pageSize, sortField, sortDirection])
+  }, [eventsQuery, applyEvents, applyEventsError])
 
-  useEffect(() => { void load() }, [load])
+  // When the query changes: flag loading, and reset to page 1 if anything other than the page itself changed.
+  // Done during render so the fetch effect below never has to set state synchronously.
+  const [prevQuery, setPrevQuery] = useState({ range, source, filters, page, pageSize, sortField, sortDirection })
+  if (
+    prevQuery.range !== range || prevQuery.source !== source || prevQuery.filters !== filters ||
+    prevQuery.page !== page || prevQuery.pageSize !== pageSize ||
+    prevQuery.sortField !== sortField || prevQuery.sortDirection !== sortDirection
+  ) {
+    const queryChanged = prevQuery.range !== range || prevQuery.source !== source || prevQuery.filters !== filters ||
+      prevQuery.pageSize !== pageSize || prevQuery.sortField !== sortField || prevQuery.sortDirection !== sortDirection
+    setPrevQuery({ range, source, filters, page, pageSize, sortField, sortDirection })
+    setLoading(true)
+    setError(null)
+    if (queryChanged) setPage(1)
+  }
 
-  // Reset to page 1 whenever the query itself changes (not just page number).
-  useEffect(() => { setPage(1) }, [range, source, filters, pageSize, sortField, sortDirection])
+  useEffect(() => {
+    let cancelled = false
+    roleActivityApi.listEvents(eventsQuery)
+      .then(res => { if (!cancelled) applyEvents(res) })
+      .catch((err: unknown) => { if (!cancelled) applyEventsError(err) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [eventsQuery, applyEvents, applyEventsError])
 
   const roleCanExport = useMemo(() => hasPermission(viewerRole, permissions, 'roleActivity.export'), [viewerRole, permissions])
   const failedSourceCount = Object.keys(sourceErrors).length
@@ -218,7 +248,7 @@ export function RoleActivityAuditPage({ viewerRole, userEmail, onBack }: Props) 
           )}
           {!onBack && (
             <h1 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-orange-600" aria-hidden="true" /> Role Activity Audit
+              <ShieldCheck className="h-5 w-5 text-indigo-600" aria-hidden="true" /> Role Activity Audit
             </h1>
           )}
           <p className="text-xs text-slate-500 mt-0.5">

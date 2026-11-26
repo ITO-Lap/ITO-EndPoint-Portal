@@ -1,7 +1,7 @@
-# GitHub Copilot Instructions — ITO Endpoint
+# GitHub Copilot Instructions — EndPoint+
 
 ## Project Overview
-ITO Endpoint is a full-stack IT endpoint management dashboard. It gives IT administrators a unified interface to monitor device compliance, manage automation runbooks, and resolve endpoint security issues across Microsoft Intune, Kandji, and ManageEngine. An OpenAI-powered AI copilot is integrated via the backend.
+EndPoint+ is a full-stack IT endpoint management dashboard. It gives IT administrators a unified interface to monitor device compliance, manage automation runbooks, and resolve endpoint security issues across Microsoft Intune, Kandji, and ManageEngine. An OpenAI-powered AI copilot is integrated via the backend.
 
 ---
 

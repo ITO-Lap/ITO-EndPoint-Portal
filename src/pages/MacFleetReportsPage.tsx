@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import type { FC } from 'react'
 import {
   RefreshCw, Download, Zap, Apple, Info,
   ChevronDown, ChevronUp,
@@ -13,7 +14,7 @@ import {
 } from '../lib/kpiConfig'
 import { attachPosture } from '../lib/macPostureScore'
 import { generateKpiExcel } from '../lib/kpiExport'
-import { useToast } from '../components/ui/ToastProvider'
+import { useToast } from '../components/ui/toastHooks'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -218,7 +219,7 @@ function AiInsightsButton({ devices, opts }: { devices: ApiDevice[]; opts: KpiFi
 
   const typeConfig = {
     Critical:    { bg: '#FEF2F2', border: '#FECACA', dot: '#EF4444', label: 'CRITICAL'     },
-    High:        { bg: '#FFFBEB', border: '#FDE68A', dot: '#F59E0B', label: 'HIGH'         },
+    High:        { bg: '#FFFBEB', border: '#FDE68A', dot: '#818CF8', label: 'HIGH'         },
     Opportunity: { bg: '#EFF6FF', border: '#BFDBFE', dot: '#3B82F6', label: 'OPPORTUNITY'  },
     Healthy:     { bg: '#F0FDF4', border: '#BBF7D0', dot: '#10B981', label: 'HEALTHY'      },
   }
@@ -359,7 +360,8 @@ function EnrollmentsByMonth({ devices, loading }: { devices: ApiDevice[]; loadin
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export function MacFleetReportsPage(_props: Props) {
+// Props are accepted for the router but this page has no use for them yet.
+export const MacFleetReportsPage: FC<Props> = function MacFleetReportsPage() {
   const { notify } = useToast()
 
   const [devices,      setDevices]      = useState<ApiDevice[]>([])
@@ -372,9 +374,8 @@ export function MacFleetReportsPage(_props: Props) {
   const kpiOpts: KpiFilterOpts = { staleThresholdDays: staleThresh }
 
   // Fetch all macOS devices
-  const fetchDevices = useCallback(() => {
-    setLoading(true)
-    api.fetchAllDevicesRaw({ platform: 'macOS', limit: 500 })
+  const requestDevices = useCallback(() => {
+    return api.fetchAllDevicesRaw({ platform: 'macOS', limit: 500 })
       .then(async r => {
         // Patch data is best-effort: devices without a Patch Manager agent simply have no patchStatus.
         const patch = await api.fetchPatchSystems('Mac').catch(() => null)
@@ -396,12 +397,18 @@ export function MacFleetReportsPage(_props: Props) {
       .finally(() => setLoading(false))
   }, [notify])
 
-  useEffect(() => { fetchDevices() }, [fetchDevices])
+  const fetchDevices = useCallback(() => {
+    setLoading(true)
+    void requestDevices()
+  }, [requestDevices])
+
+  // loading is already true on first render, so the initial load skips the flag.
+  useEffect(() => { void requestDevices() }, [requestDevices])
 
   const toggleGroup = (group: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev)
-      next.has(group) ? next.delete(group) : next.add(group)
+      if (next.has(group)) next.delete(group); else next.add(group)
       return next
     })
   }
@@ -433,7 +440,7 @@ export function MacFleetReportsPage(_props: Props) {
 
       {/* ── Single combined header row ── */}
       <div className="glass rounded-2xl overflow-hidden">
-        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 50%, #FB471F 100%)' }} />
+        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%)' }} />
         <div className="px-5 py-3.5 flex flex-wrap items-center gap-3">
 
           {/* Left — icon + title */}
@@ -471,7 +478,7 @@ export function MacFleetReportsPage(_props: Props) {
 
             <button type="button" onClick={fetchDevices} disabled={loading}
               className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50">
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#4F46E5]' : ''}`} />
               {lastUpdated
                 ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                 : 'Refresh'}
@@ -479,7 +486,7 @@ export function MacFleetReportsPage(_props: Props) {
 
             <button type="button" onClick={handleExportAll} disabled={loading || !devices.length}
               className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold text-white transition disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #F46C00, #FB471F)' }}>
+              style={{ background: 'linear-gradient(135deg, #4F46E5, #06B6D4)' }}>
               <Download className="h-3.5 w-3.5" />Export All
             </button>
           </div>

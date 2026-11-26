@@ -146,6 +146,10 @@ export interface PosturePillarDevice {
   detail: string
   /** Itemised findings, e.g. the missing critical patches on this device. */
   items?: string[]
+  /** Labelled device facts (OS, last contact, patch severity counts, …). */
+  facts?: Array<{ label: string; value: string }>
+  /** Endpoint Central Patch Manager id — lets the detail view load this device's missing patches. */
+  patchResourceId?: string
 }
 
 export interface PillarDeviceList {
@@ -186,6 +190,8 @@ export interface PosturePillar {
   byPlatform: PostureBreakdownRow[]
   bySource: PostureBreakdownRow[]
   topFindings: Array<{ label: string; devices: number }>
+  /** Patch Manager systems matching no inventory device (not scored). */
+  unmatchedAgents?: { windows: number; macos: number }
 }
 
 export interface SecurityPostureResult {
@@ -195,6 +201,14 @@ export interface SecurityPostureResult {
   sourceCounts: { intune: number; manageengine: number }
   pillars: PosturePillar[]
   overall: { score: number | null; assessedPillars: number; totalPillars: number }
+  /** Whether the second-source data behind the scores was available. */
+  /** Endpoint Central agent coverage for Windows / macOS devices, with daily history (rollout progress). null until Patch Manager data loads. */
+  coverage?: {
+    windows: { devices: number; withAgent: number }
+    macos: { devices: number; withAgent: number }
+    history?: Array<{ date: string; windows: { devices: number; withAgent: number }; macos: { devices: number; withAgent: number } }>
+  } | null
+  enrichment?: { patchLoaded: boolean; agentRowsLoaded: number; mdmDetailsStale: number; mdmDetailsUnread: number }
 }
 
 export interface PatchSystemsResponse {
@@ -447,6 +461,10 @@ export interface IntegrationStatusItem {
   healthy: boolean | null
   /** Slack only — distinguishes outbound alerts from a full Bot OAuth integration. */
   connectionType?: 'incoming_webhook' | 'bot_api' | null
+  /** PostgreSQL only. */
+  storage?: 'file' | 'postgres'
+  restartRequired?: boolean
+  note?: string
 }
 
 // ── Reporting ─────────────────────────────────────────────────────────────────
@@ -560,7 +578,11 @@ export interface EndpointProtectionCoverageResult {
   macos: PlatformCoverage
   scanTime: string
   scanDurationMs: number
+  /** True when this is the previous scan, shown while a fresh one runs in the background. */
+  stale?: boolean
 }
+/** Returned while the very first fleet scan is still running, with its live progress. */
+export interface EndpointProtectionScanning { scanning: true; progress: { done: number; total: number; startedAt: string } | null }
 
 export interface MissingAgentDevice {
   deviceId: string
@@ -774,6 +796,7 @@ export const api = {
     source?: 'intune' | 'manageengine' | 'all'
     compliance?: 'Compliant' | 'Non-Compliant' | 'Warning'
     platform?: 'Windows' | 'macOS' | 'Linux'
+    issueCategory?: string
     limit?: number
   }) => {
     const qs = new URLSearchParams()
@@ -781,6 +804,7 @@ export const api = {
     if (params?.source && params.source !== 'all') qs.set('source', params.source)
     if (params?.compliance) qs.set('compliance', params.compliance)
     if (params?.platform) qs.set('platform', params.platform)
+    if (params?.issueCategory) qs.set('issueCategory', params.issueCategory)
     qs.set('limit', String(params?.limit ?? 200))
     return get<{ devices: ApiDevice[]; total: number; mock: boolean }>(`/api/devices?${qs}`)
   },
@@ -842,7 +866,7 @@ export const api = {
     get<{ windows: ManageEngineAppEntry[]; catalogWindowsApps: number; progress: { status: 'idle' | 'running'; startedAt: string | null; finishedAt: string | null; error: string | null } }>(`/api/integrations/intune/self-service-apps${refresh ? '?refresh=1' : ''}`),
 
   fetchEndpointProtectionCoverage: () =>
-    get<EndpointProtectionCoverageResult>('/api/security-inventory/coverage'),
+    get<EndpointProtectionCoverageResult | EndpointProtectionScanning>('/api/security-inventory/coverage'),
   refreshEndpointProtectionCoverage: () =>
     post<EndpointProtectionCoverageResult>('/api/security-inventory/scan', {}),
   fetchDevicesMissingAgent: (platform: 'Windows' | 'macOS', agent: 'zscaler' | 'crowdstrike') =>

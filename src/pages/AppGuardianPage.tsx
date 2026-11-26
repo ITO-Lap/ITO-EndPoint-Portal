@@ -97,7 +97,23 @@ export function AppGuardianPage({ onBack }: Props) {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  // Initial load — loading is already true and error empty on first render.
+  useEffect(() => {
+    let cancelled = false
+    api.fetchManageEngineAppsInventory()
+      .then(inventory => {
+        if (cancelled) return
+        setApps(inventory.macos)
+        setLastLoaded(new Date())
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return
+        setError(caught instanceof Error ? caught.message : 'Could not load the ManageEngine application inventory.')
+        setApps([])
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const filteredApps = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()

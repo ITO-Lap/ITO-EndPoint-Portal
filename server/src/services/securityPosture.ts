@@ -1,5 +1,7 @@
 import type { Device } from '../types.js'
 import type { PatchSystemStatus, MissingPatch } from './endpointCentralPatch.js'
+import { reconcileDevices, buildPatchIndex, type Reconciliation } from './deviceReconciler.js'
+export { buildPatchIndex }
 
 // Live Security Posture pillars. Every number is computed from the connected device inventory (and
 // Patch Manager where available). A device whose source did not report a signal is counted as
@@ -21,6 +23,10 @@ export interface PillarDevice {
   detail: string
   /** Itemised findings (e.g. the missing critical patches), when the source provides them. */
   items?: string[]
+  /** Labelled device facts shown in the detail view (OS, last contact, patch severity counts, …). */
+  facts?: Array<{ label: string; value: string }>
+  /** Patch Manager resource id of the device's Endpoint Central system, so the UI can load its patch list on demand. */
+  patchResourceId?: string
 }
 
 export interface PillarBreakdownRow { key: string; assessed: number; passing: number; failing: number; notReported: number }
@@ -44,6 +50,8 @@ export interface PillarResult {
   bySource: PillarBreakdownRow[]
   /** Most common itemised findings among failing devices (e.g. the critical patches missing on most devices). */
   topFindings: Array<{ label: string; devices: number }>
+  /** Patch Manager systems that match no device in the inventory (e.g. agent-only machines) — not counted in any score. */
+  unmatchedAgents?: { windows: number; macos: number }
 }
 
 export interface PostureResult {
@@ -53,11 +61,27 @@ export interface PostureResult {
   sourceCounts: { intune: number; manageengine: number }
   pillars: PillarResult[]
   overall: { score: number | null; assessedPillars: number; totalPillars: number }
+  /** Whether the second-source data behind the scores was available — drives the "partial data" banner. */
+  /** Share of Windows / macOS devices that have an Endpoint Central agent record — rollout progress. null until Patch Manager data loads. */
+  coverage: { windows: { devices: number; withAgent: number }; macos: { devices: number; withAgent: number }; history?: Array<{ date: string; windows: { devices: number; withAgent: number }; macos: { devices: number; withAgent: number } }> } | null
+  enrichment: { patchLoaded: boolean; agentRowsLoaded: number; mdmDetailsStale: number; mdmDetailsUnread: number }
 }
 
 export const MAX_PAGE_SIZE = 5000
 const TOP_FINDINGS = 5
-const CHECKIN_PASS_DAYS = 7
+/** Days since last contact that still counts as checked in. Setting POSTURE_CHECKIN_DAYS changes it without a code change. */
+export function checkInDays(): number {
+  const n = Number(process.env['POSTURE_CHECKIN_DAYS'])
+  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : 7
+}
+
+/** How a device with two contact signals (MDM/Intune + Endpoint Central agent) is judged.
+ *  either (default): fresh if EITHER has been in touch · both: BOTH must be fresh · mdm-only: ignore the agent. */
+export type CheckInRule = 'either' | 'both' | 'mdm-only'
+export function checkInRule(): CheckInRule {
+  const v = (process.env['POSTURE_CHECKIN_RULE'] ?? '').trim().toLowerCase()
+  return v === 'both' || v === 'mdm-only' ? v : 'either'
+}
 
 type Verdict = { status: 'pass' | 'fail' | 'unknown'; detail: string; items?: string[] }
 
@@ -73,7 +97,10 @@ interface PillarDef {
 }
 
 interface Ctx {
-  patchBySerial: Map<string, PatchSystemStatus> | null
+  /** Cross-source identity resolution (Intune ↔ Endpoint Central MDM/agent ↔ Patch Manager), built once per request. */
+  rec: Reconciliation
+  /** Whether Patch Manager data was loaded at all. */
+  patchLoaded: boolean
   /** Missing critical patches per Patch Manager system (detailResourceId), when loaded. */
   criticalPatches: Map<string, MissingPatch[]> | null
   now: number
@@ -93,20 +120,40 @@ export function parseCheckInMs(lastCheckIn: string | undefined): number | null {
   return Number.isNaN(t) ? null : t
 }
 
-function classifyCheckIn(d: Device, now: number): Verdict {
-  const t = parseCheckInMs(d.lastCheckIn)
-  if (t === null) return { status: 'unknown', detail: 'No check-in reported' }
-  const days = Math.max(0, Math.floor((now - t) / 86_400_000))
-  return days <= CHECKIN_PASS_DAYS
-    ? { status: 'pass', detail: `Checked in ${days}d ago` }
-    : { status: 'fail', detail: `Last check-in ${days}d ago` }
+function classifyCheckIn(d: Device, ctx: Ctx): Verdict {
+  const days = (ms: number | null): number | null => (ms === null ? null : Math.max(0, Math.floor((ctx.now - ms) / 86_400_000)))
+  const rule = checkInRule()
+  const primary = days(parseCheckInMs(d.lastCheckIn))
+  // Second signal: the Endpoint Central agent. Covers hybrid Windows (Intune + EC) and Macs (MDM + EC agent).
+  const ec = hybridEc(d, ctx)
+  const sys = findPatchSystem(d, ctx)
+  const agent = rule === 'mdm-only' ? null : ec ? days(parseCheckInMs(ec.lastCheckIn)) : days(parseCheckInMs(sys?.lastContactTime ?? undefined))
+  const signals = [primary, agent].filter((n): n is number => n !== null)
+  if (!signals.length) return { status: 'unknown', detail: 'No check-in reported' }
+  const mdmLabel = d.managementSource === 'Microsoft Intune' ? 'Intune' : 'MDM'
+  const both = agent !== null ? ` (${mdmLabel} ${primary === null ? 'n/a' : `${primary}d`} · Endpoint Central ${agent}d)` : ''
+  // "either" and the single-signal case use the freshest signal; "both" requires every available signal to be fresh.
+  const judged = rule === 'both' ? Math.max(...signals) : Math.min(...signals)
+  return judged <= checkInDays()
+    ? { status: 'pass', detail: `Checked in ${judged}d ago${both}` }
+    : { status: 'fail', detail: `Last check-in ${judged}d ago${both}` }
 }
 
 function classifyCompliance(d: Device): Verdict {
-  // Only Intune returns a native compliance verdict; ManageEngine's state is derived from a few flags.
-  if (d.managementSource !== 'Microsoft Intune') return { status: 'unknown', detail: 'No native compliance verdict from this source' }
-  if (d.complianceState === 'Compliant') return { status: 'pass', detail: 'Compliant' }
-  return { status: 'fail', detail: d.primaryIssue && d.primaryIssue !== 'None' ? `${d.complianceState}: ${d.primaryIssue}` : d.complianceState }
+  if (d.managementSource === 'Microsoft Intune') {
+    if (d.complianceState === 'Compliant') return { status: 'pass', detail: 'Compliant' }
+    return { status: 'fail', detail: d.primaryIssue && d.primaryIssue !== 'None' ? `${d.complianceState}: ${d.primaryIssue}` : d.complianceState }
+  }
+  // Endpoint Central agent rows: the state is derived purely from patch counts, so it would double-count the Critical
+  // Patching pillar. No MDM compliance verdict exists for them.
+  if (d.id.startsWith('ec-')) return { status: 'unknown', detail: 'No MDM compliance verdict (agent-only device; see Critical Patching)' }
+  // Endpoint Central MDM (macOS): the per-device detail call can fail (throttling / token churn) and the mapper then
+  // defaults to "Warning". That is a missing signal, not a finding.
+  if (d.primaryIssue === 'Compliance details unavailable') return { status: 'unknown', detail: 'MDM compliance details could not be read' }
+  const suffix = ' (Endpoint Central MDM)'
+  if (d.complianceState === 'Compliant') return { status: 'pass', detail: `Compliant${suffix}` }
+  const issue = d.primaryIssue && d.primaryIssue !== 'None' ? `${d.complianceState}: ${d.primaryIssue}` : d.complianceState
+  return { status: 'fail', detail: `${issue}${suffix}` }
 }
 
 export function patchLabel(p: MissingPatch): string {
@@ -115,9 +162,29 @@ export function patchLabel(p: MissingPatch): string {
   return p.kb && !short.includes(p.kb) ? `${p.kb} — ${short}` : short
 }
 
+export function findPatchSystem(d: Device, ctx: Pick<Ctx, 'rec'>): PatchSystemStatus | undefined {
+  return ctx.rec.byDeviceId.get(d.id)?.patch
+}
+
+/** The Endpoint Central agent row for an Intune-enrolled Windows device (hybrid), if there is one. */
+function hybridEc(d: Device, ctx: Pick<Ctx, 'rec'>): Device | undefined {
+  return ctx.rec.byDeviceId.get(d.id)?.ec
+}
+
+function makeCtx(devices: Device[], systems: PatchSystemStatus[] | null, criticalPatches: Map<string, MissingPatch[]> | null, now: number, ecDevices: Device[] = []): Ctx {
+  return { rec: reconcileDevices(devices, systems, ecDevices), patchLoaded: systems !== null, criticalPatches, now }
+}
+
 function classifyPatching(d: Device, ctx: Ctx): Verdict {
-  const sys = ctx.patchBySerial?.get((d.serialNumber ?? '').toUpperCase())
-  if (!sys || !sys.scanSucceeded) return { status: 'unknown', detail: 'No Patch Manager scan for this device' }
+  const sys = findPatchSystem(d, ctx)
+  if (!sys) {
+    // Windows in Intune with no Endpoint Central agent row at all: a coverage gap worth naming, not a data glitch.
+    if (ctx.patchLoaded && d.managementSource === 'Microsoft Intune' && d.platform === 'Windows' && !hybridEc(d, ctx)) {
+      return { status: 'unknown', detail: 'No Endpoint Central agent found for this device (not patch-assessed)' }
+    }
+    return { status: 'unknown', detail: 'No Patch Manager scan for this device' }
+  }
+  if (!sys.scanSucceeded) return { status: 'unknown', detail: 'No Patch Manager scan for this device' }
   if (sys.criticalPatchCount > 0) {
     const items = ctx.criticalPatches?.get(sys.detailResourceId)?.map(patchLabel)
     return {
@@ -135,10 +202,10 @@ const PILLARS: PillarDef[] = [
   { id: 'encryption', label: 'Disk Encryption', description: 'BitLocker / FileVault reported as on', scope: 'Windows & macOS', weight: 0.35, applies: isLaptopOs, assess: d => classifyEncryption(d.encryptionStatus) },
   {
     id: 'patching', label: 'Critical Patching', description: 'No critical patches missing (Patch Manager)', scope: 'Windows & macOS with a Patch Manager scan', weight: 0.30, applies: isLaptopOs, assess: classifyPatching,
-    unavailableReason: ctx => (ctx.patchBySerial ? undefined : 'Patch Manager data could not be loaded. Check the Endpoint Central API client and its PatchMgmt.READ scope.'),
+    unavailableReason: ctx => (ctx.patchLoaded ? undefined : 'Patch Manager data could not be loaded. Check the Endpoint Central API client and its PatchMgmt.READ scope.'),
   },
-  { id: 'compliance', label: 'MDM Compliance', description: 'Intune native compliance policy result', scope: 'Intune-managed devices', weight: 0.20, applies: () => true, assess: d => classifyCompliance(d) },
-  { id: 'checkin', label: 'MDM Check-in', description: `Checked in within ${CHECKIN_PASS_DAYS} days`, scope: 'All managed devices', weight: 0.15, applies: () => true, assess: (d, ctx) => classifyCheckIn(d, ctx.now) },
+  { id: 'compliance', label: 'MDM Compliance', description: 'Intune compliance policy result; macOS uses the Endpoint Central MDM verdict', scope: 'Intune Windows & Endpoint Central macOS', weight: 0.20, applies: () => true, assess: d => classifyCompliance(d) },
+  { id: 'checkin', label: 'MDM Check-in', get description() { return `Checked in within ${checkInDays()} days` }, scope: 'All managed devices', weight: 0.15, applies: () => true, assess: classifyCheckIn },
 ]
 
 function bump(map: Map<string, PillarBreakdownRow>, key: string, status: Verdict['status']): void {
@@ -147,17 +214,9 @@ function bump(map: Map<string, PillarBreakdownRow>, key: string, status: Verdict
   map.set(key, row)
 }
 
-export function buildPatchIndex(devices: Device[], systems: PatchSystemStatus[] | null): Map<string, PatchSystemStatus> | null {
-  if (!systems) return null
-  const haystacks = systems.map(s => ({ s, text: s.names.join(' ').toUpperCase() }))
-  const index = new Map<string, PatchSystemStatus>()
-  for (const d of devices) {
-    const serial = (d.serialNumber ?? '').trim().toUpperCase()
-    if (serial.length < 6 || serial === 'UNKNOWN' || index.has(serial)) continue
-    const hit = haystacks.find(h => h.text.includes(serial))
-    if (hit) index.set(serial, hit.s)
-  }
-  return index
+function agentCoverage(devices: Device[], ctx: Ctx, platform: Device['platform']): { devices: number; withAgent: number } {
+  const of = devices.filter(d => d.platform === platform)
+  return { devices: of.length, withAgent: of.filter(d => findPatchSystem(d, ctx) !== undefined).length }
 }
 
 export function gradeFor(score: number | null): string | null {
@@ -167,11 +226,11 @@ export function gradeFor(score: number | null): string | null {
 
 export function buildPosture(
   allDevices: Device[], systems: PatchSystemStatus[] | null, source: PostureSource = 'all', now = Date.now(),
-  criticalPatches: Map<string, MissingPatch[]> | null = null,
+  criticalPatches: Map<string, MissingPatch[]> | null = null, ecDevices: Device[] = [],
 ): PostureResult {
   const devices = source === 'all' ? allDevices
     : allDevices.filter(d => d.managementSource === (source === 'intune' ? 'Microsoft Intune' : 'ManageEngine'))
-  const ctx: Ctx = { patchBySerial: buildPatchIndex(devices, systems), criticalPatches, now }
+  const ctx = makeCtx(devices, systems, criticalPatches, now, ecDevices)
 
   const pillars: PillarResult[] = PILLARS.map(def => {
     const byPlatform = new Map<string, PillarBreakdownRow>()
@@ -193,6 +252,9 @@ export function buildPosture(
     }
 
     const assessed = passing + failingCount
+    const unmatchedAgents: PillarResult['unmatchedAgents'] | undefined = def.id === 'patching' && systems && source === 'all'
+      ? { windows: ctx.rec.unmatchedPatch.filter(x => x.platform === 'Windows').length, macos: ctx.rec.unmatchedPatch.filter(x => x.platform === 'Mac').length }
+      : undefined
     return {
       id: def.id, label: def.label, description: def.description, scope: def.scope, weight: def.weight,
       inScope, assessed, passing, failing: failingCount, notReported,
@@ -201,6 +263,7 @@ export function buildPosture(
       byPlatform: [...byPlatform.values()].sort((a, b) => b.assessed + b.notReported - (a.assessed + a.notReported)),
       bySource: [...bySource.values()],
       topFindings: [...findingCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP_FINDINGS).map(([label, devices]) => ({ label, devices })),
+      ...(unmatchedAgents ? { unmatchedAgents } : {}),
     }
   })
 
@@ -219,6 +282,16 @@ export function buildPosture(
     },
     pillars,
     overall: { score, assessedPillars: scored.length, totalPillars: pillars.length },
+    coverage: systems === null ? null : {
+      windows: agentCoverage(devices, ctx, 'Windows'),
+      macos: agentCoverage(devices, ctx, 'macOS'),
+    },
+    enrichment: {
+      patchLoaded: systems !== null,
+      agentRowsLoaded: ecDevices.length,
+      mdmDetailsStale: devices.filter(d => d.detailsStaleSince).length,
+      mdmDetailsUnread: devices.filter(d => d.primaryIssue === 'Compliance details unavailable').length,
+    },
   }
 }
 
@@ -249,16 +322,55 @@ export interface PillarDeviceList {
   rows: PillarDevice[]
 }
 
+function verdictBasis(pillar: PillarId, d: Device, ec: Device | undefined, sys: PatchSystemStatus | undefined): string {
+  const intune = d.managementSource === 'Microsoft Intune'
+  switch (pillar) {
+    case 'encryption': return intune ? 'Intune' : d.id.startsWith('ec-') ? 'Endpoint Central (not reported by the agent)' : 'Endpoint Central MDM'
+    case 'patching': return 'Endpoint Central Patch Manager'
+    case 'compliance': return intune ? 'Intune compliance policy' : d.id.startsWith('ec-') ? 'None (agent-only device)' : 'Endpoint Central MDM'
+    case 'checkin': {
+      const rule = checkInRule()
+      if (!(ec || sys?.lastContactTime) || rule === 'mdm-only') return intune ? 'Intune' : 'Endpoint Central MDM'
+      return rule === 'both' ? `Both ${intune ? 'Intune' : 'MDM'} and Endpoint Central must be recent` : `Freshest of ${intune ? 'Intune' : 'MDM'} and Endpoint Central`
+    }
+  }
+}
+
+function deviceFacts(pillar: PillarId, d: Device, sys: PatchSystemStatus | undefined, ec: Device | undefined): Array<{ label: string; value: string }> {
+  const out: Array<{ label: string; value: string }> = []
+  const add = (label: string, value: string | undefined | null) => { if (value && value !== 'Unknown' && value !== '—') out.push({ label, value }) }
+  add('Verdict based on', verdictBasis(pillar, d, ec, sys))
+  if (d.detailsStaleSince) add('MDM details', `Last read ${d.detailsStaleSince} — the latest sync could not read them, last known values shown`)
+  const macAgent = d.platform === 'macOS' && d.managementSource === 'ManageEngine' && !d.id.startsWith('ec-')
+  add('Managed by', ec ? 'Microsoft Intune + Endpoint Central (hybrid)' : macAgent ? (sys ? 'Endpoint Central (MDM + agent)' : 'Endpoint Central (MDM)') : d.id.startsWith('ec-') ? 'Endpoint Central (agent)' : d.managementSource === 'ManageEngine' ? 'ManageEngine MDM' : d.managementSource)
+  add('Operating system', [d.osVersion, d.osBuildNumber].filter(Boolean).join(' · '))
+  add(ec ? 'Last check-in (Intune)' : 'Last check-in', d.lastCheckIn)
+  if (ec) {
+    add('Last contact (Endpoint Central)', ec.lastCheckIn)
+    add('Endpoint Central state', ec.complianceState === 'Compliant' ? 'Compliant' : `${ec.complianceState}: ${ec.primaryIssue}`)
+  }
+  add('Encryption', d.encryptionStatus)
+  add('IP address', d.ipAddress)
+  add('Location / department', d.department)
+  if (sys) {
+    add('Missing patches', `${sys.criticalPatchCount} critical · ${sys.importantPatchCount} important · ${sys.moderatePatchCount} moderate · ${sys.lowPatchCount} low`)
+    add('Missing by type', `OS ${sys.missingOsPatches} · third-party ${sys.missingThirdPartyPatches} · driver ${sys.missingDriverPatches} · BIOS ${sys.missingBiosPatches}`)
+    add('Last patch scan', sys.lastSuccessfulScanTime ?? sys.lastScanTime)
+    add('Last contact (Endpoint Central agent)', sys.lastContactTime)
+  }
+  return out
+}
+
 export function listPillarDevices(
   allDevices: Device[], systems: PatchSystemStatus[] | null, criticalPatches: Map<string, MissingPatch[]> | null,
-  opts: ListOptions, now = Date.now(),
+  opts: ListOptions, now = Date.now(), ecDevices: Device[] = [],
 ): PillarDeviceList {
   const def = PILLARS.find(p => p.id === opts.pillarId)
   if (!def) return { total: 0, page: 1, pageSize: 0, totalPages: 1, rows: [] }
   const source = opts.source ?? 'all'
   const devices = source === 'all' ? allDevices
     : allDevices.filter(d => d.managementSource === (source === 'intune' ? 'Microsoft Intune' : 'ManageEngine'))
-  const ctx: Ctx = { patchBySerial: buildPatchIndex(devices, systems), criticalPatches, now }
+  const ctx = makeCtx(devices, systems, criticalPatches, now, ecDevices)
   const q = (opts.q ?? '').trim().toLowerCase()
 
   let rows: PillarDevice[] = []
@@ -268,9 +380,12 @@ export function listPillarDevices(
     if (opts.sourceKey && d.managementSource !== opts.sourceKey) continue
     const v = def.assess(d, ctx)
     if (opts.status && v.status !== opts.status) continue
+    const patchSys = def.id === 'patching' || def.id === 'checkin' ? findPatchSystem(d, ctx) : undefined
     const row: PillarDevice = {
       id: d.id, deviceName: d.deviceName, user: d.user, platform: d.platform, source: d.managementSource,
       serialNumber: d.serialNumber, status: v.status, detail: v.detail, ...(v.items ? { items: v.items } : {}),
+      facts: deviceFacts(def.id, d, patchSys, hybridEc(d, ctx)),
+      ...(patchSys?.detailResourceId ? { patchResourceId: patchSys.detailResourceId } : {}),
     }
     if (q && ![row.deviceName, row.user, row.serialNumber, row.detail, ...(row.items ?? [])].some(t => t.toLowerCase().includes(q))) continue
     rows.push(row)

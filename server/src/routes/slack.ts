@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireCapability } from '../middleware/requireRole.js'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { getSlackConfig, isConfigured } from '../store/integrationStore.js'
@@ -38,7 +39,7 @@ router.get('/health', asyncHandler(async (_req, res) => {
 
 // POST /api/slack/test — explicit connection test triggered by the user
 // Forces an immediate health check and returns the result.
-router.post('/test', asyncHandler(async (_req, res) => {
+router.post('/test', requireCapability('pages.Settings'), asyncHandler(async (_req, res) => {
   const cfg = getSlackConfig()
   if (!cfg) {
     res.status(400).json({ success: false, error: 'Slack is not configured. Add credentials in Settings → Integrations.' })
@@ -54,7 +55,7 @@ router.post('/test', asyncHandler(async (_req, res) => {
 
 // POST /api/slack/reconnect — force an immediate health re-check outside the
 // normal 5-minute poll window.  Returns the updated health status.
-router.post('/reconnect', asyncHandler(async (_req, res) => {
+router.post('/reconnect', requireCapability('pages.Settings'), asyncHandler(async (_req, res) => {
   if (!isConfigured('slack')) {
     res.status(400).json({ success: false, error: 'Slack is not configured.' })
   } else {
@@ -68,7 +69,7 @@ router.post('/reconnect', asyncHandler(async (_req, res) => {
 }))
 
 // GET /api/slack/audit-logs?limit=
-router.get('/audit-logs', asyncHandler(async (req, res) => {
+router.get('/audit-logs', requireCapability('pages.Settings'), asyncHandler(async (req, res) => {
   const schema = z.object({
     limit: z.coerce.number().int().min(1).max(500).optional().default(100),
   })

@@ -36,11 +36,11 @@ const SOURCES: SourcePill[] = [
     label: 'Microsoft Intune',
     shortLabel: 'Intune',
     Icon: Server,
-    iconColor: 'text-orange-500',
-    pillBg: 'bg-orange-50',
-    pillBorder: 'border-orange-200',
-    pillText: 'text-orange-700',
-    dotColor: 'bg-orange-500',
+    iconColor: 'text-indigo-500',
+    pillBg: 'bg-indigo-50',
+    pillBorder: 'border-indigo-200',
+    pillText: 'text-indigo-700',
+    dotColor: 'bg-indigo-500',
     navigateTo: 'Managed Devices',
   },
   {
@@ -48,11 +48,11 @@ const SOURCES: SourcePill[] = [
     label: 'ManageEngine',
     shortLabel: 'ME',
     Icon: Settings,
-    iconColor: 'text-orange-500',
-    pillBg: 'bg-orange-50',
-    pillBorder: 'border-orange-200',
-    pillText: 'text-orange-700',
-    dotColor: 'bg-orange-500',
+    iconColor: 'text-indigo-500',
+    pillBg: 'bg-indigo-50',
+    pillBorder: 'border-indigo-200',
+    pillText: 'text-indigo-700',
+    dotColor: 'bg-indigo-500',
     navigateTo: 'Managed Devices',
   },
 ]
@@ -77,7 +77,7 @@ function priorityColor(p: string) {
 
 function statusColor(s: string) {
   if (s === 'Done' || s === 'Closed' || s === 'Resolved') return 'text-emerald-600'
-  if (s === 'In Progress') return 'text-orange-600'
+  if (s === 'In Progress') return 'text-indigo-600'
   return 'text-slate-500'
 }
 
@@ -99,12 +99,12 @@ function JiraPopover({ onClose }: { onClose: () => void }) {
     <div className="w-80">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <div className="grid h-6 w-6 place-items-center rounded-md bg-orange-100">
-            <Hash className="h-3.5 w-3.5 text-orange-600" />
+          <div className="grid h-6 w-6 place-items-center rounded-md bg-indigo-100">
+            <Hash className="h-3.5 w-3.5 text-indigo-600" />
           </div>
           <span className="text-xs font-bold text-slate-800">Jira — Open Issues</span>
           {!loading && !error && (
-            <span className="rounded-full bg-orange-100 border border-orange-200 px-1.5 py-0.5 text-[0.6rem] font-bold text-orange-700">{issues.length}</span>
+            <span className="rounded-full bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 text-[0.6rem] font-bold text-indigo-700">{issues.length}</span>
           )}
         </div>
         <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
@@ -141,14 +141,14 @@ function JiraPopover({ onClose }: { onClose: () => void }) {
           >
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-[0.62rem] font-bold text-orange-600 font-mono flex-shrink-0">{issue.key}</span>
+                <span className="text-[0.62rem] font-bold text-indigo-600 font-mono flex-shrink-0">{issue.key}</span>
                 <span className={`text-[0.6rem] font-semibold ${statusColor(issue.status)}`}>{issue.status}</span>
               </div>
               <p className="text-xs text-slate-700 leading-snug line-clamp-2">{issue.summary}</p>
             </div>
             <div className="flex flex-col items-end gap-1 flex-shrink-0">
               <span className={`rounded-full border px-1.5 py-0.5 text-[0.58rem] font-bold ${priorityColor(issue.priority)}`}>{issue.priority}</span>
-              <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-orange-400 transition" />
+              <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-indigo-400 transition" />
             </div>
           </a>
         ))}
@@ -306,7 +306,7 @@ export function LiveDataBar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-orange-50/60 px-4 py-2.5 shadow-sm shadow-slate-900/5">
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/80 to-indigo-50/60 px-4 py-2.5 shadow-sm shadow-slate-900/5">
 
       {/* LIVE badge */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -358,7 +358,7 @@ export function LiveDataBar({
             className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold transition ${
               activePopover === 'jira'
                 ? 'is-selected'
-                : 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100 hover:border-orange-300'
+                : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300'
             }`}
             title="Jira — view open issues"
           >
@@ -421,7 +421,7 @@ export function LiveDataBar({
           title={`Auto-refresh in ${countdown}s`}
           className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[0.62rem] font-mono font-semibold text-slate-500"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
           {countdown}s
         </span>
       </div>
@@ -432,9 +432,9 @@ export function LiveDataBar({
         onClick={onRefresh}
         disabled={refreshing}
         title="Refresh now"
-        className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 disabled:opacity-50 transition shadow-sm ${refreshing ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300'}`}
+        className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[0.68rem] font-semibold text-slate-600 disabled:opacity-50 transition shadow-sm ${refreshing ? 'border-indigo-300 bg-indigo-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300'}`}
       >
-        <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin text-orange-500' : ''}`} />
+        <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin text-indigo-500' : ''}`} />
         <span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
       </button>
 

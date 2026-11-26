@@ -1,4 +1,4 @@
-import { ZinniaVertical } from '../ui/ZinniaLogo'
+import { EndpointPlusVertical } from '../ui/EndpointPlusLogo'
 
 interface PlaceholderPageProps {
   title: string
@@ -10,9 +10,9 @@ export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
     <div className="glass rounded-3xl px-6 py-10 min-w-0 w-full">
       <div className="max-w-lg mx-auto text-center">
 
-        {/* Zinnia logo */}
+        {/* Verma logo */}
         <div className="flex justify-center mb-8">
-          <ZinniaVertical iconSize="lg" wordmarkSize="xl" subtitle="ITO Endpoint" />
+          <EndpointPlusVertical iconSize="lg" wordmarkSize="xl" subtitle="IT Operations" />
         </div>
 
         {/* Page title */}
@@ -32,7 +32,7 @@ export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
             <p className="text-xs font-bold text-slate-700">Coming soon</p>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed">
-            This section is being prepared for the next release of ITO Endpoint — built on the Zinnia platform.
+            This section is being prepared for the next release of EndPoint+ — built on the Verma platform.
           </p>
         </div>
 

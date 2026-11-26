@@ -1,10 +1,10 @@
-# ITO Endpoint AI Copilot — Documentation Master Index
+# EndPoint+ — Documentation Master Index
 
 > **Version:** 3.0 | **Last updated:** Jun 2026 | **Stack:** React 19 · Express · TypeScript · Tailwind 4  
-> **Product:** ITO Endpoint — Built on the Zinnia Platform  
+> **Product:** EndPoint+ — Built on the Verma Platform  
 > **Architect & lead developer:** Avinash Kumar Verma
 
-Welcome to the complete documentation for ITO Endpoint AI Copilot. Navigate directly to what you need.
+Welcome to the complete documentation for EndPoint+. Navigate directly to what you need.
 
 ---
 
@@ -61,7 +61,14 @@ docs/
 - [Jira](04-integrations/JIRA.md) · [Confluence](04-integrations/CONFLUENCE.md)
 
 ### Feature deep dives
+- [Ocean — documentation-aware support assistant](07-features/OCEAN.md) — answers from the approved docs with citations, admin-managed knowledge base ← **New**
 - [Endpoint Operations Copilot](07-features/AI-COPILOT.md) — global chat-based AI assistant with tool-calling over real data + confirmed write actions ← **New**
+- [Security Posture](07-features/SECURITY-POSTURE.md) — four-pillar score, hybrid Intune + Endpoint Central matching, stale-data rules, finding and patch details, diagnostics ← **New**
+- [Patch Operations](07-features/PATCH-OPERATIONS.md) — Patch Manager health, critical queue, confirmed scan and deploy ← **New**
+- [Policy Conflicts](07-features/POLICY-CONFLICTS.md) · [Risk Scoring](07-features/RISK-SCORING.md) · [Role Activity Audit](07-features/ROLE-ACTIVITY-AUDIT.md) ← **New**
+- [Reports & Analytics](07-features/REPORTS-ANALYTICS.md) · [Scheduled Reports](07-features/SCHEDULED-REPORTS.md) ← **New**
+- [Settings](07-features/SETTINGS.md) — integrations, roles and permissions, Ocean Knowledge ← **New**
+- [App Guardian](07-features/APP-GUARDIAN.md) — Mac application inventory and fleet version visibility ← **New**
 - [Dashboard](07-features/DASHBOARD.md)
 - [Mac Devices (ManageEngine)](07-features/mac-devices.md)
 - [Mac Fleet Reports](07-features/MAC-FLEET-REPORTS.md) ← **New**
@@ -123,7 +130,7 @@ sidebar entry, and are noted as such below.
 
 | Page | Route key | Description |
 |---|---|---|
-| Security Posture | `Security Posture` | Fleet-wide security scoring |
+| Security Posture | `Security Posture` | Fleet-wide security scoring — see [SECURITY-POSTURE.md](07-features/SECURITY-POSTURE.md) |
 | Role Activity Audit | `Role Activity Audit` | Admin/role action audit trail |
 | Security Policies | `Security Policies` | Compliance policy configuration |
 
@@ -198,9 +205,9 @@ escalation) was added in its place. See `git log` for commits `41ea0d6`, `e56fa9
 - Write actions (Jira ticket creation, automation rule test-runs) require explicit user confirmation
 - See: [AI Copilot Feature Guide](07-features/AI-COPILOT.md)
 
-### Design System — Apple Glass / Zinnia Brand
+### Design System — Apple Glass / Verma Brand
 - Water-glow hover effect on all interactive elements (`water-glow`, `water-glow-card`)
-- Zinnia brand logo (3-petal teardrop) — `ZinniaIcon`, `ZinniaHorizontal`, `ZinniaVertical`, `ZinniaBadge`
+- Verma brand logo (3-petal teardrop) — `EndpointPlusIcon`, `EndpointPlusHorizontal`, `EndpointPlusVertical`, `EndpointPlusBadge`
 - Pearl gradient animated background
 - See: [Design System](08-design/DESIGN-SYSTEM.md)
 
@@ -217,4 +224,6 @@ escalation) was added in its place. See `git log` for commits `41ea0d6`, `e56fa9
 
 ---
 
-*Last updated: Jun 2026 | ITO Endpoint v3.0 | Zinnia Technologies*
+*Last updated: Jun 2026 | EndPoint+ v3.0 | Verma Technologies*
+
+- [17 Database-first sync architecture](17-database-sync-architecture.md): PostgreSQL device store, background sync, schedules, recovery

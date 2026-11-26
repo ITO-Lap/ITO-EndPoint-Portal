@@ -56,8 +56,8 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-xl bg-orange-50 border border-orange-200">
-              <Ticket className="h-4 w-4 text-orange-600" />
+            <div className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-50 border border-indigo-200">
+              <Ticket className="h-4 w-4 text-indigo-600" />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800">Create Jira Ticket</p>
@@ -75,7 +75,7 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
             <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               <p className="text-sm font-semibold text-slate-800">Ticket Created!</p>
-              <a href={created.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:text-orange-700">
+              <a href={created.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700">
                 {created.key} — {created.summary}
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
@@ -96,7 +96,7 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
                   type="text"
                   value={summary}
                   onChange={e => setSummary(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400"
                 />
               </div>
 
@@ -106,7 +106,7 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
                   <select
                     value={issueType}
                     onChange={e => setIssueType(e.target.value as JiraIssueInput['issueType'])}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                   >
                     <option>Incident</option>
                     <option>Task</option>
@@ -119,7 +119,7 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
                   <select
                     value={priority}
                     onChange={e => setPriority(e.target.value as JiraIssueInput['priority'])}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                   >
                     <option>Critical</option>
                     <option>High</option>
@@ -135,12 +135,12 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   rows={8}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 resize-none"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 resize-none"
                 />
               </div>
 
               {ai && (
-                <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-2.5 text-xs text-orange-700">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5 text-xs text-indigo-700">
                   <span className="font-semibold">AI-populated</span> — description includes root cause analysis and remediation steps from AI.
                 </div>
               )}
@@ -162,7 +162,7 @@ export function JiraModal({ device, ai, onClose, onCreated }: Props) {
               type="button"
               onClick={handleCreate}
               disabled={loading || !summary.trim()}
-              className="flex items-center gap-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-medium transition disabled:opacity-50"
             >
               {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Create Ticket

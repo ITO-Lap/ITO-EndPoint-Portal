@@ -72,11 +72,11 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">
             <button type="button" onClick={() => { setState('loading'); load() }} aria-label="Refresh app details"
-              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <RefreshCw className={`h-4 w-4 ${state === 'loading' ? 'animate-spin' : ''}`} />
             </button>
             <button ref={closeRef} type="button" onClick={onClose} aria-label="Close app details"
-              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -99,15 +99,15 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
                 <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-700">{app.reason}</p>
                 <p className="text-xs text-slate-600"><span className="font-semibold">Recommended action:</span> {app.action}</p>
                 {intent && (
-                  <div className="space-y-2 rounded-xl border border-orange-200 bg-orange-50/60 px-4 py-3">
+                  <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <button type="button" disabled={!packagerReady} onClick={() => createPackage(intent)}
                         title={packagerReady ? undefined : 'No packaging workflow is connected to this build'}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                         <Package className="h-3.5 w-3.5" />Create package
                       </button>
                       <button type="button" onClick={() => { void navigator.clipboard?.writeText(intentToText(intent)); setCopied(true) }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                         <Copy className="h-3.5 w-3.5" />{copied ? 'Copied' : 'Copy package request'}
                       </button>
                     </div>
@@ -172,7 +172,7 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
                         {detail.cve.cves.slice(0, 15).map(c => (
                           <li key={c.id} className="text-[0.68rem] text-slate-600">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <a href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-mono font-semibold text-orange-700 hover:underline">{c.id}<ExternalLink className="h-3 w-3" /></a>
+                              <a href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-mono font-semibold text-indigo-700 hover:underline">{c.id}<ExternalLink className="h-3 w-3" /></a>
                               <SeverityBadge severity={c.severity} kev={c.knownExploited} />{c.score !== null && <span className="tabular-nums text-slate-400">{c.score.toFixed(1)}</span>}
                               <span className="text-slate-400">in {c.versions.join(', ')}</span>
                             </div>
@@ -190,23 +190,23 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
                 <div className="space-y-1.5 rounded-xl border border-slate-200 px-3 py-2">
                   <p className="text-[0.6rem] font-bold uppercase tracking-wide text-slate-400">Latest release notes{app.latest ? ` — ${app.latest.version}` : ''}</p>
                   {app.latest?.releaseNotes?.summary && <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-2 py-1.5 font-sans text-[0.68rem] leading-relaxed text-slate-700">{app.latest.releaseNotes.summary}</pre>}
-                  {app.latest?.releaseNotes?.url && <a href={app.latest.releaseNotes.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline">Full release notes<ExternalLink className="h-3 w-3" /></a>}
+                  {app.latest?.releaseNotes?.url && <a href={app.latest.releaseNotes.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:underline">Full release notes<ExternalLink className="h-3 w-3" /></a>}
                   {app.latest && !app.latest.releaseNotes?.summary && !app.latest.releaseNotes?.url && (
                     <p className="text-xs text-slate-500">{app.latest.releaseNotes?.unavailableReason ?? 'Release notes are not available for this version.'}
-                      {app.latest.releaseNotes?.vendorUrl && <> Vendor site: <a href={app.latest.releaseNotes.vendorUrl} target="_blank" rel="noreferrer" className="font-semibold text-orange-700 hover:underline">{app.latest.releaseNotes.vendorUrl}</a>.</>}</p>
+                      {app.latest.releaseNotes?.vendorUrl && <> Vendor site: <a href={app.latest.releaseNotes.vendorUrl} target="_blank" rel="noreferrer" className="font-semibold text-indigo-700 hover:underline">{app.latest.releaseNotes.vendorUrl}</a>.</>}</p>
                   )}
                   {!app.latest && <p className="text-xs text-slate-500">No verified latest version, so no release notes.</p>}
                   {app.latest?.releaseNotes && <p className="text-[0.62rem] text-slate-400">Source: {app.latest.releaseNotes.source}</p>}
                 </div>
 
                 {mismatch && (
-                  <div className="space-y-2 rounded-xl border border-orange-200 bg-orange-50/60 px-3 py-2.5">
-                    <p className="text-[0.6rem] font-bold uppercase tracking-wide text-orange-700">Raise this mismatch</p>
+                  <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2.5">
+                    <p className="text-[0.6rem] font-bold uppercase tracking-wide text-indigo-700">Raise this mismatch</p>
                     {detail.requests.length > 0 && (
                       <ul className="space-y-0.5 text-[0.68rem] text-slate-600">
                         {detail.requests.map(r => (
                           <li key={r.id}>{r.kind === 'jira' ? 'Packaging request' : 'Slack notification'} for {r.targetVersion}
-                            {r.externalKey && r.externalUrl && <> — <a href={r.externalUrl} target="_blank" rel="noreferrer" className="font-semibold text-orange-700 hover:underline">{r.externalKey}</a></>}
+                            {r.externalKey && r.externalUrl && <> — <a href={r.externalUrl} target="_blank" rel="noreferrer" className="font-semibold text-indigo-700 hover:underline">{r.externalKey}</a></>}
                             <span className="text-slate-400"> · {fmtDate(r.createdAt)} by {r.createdBy}</span></li>
                         ))}
                       </ul>
@@ -215,12 +215,12 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
                       <div className="flex flex-wrap gap-2">
                         {PACKAGING_STATUSES.includes(app.status) && (
                           <button type="button" onClick={() => setRequestKind('jira')}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                             <Package className="h-3.5 w-3.5" />Create packaging request
                           </button>
                         )}
                         <button type="button" onClick={() => setRequestKind('slack')}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                           <Send className="h-3.5 w-3.5" />Notify in Slack
                         </button>
                       </div>
@@ -242,7 +242,7 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
                     <div key={`${i.provider}-${i.version}`} className="flex items-center gap-2 text-[0.7rem]">
                       <span className="w-40 flex-shrink-0 truncate font-mono text-slate-700" title={i.version}>{i.version}</span>
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`${i.version}: ${i.deviceCount} devices`}>
-                        <div className="h-2 rounded-full bg-orange-400" style={{ width: `${total ? (i.deviceCount / total) * 100 : 0}%` }} />
+                        <div className="h-2 rounded-full bg-indigo-400" style={{ width: `${total ? (i.deviceCount / total) * 100 : 0}%` }} />
                       </div>
                       <span className="w-10 text-right font-semibold tabular-nums text-slate-700">{i.deviceCount}</span>
                       <ProviderBadge provider={i.provider} />
@@ -308,7 +308,7 @@ export function AppDetailDrawer({ row, onClose, canWrite = false, onRequested }:
                   <div className="rounded-xl border border-slate-200 px-3 py-2 text-[0.7rem] text-slate-600">
                     <p>Latest verified version: <span className="font-mono font-semibold text-slate-800">{app.latest.version}</span></p>
                     <p>Source: {app.latest.versionSource} · checked {formatTime(app.latest.lastCheckedAt)}</p>
-                    <p className="break-all">Evidence: <a href={app.latest.sourceUrl} target="_blank" rel="noreferrer" className="text-orange-700 hover:underline">{app.latest.sourceUrl}</a></p>
+                    <p className="break-all">Evidence: <a href={app.latest.sourceUrl} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline">{app.latest.sourceUrl}</a></p>
                     {app.latest.selfUpdating && <p className="text-violet-700">The source reports this app updates itself.</p>}
                   </div>
                 ) : (

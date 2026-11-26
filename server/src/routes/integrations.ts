@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireAnyCapability, requireCapability } from '../middleware/requireRole.js'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import OpenAI from 'openai'
@@ -23,6 +24,12 @@ import { getManageEngineDevices } from '../services/manageEngine.js'
 import { getEndpointCentralAppInventory } from '../services/endpointCentralSoftware.js'
 import { getEntraData, invalidateEntraTokenCache } from '../services/entra.js'
 import { testSlackConnection } from '../services/slack.js'
+import { activeConnectionString, configuredConnectionString, testConnection } from '../db/index.js'
+import { clearPostgresConfig, getPostgresConfig, savePostgresConfig } from '../store/postgresConfig.js'
+import { storageKind } from '../services/sync/syncEngine.js'
+import { saveConfluenceConfig, saveJiraConfig, getJiraConfig, getConfluenceConfig } from '../store/atlassianConfig.js'
+import { isConfluenceConfigured } from '../services/confluence.js'
+import { isJiraConfigured } from '../services/jira.js'
 
 const router = Router()
 
@@ -56,6 +63,21 @@ const credentialSchemas: Record<string, z.ZodObject<any>> = {
     orgId:  z.string().optional(),
     model:  z.string().optional(),
   }),
+  jira: z.object({
+    baseUrl:    z.string().trim().url('baseUrl must be a valid URL, for example https://yourorg.atlassian.net'),
+    email:      z.string().trim().email('email must be a valid address'),
+    apiToken:   z.string().trim().min(1, 'apiToken required'),
+    projectKey: z.string().trim().optional(),
+  }),
+  confluence: z.object({
+    baseUrl:  z.string().trim().url('baseUrl must be a valid URL').optional().or(z.literal('')),
+    spaceKey: z.string().trim().optional(),
+    apiToken: z.string().trim().optional(),
+  }),
+  postgres: z.object({
+    connectionString: z.string().trim().regex(/^postgres(ql)?:\/\/.+/i, 'connectionString must start with postgresql://'),
+    ssl: z.enum(['auto', 'require', 'disable']).optional(),
+  }),
   gemini: z.object({
     apiKey: z.string().min(1, 'apiKey required').startsWith('AIza', 'apiKey must start with AIza'),
     model: z.string().optional(),
@@ -64,7 +86,7 @@ const credentialSchemas: Record<string, z.ZodObject<any>> = {
 }
 
 // POST /api/integrations/:id/credentials — push credentials from UI to backend
-router.post('/:id/credentials', asyncHandler(async (req, res) => {
+router.post('/:id/credentials', requireCapability('pages.Settings'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { fields } = req.body as { fields: unknown }
 
@@ -82,6 +104,28 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
   }
 
   const f = parsed.data
+
+  if (id === 'jira') {
+    saveJiraConfig({ baseUrl: f['baseUrl'] as string, email: f['email'] as string, apiToken: f['apiToken'] as string, ...(f['projectKey'] ? { projectKey: f['projectKey'] as string } : {}) })
+    res.json({ success: true, data: { id, configured: isJiraConfigured() } })
+    return
+  }
+  if (id === 'confluence') {
+    saveConfluenceConfig({ ...(f['baseUrl'] ? { baseUrl: f['baseUrl'] as string } : {}), ...(f['spaceKey'] ? { spaceKey: f['spaceKey'] as string } : {}), ...(f['apiToken'] ? { apiToken: f['apiToken'] as string } : {}) })
+    res.json({ success: true, data: { id, configured: isConfluenceConfigured() } })
+    return
+  }
+
+  if (id === 'postgres') {
+    // Only a connection that works is saved: a saved-but-unreachable database would break every module at the next start.
+    const cfg = { connectionString: f['connectionString'] as string, ...(f['ssl'] && f['ssl'] !== 'auto' ? { ssl: f['ssl'] as 'require' | 'disable' } : {}) }
+    const probe = await testConnection(cfg)
+    if (!probe.ok) { res.status(400).json({ success: false, error: `Could not connect to PostgreSQL: ${probe.error}` }); return }
+    savePostgresConfig(cfg)
+    res.json({ success: true, data: { id, configured: true, restartRequired: configuredConnectionString() !== activeConnectionString(), serverVersion: probe.serverVersion } })
+    return
+  }
+
   switch (id) {
     case 'intune':
       setIntuneConfig({
@@ -134,27 +178,33 @@ router.post('/:id/credentials', asyncHandler(async (req, res) => {
   res.json({ success: true, data: { id, configured: true } })
 }))
 
+// DELETE /api/integrations/postgres/credentials — forget the saved PostgreSQL connection (the app returns to local files at the next start)
+router.delete('/postgres/credentials', requireCapability('pages.Settings'), asyncHandler(async (_req, res) => {
+  clearPostgresConfig()
+  res.json({ success: true, data: { id: 'postgres', configured: !!getPostgresConfig(), restartRequired: configuredConnectionString() !== activeConnectionString() } })
+}))
+
 // GET /api/integrations/intune/debug — connectivity and permission diagnostic
-router.get('/intune/debug', asyncHandler(async (_req, res) => {
+router.get('/intune/debug', requireCapability('pages.Settings'), asyncHandler(async (_req, res) => {
   const result = await diagnoseIntune()
   res.json({ success: true, data: result })
 }))
 
 // GET /api/integrations/manageengine/apps — fleet-wide installed-app inventory,
 // separated into Windows/macOS buckets by device platform
-router.get('/manageengine/apps', asyncHandler(async (req, res) => {
+router.get('/manageengine/apps', requireAnyCapability('pages.App Guardian', 'pages.ManageEngine App Inventory'), asyncHandler(async (req, res) => {
   const apps = getEndpointCentralAppInventory(req.query.refresh === '1', req.query.includeSystem === '1')
   res.json({ success: true, data: apps })
 }))
 
 // GET /api/integrations/intune/self-service-apps/devices?appId= — devices holding one Self Service app (loaded on demand)
-router.get('/intune/self-service-apps/devices', asyncHandler(async (req, res) => {
+router.get('/intune/self-service-apps/devices', requireCapability('pages.ManageEngine App Inventory'), asyncHandler(async (req, res) => {
   const appId = typeof req.query.appId === 'string' ? req.query.appId : ''
   res.json({ success: true, data: await getIntuneSelfServiceAppDevices(appId) })
 }))
 
 // GET /api/integrations/intune/self-service-apps — Windows apps assigned as `available` (Company Portal)
-router.get('/intune/self-service-apps', asyncHandler(async (req, res) => {
+router.get('/intune/self-service-apps', requireCapability('pages.ManageEngine App Inventory'), asyncHandler(async (req, res) => {
   res.json({ success: true, data: getIntuneSelfServiceWindowsApps(undefined, req.query.refresh === '1') })
 }))
 
@@ -198,6 +248,28 @@ router.get('/status', asyncHandler(async (_req, res) => {
       healthy:     isConfigured('slack') ? (getFetchResult('slack')?.error === null ? true : null) : null,
       connectionType: slackConfig?.webhookUrl ? 'incoming_webhook' : slackConfig?.botToken ? 'bot_api' : null,
     },
+    ...(['jira', 'confluence'] as const).map(src => ({
+      id: src,
+      name: src === 'jira' ? 'Jira' : 'Confluence',
+      configured: src === 'jira' ? isJiraConfigured() : isConfluenceConfigured(),
+      deviceCount: null, lastSyncAt: null, latencyMs: null, error: null,
+      healthy: (src === 'jira' ? isJiraConfigured() : isConfluenceConfigured()) ? true : null,
+    })),
+    {
+      id: 'postgres',
+      name: 'PostgreSQL',
+      configured: !!configuredConnectionString(),
+      deviceCount: null,
+      lastSyncAt:  null,
+      latencyMs:   null,
+      error:       null,
+      healthy:     storageKind() === 'postgres' ? true : null,
+      storage:     storageKind(),
+      restartRequired: configuredConnectionString() !== activeConnectionString(),
+      note: storageKind() === 'postgres'
+        ? 'In use: synced data is stored in PostgreSQL.'
+        : configuredConnectionString() ? 'Saved. Restart the server to start using PostgreSQL.' : 'Optional. Without it the tool stores synced data in local files and works the same.',
+    },
     {
       id: 'openai',
       name: 'OpenAI',
@@ -226,7 +298,7 @@ router.get('/status', asyncHandler(async (_req, res) => {
 }))
 
 // POST /api/integrations/:id/sync — force a fresh fetch from a single source
-router.post('/:id/sync', asyncHandler(async (req, res) => {
+router.post('/:id/sync', requireCapability('pages.Settings'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const t0 = Date.now()
   let deviceCount = 0
@@ -258,6 +330,27 @@ router.post('/:id/sync', asyncHandler(async (req, res) => {
         if (!cfg) throw new Error('Slack is not configured — push credentials first')
         const result = await testSlackConnection(cfg)
         if (!result.ok) throw new Error(result.error ?? 'Slack connection test failed')
+        deviceCount = 0
+        break
+      }
+      case 'jira':
+      case 'confluence': {
+        // A read-only call that proves the URL, email and token work together.
+        const isJira = id === 'jira'
+        const cfg = isJira ? getJiraConfig() : getConfluenceConfig()
+        if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) throw new Error(`${isJira ? 'Jira' : 'Confluence'} is not configured. Push the URL, email and token first.`)
+        const auth = Buffer.from(`${cfg.email}:${cfg.apiToken}`).toString('base64')
+        const url = isJira ? `${cfg.baseUrl}/rest/api/3/myself` : `${cfg.baseUrl}/wiki/rest/api/space?limit=1`
+        const response = await fetch(url, { headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
+        if (!response.ok) throw new Error(`${isJira ? 'Jira' : 'Confluence'} answered ${response.status}. Check the URL, email and API token.`)
+        deviceCount = 0
+        break
+      }
+      case 'postgres': {
+        const cfg = getPostgresConfig()
+        if (!cfg) throw new Error('PostgreSQL is not configured. Save a connection string first.')
+        const probe = await testConnection(cfg)
+        if (!probe.ok) throw new Error(probe.error)
         deviceCount = 0
         break
       }

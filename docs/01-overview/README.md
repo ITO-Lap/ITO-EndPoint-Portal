@@ -1,6 +1,6 @@
 # Project Overview
 
-**ITO Endpoint AI Copilot** is a unified enterprise IT endpoint management dashboard. It aggregates device data from multiple MDM platforms, surfaces compliance issues, and delivers AI-powered remediation guidance — all through a single, role-aware UI.
+**EndPoint+** is a unified enterprise IT endpoint management dashboard. It aggregates device data from multiple MDM platforms, surfaces compliance issues, and delivers AI-powered remediation guidance — all through a single, role-aware UI.
 
 ---
 
@@ -11,7 +11,7 @@ IT teams managing hundreds or thousands of devices across multiple platforms (Wi
 - Manually correlate compliance data across sources
 - Write remediation instructions from scratch for each incident
 
-ITO Endpoint replaces that with one dashboard that shows everything, flags problems automatically, and suggests runbooks backed by AI.
+EndPoint+ replaces that with one dashboard that shows everything, flags problems automatically, and suggests runbooks backed by AI.
 
 ---
 
@@ -30,7 +30,7 @@ See [ROLES.md](../ROLES.md) for the full permissions matrix.
 ## Feature map
 
 ```
-ITO Endpoint AI Copilot
+EndPoint+
 │
 ├── Dashboard
 │   ├── Stat cards (total, compliant, non-compliant, Mac, open issues)

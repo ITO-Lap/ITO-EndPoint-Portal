@@ -76,17 +76,17 @@ function OverviewSection() {
   ]
 
   return (
-    <SectionWrap title="ITO Endpoint Overview" description="What this tool does and who it's for">
+    <SectionWrap title="EndPoint+ Overview" description="What this tool does and who it's for">
       <DocCard>
         <div className="px-5 py-5 space-y-4">
           <p className="text-sm text-slate-700 leading-relaxed">
-            <strong>ITO Endpoint</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune, Microsoft Entra ID, and ManageEngine, surfaces compliance and identity risk in real time, and includes Ocean, an AI operations assistant that can act on that data directly.
+            <strong>EndPoint+</strong> is an endpoint compliance dashboard that gives your IT team a single pane of glass across all managed devices. It aggregates data from Microsoft Intune, Microsoft Entra ID, and ManageEngine, surfaces compliance and identity risk in real time, and includes Ocean, an AI operations assistant that can act on that data directly.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {features.map(f => (
               <div key={f.label} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
-                <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-orange-100 mt-0.5">
-                  <f.icon className="h-4 w-4 text-orange-600" />
+                <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-indigo-100 mt-0.5">
+                  <f.icon className="h-4 w-4 text-indigo-600" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-900">{f.label}</p>
@@ -102,8 +102,8 @@ function OverviewSection() {
         <CardHeader title="Supported Integrations" />
         <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { name: 'Microsoft Intune', color: 'bg-orange-100 text-orange-700',    desc: 'Windows device MDM' },
-            { name: 'ManageEngine',     color: 'bg-orange-100 text-orange-700', desc: 'Cross-platform UEM (Windows & macOS)' },
+            { name: 'Microsoft Intune', color: 'bg-indigo-100 text-indigo-700',    desc: 'Windows device MDM' },
+            { name: 'ManageEngine',     color: 'bg-indigo-100 text-indigo-700', desc: 'Cross-platform UEM (Windows & macOS)' },
           ].map(itg => (
             <div key={itg.name} className={`rounded-xl px-3 py-2.5 ${itg.color}`}>
               <p className="text-xs font-bold leading-tight">{itg.name}</p>
@@ -122,8 +122,8 @@ const ROLES = [
   {
     key: 'global',
     name: 'Global Admin',
-    color: 'from-orange-500 to-orange-600',
-    badge: 'bg-orange-100 text-orange-700',
+    color: 'from-indigo-500 to-indigo-600',
+    badge: 'bg-indigo-100 text-indigo-700',
     icon: Lock,
     who: 'IT Operations leads, platform owners',
     summary: 'Unrestricted access to all features, settings, integrations, and user management.',
@@ -238,7 +238,7 @@ function PermCell({ level }: { level: PermLevel }) {
 
 function RolesSection() {
   return (
-    <SectionWrap title="Roles & Permissions" description="Three roles govern what each team member can see and do in ITO Endpoint">
+    <SectionWrap title="Roles & Permissions" description="Three roles govern what each team member can see and do in EndPoint+">
       {/* Role cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {ROLES.map(role => (
@@ -408,7 +408,7 @@ function OnboardingSection() {
   const doneCount = allItems.filter(item => checked[`${activeRole}-${item}`]).length
 
   return (
-    <SectionWrap title="Onboarding Checklists" description="Step-by-step guide for each role's first day with ITO Endpoint">
+    <SectionWrap title="Onboarding Checklists" description="Step-by-step guide for each role's first day with EndPoint+">
       {/* Role tabs */}
       <div className="flex gap-2 flex-wrap">
         {(['global', 'admin', 'helpdesk'] as const).map(r => (
@@ -416,7 +416,7 @@ function OnboardingSection() {
             key={r}
             type="button"
             onClick={() => setActiveRole(r)}
-            className={`rounded-lg border px-3.5 py-2 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+            className={`rounded-lg border px-3.5 py-2 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
               activeRole === r
                 ? 'is-selected'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
@@ -432,11 +432,11 @@ function OnboardingSection() {
         <div className="px-5 py-3 border-b border-slate-100">
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-xs font-semibold text-slate-800">{roleLabels[activeRole]} onboarding progress</p>
-            <span className="text-xs font-bold text-orange-700">{doneCount} / {allItems.length}</span>
+            <span className="text-xs font-bold text-indigo-700">{doneCount} / {allItems.length}</span>
           </div>
           <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-indigo-500 transition-all duration-500"
               style={{ width: `${allItems.length ? (doneCount / allItems.length) * 100 : 0}%` }}
             />
           </div>
@@ -455,8 +455,8 @@ function OnboardingSection() {
                         onClick={() => toggle(key)}
                         className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition ${
                           done
-                            ? 'border-orange-500 bg-orange-500'
-                            : 'border-slate-300 bg-white group-hover:border-orange-400'
+                            ? 'border-indigo-500 bg-indigo-500'
+                            : 'border-slate-300 bg-white group-hover:border-indigo-400'
                         }`}
                       >
                         {done && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
@@ -529,14 +529,14 @@ function FaqSection() {
               <button
                 type="button"
                 onClick={() => setOpen(open === i ? null : i)}
-                className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300"
+                className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300"
               >
                 <p className="text-xs font-semibold text-slate-900 leading-snug">{faq.q}</p>
                 <ChevronRight className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform mt-0.5 ${open === i ? 'rotate-90' : ''}`} />
               </button>
               {open === i && (
                 <div className="px-5 pb-4">
-                  <p className="text-[0.72rem] text-slate-600 leading-relaxed border-l-2 border-orange-200 pl-3">{faq.a}</p>
+                  <p className="text-[0.72rem] text-slate-600 leading-relaxed border-l-2 border-indigo-200 pl-3">{faq.a}</p>
                 </div>
               )}
             </div>
@@ -548,7 +548,7 @@ function FaqSection() {
         <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-600">
           Can't find your answer?{' '}
-          <span className="font-semibold text-orange-600">it-support@zinnia.com</span>
+          <span className="font-semibold text-indigo-600">it-support@zinnia.com</span>
           {' '}· Full reference: <span className="font-mono text-slate-700">docs/ROLES.md</span>
         </p>
       </div>
@@ -574,7 +574,7 @@ function AutomationSection() {
   ]
 
   const actions = [
-    { name: 'Send In-App Notification', desc: 'Posts a notification in the ITO Endpoint notification centre.', icon: Bell,           color: 'bg-orange-100 text-orange-700' },
+    { name: 'Send In-App Notification', desc: 'Posts a notification in the EndPoint+ notification centre.', icon: Bell,           color: 'bg-indigo-100 text-indigo-700' },
     { name: 'Send Slack Message',        desc: 'Posts a message to the configured Slack bot channel.',           icon: MessageSquare,  color: 'bg-purple-100 text-purple-700' },
     { name: 'Create Jira Ticket',        desc: 'Creates an Incident, Task, Bug, or Story in your Jira project.',  icon: Ticket,         color: 'bg-blue-100 text-blue-700' },
     { name: 'Send Teams Message',        desc: 'Posts an alert to the configured Microsoft Teams webhook.',       icon: MessageSquare,  color: 'bg-indigo-100 text-indigo-700' },
@@ -616,7 +616,7 @@ function AutomationSection() {
           {steps.map(s => (
             <div key={s.n} className="bg-white px-4 py-4">
               <div className="flex items-center gap-2 mb-2">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-orange-500 text-[0.65rem] font-extrabold text-white">{s.n}</span>
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-indigo-500 text-[0.65rem] font-extrabold text-white">{s.n}</span>
                 <p className="text-xs font-bold text-slate-900">{s.title}</p>
               </div>
               <p className="text-[0.68rem] text-slate-500 leading-relaxed">{s.desc}</p>
@@ -649,8 +649,8 @@ function AutomationSection() {
         <div className="divide-y divide-slate-100">
           {triggers.map(t => (
             <div key={t.name} className="flex items-start gap-3 px-5 py-3">
-              <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-orange-100 mt-0.5">
-                <t.icon className="h-3.5 w-3.5 text-orange-600" />
+              <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-indigo-100 mt-0.5">
+                <t.icon className="h-3.5 w-3.5 text-indigo-600" />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-900">{t.name}</p>
@@ -690,7 +690,7 @@ function AutomationSection() {
               </button>
               {open === i && (
                 <div className="px-5 pb-4">
-                  <p className="text-[0.72rem] text-slate-600 leading-relaxed border-l-2 border-orange-200 pl-3">{item.a}</p>
+                  <p className="text-[0.72rem] text-slate-600 leading-relaxed border-l-2 border-indigo-200 pl-3">{item.a}</p>
                 </div>
               )}
             </div>
@@ -880,7 +880,7 @@ function ConfigurationSection() {
         {integrations.map((intg, i) => (
           <DocCard key={intg.name}>
             <button type="button" onClick={() => setOpen(open === i ? null : i)}
-              className="flex w-full items-center justify-between px-5 py-4 hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 rounded-[18px]">
+              className="flex w-full items-center justify-between px-5 py-4 hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300 rounded-[18px]">
               <div className="flex items-start gap-3 text-left">
                 <Globe className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
                 <div>
@@ -895,7 +895,7 @@ function ConfigurationSection() {
                 <ol className="space-y-2">
                   {intg.steps.map((step, j) => (
                     <li key={j} className="flex items-start gap-2.5">
-                      <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-orange-500 text-[0.6rem] font-bold text-white mt-0.5">{j + 1}</span>
+                      <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-indigo-500 text-[0.6rem] font-bold text-white mt-0.5">{j + 1}</span>
                       <p className="text-[0.72rem] text-slate-700 leading-snug">{step}</p>
                     </li>
                   ))}
@@ -987,7 +987,7 @@ function TroubleshootingSection() {
           {issues.map((issue, i) => (
             <div key={i}>
               <button type="button" onClick={() => setOpen(open === i ? null : i)}
-                className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300">
+                className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50 transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500 mt-0.5" />
                   <p className="text-xs font-semibold text-slate-900 leading-snug">{issue.problem}</p>
@@ -1002,7 +1002,7 @@ function TroubleshootingSection() {
                   <div className="space-y-2">
                     {issue.steps.map((step, j) => (
                       <div key={j} className="flex items-start gap-2.5">
-                        <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-orange-100 text-[0.6rem] font-bold text-orange-700 mt-0.5">{j + 1}</span>
+                        <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-indigo-100 text-[0.6rem] font-bold text-indigo-700 mt-0.5">{j + 1}</span>
                         <p className="text-[0.72rem] text-slate-700 leading-snug">{step}</p>
                       </div>
                     ))}
@@ -1015,10 +1015,10 @@ function TroubleshootingSection() {
       </DocCard>
 
       <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3.5">
-        <LifeBuoy className="h-4 w-4 text-orange-500 flex-shrink-0" />
+        <LifeBuoy className="h-4 w-4 text-indigo-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-600">
           Still stuck?{' '}
-          <span className="font-semibold text-orange-600">it-support@zinnia.com</span>
+          <span className="font-semibold text-indigo-600">it-support@zinnia.com</span>
           {' '}or file an issue at{' '}
           <span className="font-mono text-slate-700">github.com/your-org/endpoint-ai-copilot</span>
         </p>
@@ -1032,17 +1032,17 @@ function TroubleshootingSection() {
 function QuickStartSection() {
   const steps = [
     {
-      n: '1', title: 'Open the dashboard', color: 'bg-orange-500',
+      n: '1', title: 'Open the dashboard', color: 'bg-indigo-500',
       desc: 'The app opens straight to the dashboard — there is no sign-in step in this deployment. The stat cards at the top show your fleet at a glance: total devices, compliant, non-compliant, warning, Windows, and Mac.',
       tips: ['Click any stat card number to drill into a filtered device list.', 'The donut chart and issue categories update in real time from your MDM sources.'],
     },
     {
-      n: '2', title: 'Find a device', color: 'bg-orange-500',
+      n: '2', title: 'Find a device', color: 'bg-indigo-500',
       desc: 'Type a device name, user email, or serial number into the search bar at the top. The dashboard switches to show that device\'s full compliance detail.',
       tips: ['The app auto-selects the first non-compliant device on load so you always see a real example.'],
     },
     {
-      n: '3', title: 'Check Risk Scoring', color: 'bg-orange-500',
+      n: '3', title: 'Check Risk Scoring', color: 'bg-indigo-500',
       desc: 'Navigate to Risk Scoring in the sidebar to see devices/users ranked by combined compliance and identity risk. Expand a row to create a Jira ticket or link a Confluence article for that device.',
       tips: ['Jira and Confluence escalation are gated on those integrations actually being configured.'],
     },
@@ -1052,19 +1052,19 @@ function QuickStartSection() {
       tips: ['Ocean only reads and acts on modules already live in this app — it does not fabricate data.'],
     },
     {
-      n: '5', title: 'Check automation rules', color: 'bg-orange-500',
+      n: '5', title: 'Check automation rules', color: 'bg-indigo-500',
       desc: 'Navigate to Automation in the sidebar to review trigger-based rules covering compliance, security, patching, reporting, and drift detection.',
       tips: ['Use the Test Run button on any rule to simulate a trigger without waiting for a real event.', 'Enable the rules relevant to your environment and leave the rest disabled.'],
     },
     {
-      n: '6', title: 'Connect your MDM', color: 'bg-orange-500',
+      n: '6', title: 'Connect your MDM', color: 'bg-indigo-500',
       desc: 'When you\'re ready for live data, go to Settings → Integrations. Add your Intune, Entra ID, or ManageEngine credentials. See Integration Setup in this docs for step-by-step instructions.',
       tips: ['Without credentials, unconfigured integrations show clearly as not-connected rather than mock data.', 'Each integration can be connected independently; you don\'t need all of them.'],
     },
   ]
 
   const nextByRole = [
-    { role: 'Global Admin', badge: 'bg-orange-100 text-orange-700', next: ['Connect integrations in Settings → Integrations', 'Review and enable automation rules', 'Configure Slack, Teams, and Jira for alert routing'] },
+    { role: 'Global Admin', badge: 'bg-indigo-100 text-indigo-700', next: ['Connect integrations in Settings → Integrations', 'Review and enable automation rules', 'Configure Slack, Teams, and Jira for alert routing'] },
     { role: 'IT Admin',     badge: 'bg-lime-100 text-lime-700',     next: ['Search for devices with active issues', 'Use Risk Scoring to prioritise remediation', 'Ask Ocean to trigger an automation Test Run', 'Check Reports & Analytics for fleet trends'] },
     { role: 'Helpdesk',     badge: 'bg-slate-100 text-slate-700',   next: ['Use the search bar to find a device by user email', 'Read the Compliance Details to understand the issue', 'Escalate to an IT Admin if remediation is needed'] },
   ]
@@ -1085,7 +1085,7 @@ function QuickStartSection() {
                   <ul className="mt-2 space-y-1">
                     {s.tips.map(tip => (
                       <li key={tip} className="flex items-start gap-1.5 text-[0.68rem] text-slate-500">
-                        <ChevronRight className="h-3 w-3 flex-shrink-0 mt-0.5 text-orange-400" />
+                        <ChevronRight className="h-3 w-3 flex-shrink-0 mt-0.5 text-indigo-400" />
                         {tip}
                       </li>
                     ))}
@@ -1106,7 +1106,7 @@ function QuickStartSection() {
               <ul className="space-y-2">
                 {r.next.map(item => (
                   <li key={item} className="flex items-start gap-1.5 text-[0.68rem] text-slate-600">
-                    <ChevronRight className="h-3 w-3 flex-shrink-0 mt-0.5 text-orange-400" />
+                    <ChevronRight className="h-3 w-3 flex-shrink-0 mt-0.5 text-indigo-400" />
                     {item}
                   </li>
                 ))}
@@ -1116,8 +1116,8 @@ function QuickStartSection() {
         </div>
       </DocCard>
 
-      <div className="flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3.5">
-        <Zap className="h-4 w-4 text-orange-500 flex-shrink-0" />
+      <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3.5">
+        <Zap className="h-4 w-4 text-indigo-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-700">
           Running without credentials? Automation rules and reports still operate against whatever devices are already synced — an unconfigured integration is shown as not-connected rather than backfilled with mock data. Add credentials when you're ready to go live.
         </p>
@@ -1130,11 +1130,11 @@ function QuickStartSection() {
 
 function DashboardSection() {
   const statCards = [
-    { title: 'Total Devices',    desc: 'All enrolled devices across every connected MDM source combined.',            color: 'bg-orange-100 text-orange-700' },
+    { title: 'Total Devices',    desc: 'All enrolled devices across every connected MDM source combined.',            color: 'bg-indigo-100 text-indigo-700' },
     { title: 'Compliant',        desc: 'Devices passing all compliance policies with no active issues.',              color: 'bg-emerald-100 text-emerald-700' },
     { title: 'Non-Compliant',    desc: 'Devices with one or more failed compliance policies. Requires action.',       color: 'bg-red-100 text-red-700' },
     { title: 'Warning',          desc: 'Devices with issues that haven\'t yet reached Non-Compliant threshold.',      color: 'bg-amber-100 text-amber-700' },
-    { title: 'Open Issues',      desc: 'Sum of Non-Compliant + Warning devices — total devices needing attention.',   color: 'bg-orange-100 text-orange-700' },
+    { title: 'Open Issues',      desc: 'Sum of Non-Compliant + Warning devices — total devices needing attention.',   color: 'bg-indigo-100 text-indigo-700' },
     { title: 'Windows Devices',  desc: 'Count of Windows endpoints across all MDM sources.',                         color: 'bg-slate-100 text-slate-700' },
     { title: 'Mac Devices',      desc: 'Count of macOS endpoints across all MDM sources.',                           color: 'bg-slate-100 text-slate-700' },
   ]
@@ -1199,7 +1199,7 @@ function DashboardSection() {
         <div className="divide-y divide-slate-100">
           {panelTabs.map(t => (
             <div key={t.tab} className="flex items-start gap-3 px-5 py-3.5">
-              <span className="inline-flex rounded-lg bg-orange-100 px-2 py-1 text-[0.62rem] font-bold text-orange-700 min-w-[110px] flex-shrink-0 mt-0.5 text-center justify-center">{t.tab}</span>
+              <span className="inline-flex rounded-lg bg-indigo-100 px-2 py-1 text-[0.62rem] font-bold text-indigo-700 min-w-[110px] flex-shrink-0 mt-0.5 text-center justify-center">{t.tab}</span>
               <p className="text-[0.72rem] text-slate-600 leading-snug">{t.desc}</p>
             </div>
           ))}
@@ -1216,9 +1216,9 @@ function DashboardSection() {
               { label: 'View Runbook', desc: 'Opens the full step list in a modal.' },
               { label: 'Copy Steps', desc: 'Copies all steps to clipboard for manual remediation.' },
             ].map(a => (
-              <div key={a.label} className="rounded-xl bg-orange-50 border border-orange-100 px-3 py-2.5">
-                <p className="text-[0.65rem] font-bold text-orange-800 mb-0.5">{a.label}</p>
-                <p className="text-[0.62rem] text-orange-700/80">{a.desc}</p>
+              <div key={a.label} className="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2.5">
+                <p className="text-[0.65rem] font-bold text-indigo-800 mb-0.5">{a.label}</p>
+                <p className="text-[0.62rem] text-indigo-700/80">{a.desc}</p>
               </div>
             ))}
           </div>
@@ -1298,16 +1298,16 @@ export function DocsPage() {
                         type="button"
                         onClick={() => setActive(item.key)}
                         aria-current={isActive ? 'page' : undefined}
-                        className={`group flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                        className={`group flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                           isActive
-                            ? 'bg-orange-50 text-orange-700 border-orange-200'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border-transparent'
                         }`}
                       >
-                        <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-orange-600' : 'text-slate-400 group-hover:text-slate-500'}`} />
+                        <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-500'}`} />
                         <span className="flex-1 text-xs font-medium">{item.label}</span>
                         {item.badge && (
-                          <span className="inline-flex rounded-full bg-orange-500 px-1.5 py-0.5 text-[0.5rem] font-extrabold text-white leading-none">
+                          <span className="inline-flex rounded-full bg-indigo-500 px-1.5 py-0.5 text-[0.5rem] font-extrabold text-white leading-none">
                             {item.badge}
                           </span>
                         )}
@@ -1318,8 +1318,8 @@ export function DocsPage() {
               </div>
             ))}
           </nav>
-          <div className="mt-3 mx-1 rounded-xl bg-orange-50 border border-orange-100 px-3 py-2.5">
-            <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-orange-600 mb-1">Source file</p>
+          <div className="mt-3 mx-1 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2.5">
+            <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-indigo-600 mb-1">Source file</p>
             <p className="text-[0.62rem] font-mono text-slate-600 break-all">docs/ROLES.md</p>
           </div>
         </div>

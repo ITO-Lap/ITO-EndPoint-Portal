@@ -26,8 +26,8 @@ const COLS = [
 
 const SOURCE_TABS = [
   { id: 'all',          label: 'All Sources',  activeClass: 'bg-slate-900 text-white' },
-  { id: 'intune',       label: 'Intune',        activeClass: 'bg-orange-600 text-white'  },
-  { id: 'manageengine', label: 'ManageEngine',  activeClass: 'bg-orange-500 text-white' },
+  { id: 'intune',       label: 'Intune',        activeClass: 'bg-indigo-600 text-white'  },
+  { id: 'manageengine', label: 'ManageEngine',  activeClass: 'bg-indigo-500 text-white' },
 ] as const
 
 type SourceId      = typeof SOURCE_TABS[number]['id']
@@ -39,10 +39,13 @@ interface Props {
   onClose: () => void
   onViewDevice: (deviceName: string) => void
   sourceCounts?: { intune: number; manageEngine: number }
+  /** Opens the list already filtered (used by the dashboard cards). */
+  initialCompliance?: ComplianceOpt
+  initialIssueCategory?: string | null
 }
 
 function PlatformIcon({ p }: { p: string }) {
-  if (p === 'Windows') return <Monitor className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+  if (p === 'Windows') return <Monitor className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
   if (p === 'macOS')   return <Laptop  className="h-3.5 w-3.5 text-lime-500 flex-shrink-0" />
   return                      <Globe   className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
 }
@@ -62,8 +65,8 @@ function CompliancePill({ state }: { state: string }) {
 
 function SourcePill({ src }: { src: string }) {
   if (src === 'Microsoft Intune')
-    return <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-xs font-medium text-orange-700">Intune</span>
-  return   <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-xs font-medium text-orange-700">ManageEngine</span>
+    return <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-medium text-indigo-700">Intune</span>
+  return   <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-medium text-indigo-700">ManageEngine</span>
 }
 
 function EncryptionCell({ status }: { status: string }) {
@@ -140,11 +143,11 @@ function matchesSearch(d: ApiDevice, q: string): boolean {
   )
 }
 
-export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: Props) {
+export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts, initialCompliance = '', initialIssueCategory = null }: Props) {
   // allDevices: full unfiltered set loaded from server (re-fetched on source/compliance/platform change)
   const [allDevices, setAllDevices] = useState<ApiDevice[]>([])
   const [serverTotal, setServerTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(open)
   const [error,   setError]   = useState<string | null>(null)
   const [selected, setSelected] = useState<ApiDevice | null>(null)
 
@@ -154,15 +157,27 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
   const [compliance, setCompliance] = useState<ComplianceOpt>('')
   const [platform,   setPlatform]   = useState<PlatformOpt>('')
   const [searchRaw,  setSearchRaw]  = useState('')
+  const [issueCategory, setIssueCategory] = useState<string | null>(initialIssueCategory)
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
-  // Reset on open
-  useEffect(() => {
-    if (!open) return
-    setSource('all'); setCompliance(''); setPlatform(''); setSearchRaw('')
-    setSelected(null)
-  }, [open])
+  // Reset on open (adjusted during render rather than in an effect)
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) {
+      setSource('all'); setCompliance(initialCompliance); setPlatform(''); setSearchRaw(''); setIssueCategory(initialIssueCategory)
+      setSelected(null)
+    }
+  }
+
+  // Mark as loading as soon as the structural filters (or open state) change
+  const fetchKey = `${open}|${source}|${compliance}|${platform}|${issueCategory ?? ''}`
+  const [prevFetchKey, setPrevFetchKey] = useState(fetchKey)
+  if (fetchKey !== prevFetchKey) {
+    setPrevFetchKey(fetchKey)
+    if (open) { setLoading(true); setError(null) }
+  }
 
   // Fetch from server only when structural filters change (not search — that's client-side)
   const fetchDevices = useCallback(async () => {
@@ -173,6 +188,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
         ...(source !== 'all' ? { source } : {}),
         ...(compliance ? { compliance }   : {}),
         ...(platform   ? { platform }     : {}),
+        ...(issueCategory ? { issueCategory } : {}),
         limit: 10000,
       })
       setAllDevices(result.devices)
@@ -183,9 +199,31 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
     } finally {
       setLoading(false)
     }
-  }, [open, source, compliance, platform])
+  }, [open, source, compliance, platform, issueCategory])
 
-  useEffect(() => { fetchDevices() }, [fetchDevices])
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    api.fetchAllDevicesRaw({
+      ...(source !== 'all' ? { source } : {}),
+      ...(compliance ? { compliance }   : {}),
+      ...(platform   ? { platform }     : {}),
+      ...(issueCategory ? { issueCategory } : {}),
+      limit: 10000,
+    })
+      .then(result => {
+        if (cancelled) return
+        setAllDevices(result.devices)
+        setServerTotal(result.total)
+      })
+      .catch(e => {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : 'Failed to load devices')
+        setAllDevices([])
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [open, source, compliance, platform, issueCategory])
 
   // Client-side search — instant, no server round-trip
   const devices = searchRaw ? allDevices.filter(d => matchesSearch(d, searchRaw)) : allDevices
@@ -219,9 +257,9 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
   }
 
   const clearFilters = () => {
-    setSource('all'); setCompliance(''); setPlatform(''); setSearchRaw('')
+    setSource('all'); setCompliance(''); setPlatform(''); setSearchRaw(''); setIssueCategory(null)
   }
-  const hasFilters = source !== 'all' || compliance !== '' || platform !== '' || searchRaw !== ''
+  const hasFilters = source !== 'all' || compliance !== '' || platform !== '' || searchRaw !== '' || issueCategory !== null
 
   // Whether to show split-pane (device selected on desktop)
   const showDetail = selected !== null
@@ -259,7 +297,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
           <button
             type="button"
             onClick={onClose}
-            className="ml-4 flex-shrink-0 rounded-full p-2 hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition focus-visible:ring-2 focus-visible:ring-orange-300"
+            className="ml-4 flex-shrink-0 rounded-full p-2 hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition focus-visible:ring-2 focus-visible:ring-indigo-300"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -282,7 +320,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     key={tab.id}
                     type="button"
                     onClick={() => setSource(tab.id)}
-                    className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                    className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                       isActive ? tab.activeClass : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -305,7 +343,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                   placeholder="Search…"
                   value={searchRaw}
                   onChange={e => setSearchRaw(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-7.5 pr-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-300 transition"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-7.5 pr-2.5 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition"
                 />
               </div>
               {/* Compliance */}
@@ -315,7 +353,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     key={opt || 'all-c'}
                     type="button"
                     onClick={() => setCompliance(opt)}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                       compliance === opt
                         ? opt === 'Compliant'     ? 'bg-emerald-500 text-white border-emerald-500'
                         : opt === 'Warning'       ? 'bg-amber-500   text-white border-amber-500'
@@ -335,7 +373,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     key={opt || 'all-p'}
                     type="button"
                     onClick={() => setPlatform(opt)}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium border transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                       platform === opt ? 'is-selected' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
@@ -344,6 +382,12 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                 ))}
               </div>
               <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                {issueCategory && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                    Issue: {issueCategory}
+                    <button type="button" aria-label="Remove issue filter" onClick={() => setIssueCategory(null)} className="hover:text-indigo-900">×</button>
+                  </span>
+                )}
                 {hasFilters && (
                   <button type="button" onClick={clearFilters} className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 transition">
                     Clear
@@ -373,13 +417,13 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
               ) : error ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-3">
                   <p className="text-sm text-slate-500">{error}</p>
-                  <button type="button" onClick={fetchDevices} className="text-xs text-orange-600 underline">Retry</button>
+                  <button type="button" onClick={fetchDevices} className="text-xs text-indigo-600 underline">Retry</button>
                 </div>
               ) : devices.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-2">
                   <Search className="h-10 w-10 text-slate-200" />
                   <p className="text-sm font-medium text-slate-400">No devices match current filters</p>
-                  {hasFilters && <button type="button" onClick={clearFilters} className="text-xs text-orange-600 underline">Clear filters</button>}
+                  {hasFilters && <button type="button" onClick={clearFilters} className="text-xs text-indigo-600 underline">Clear filters</button>}
                 </div>
               ) : showDetail ? (
                 /* Compact list when detail is open */
@@ -391,13 +435,13 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                         key={device.id}
                         type="button"
                         onClick={() => setSelected(device)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 ${
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300 ${
                           isActive ? 'is-selected border-l-2' : 'hover:bg-slate-50 border-l-2 border-transparent'
                         }`}
                       >
                         <PlatformIcon p={device.platform} />
                         <div className="min-w-0 flex-1">
-                          <p className={`text-xs font-semibold truncate ${isActive ? 'text-orange-700' : 'text-slate-900'}`}>{device.deviceName}</p>
+                          <p className={`text-xs font-semibold truncate ${isActive ? 'text-indigo-700' : 'text-slate-900'}`}>{device.deviceName}</p>
                           <p className="text-xs text-slate-400 truncate">{device.user}</p>
                         </div>
                         <CompliancePill state={device.complianceState} />
@@ -426,7 +470,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                         >
                           {/* Drag handle — visible on hover */}
                           <span
-                            className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-orange-400/60 active:bg-orange-500 transition-colors"
+                            className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400/60 active:bg-indigo-500 transition-colors"
                             onMouseDown={e => startResize(c.key, e)}
                           />
                         </SortableHeader>
@@ -437,7 +481,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                     {paginated.map(device => (
                       <tr
                         key={device.id}
-                        className="group hover:bg-orange-50/40 cursor-pointer transition-colors"
+                        className="group hover:bg-indigo-50/40 cursor-pointer transition-colors"
                         onClick={() => setSelected(device)}
                       >
                         <td className="px-4 py-3 overflow-hidden">
@@ -472,7 +516,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                           )}
                         </td>
                         <td className="px-4 py-3 overflow-hidden">
-                          <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 transition opacity-0 group-hover:opacity-100">
+                          <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition opacity-0 group-hover:opacity-100">
                             Details <ChevronRight className="h-3 w-3" />
                           </span>
                         </td>
@@ -512,7 +556,7 @@ export function AllDevicesDrawer({ open, onClose, onViewDevice, sourceCounts }: 
                 <button
                   type="button"
                   onClick={() => { onClose(); onViewDevice(selected.deviceName) }}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white transition focus-visible:ring-2 focus-visible:ring-orange-300"
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition focus-visible:ring-2 focus-visible:ring-indigo-300"
                 >
                   Open in Dashboard <ChevronRight className="h-4 w-4" />
                 </button>

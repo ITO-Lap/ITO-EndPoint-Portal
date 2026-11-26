@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Info } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { useToast } from '../ui/ToastProvider'
+import { useToast } from '../ui/toastHooks'
 import { notificationScheduleApi } from '../../api/notificationSchedule'
 import type { NotificationFrequency, NotificationSchedule } from '../../api/notificationSchedule'
 import { describeSchedule } from './scheduleFormat'
@@ -104,7 +104,7 @@ export function EditSlackScheduleModal({ open, onClose, module, sourceId, schedu
               {(['daily', 'weekly'] as const).map(f => (
                 <button
                   key={f} type="button" onClick={() => setFrequency(f)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition ${frequency === f ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition ${frequency === f ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                 >{f}</button>
               ))}
             </div>
@@ -120,7 +120,7 @@ export function EditSlackScheduleModal({ open, onClose, module, sourceId, schedu
                   return (
                     <button
                       key={d.value} type="button" aria-pressed={active} onClick={() => toggleDay(d.value)}
-                      className={`h-8 w-10 rounded-lg text-xs font-semibold transition border ${active ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-orange-300'}`}
+                      className={`h-8 w-10 rounded-lg text-xs font-semibold transition border ${active ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`}
                     >{d.label}</button>
                   )
                 })}
@@ -134,14 +134,14 @@ export function EditSlackScheduleModal({ open, onClose, module, sourceId, schedu
               <label className="block text-xs font-medium text-slate-700 mb-1">Time</label>
               <input
                 type="time" value={executionTime} onChange={e => setExecutionTime(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:border-orange-400"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:border-indigo-400"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Time zone</label>
               <input
                 list="notification-schedule-timezones" value={timezone} onChange={e => setTimezone(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono focus:outline-none focus:border-orange-400"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono focus:outline-none focus:border-indigo-400"
               />
               <datalist id="notification-schedule-timezones">
                 {COMMON_TIMEZONES.map(tz => <option key={tz} value={tz} />)}

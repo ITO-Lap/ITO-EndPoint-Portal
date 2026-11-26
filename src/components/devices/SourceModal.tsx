@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
-import { useToast } from '../ui/ToastProvider'
+import { useToast } from '../ui/toastHooks'
 import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import type { ConnectedSource } from '../../types'
@@ -34,14 +34,23 @@ export function SourceModal({ open, onClose, source }: SourceModalProps) {
   const [loadingStatus, setLoadingStatus] = useState(false)
   const { notify } = useToast()
 
+  const active = open && source ? source : null
+  const [prevActive, setPrevActive] = useState(active)
+  if (active !== prevActive) {
+    setPrevActive(active)
+    if (active) setLoadingStatus(true)
+    else setStatus(null)
+  }
+
   useEffect(() => {
-    if (!open || !source) { setStatus(null); return }
-    setLoadingStatus(true)
+    if (!active) return
+    let cancelled = false
     api.fetchIntegrationStatus()
-      .then(items => setStatus(items.find(i => i.id === source.integrationId) ?? null))
-      .catch(() => setStatus(null))
-      .finally(() => setLoadingStatus(false))
-  }, [open, source])
+      .then(items => { if (!cancelled) setStatus(items.find(i => i.id === active.integrationId) ?? null) })
+      .catch(() => { if (!cancelled) setStatus(null) })
+      .finally(() => { if (!cancelled) setLoadingStatus(false) })
+    return () => { cancelled = true }
+  }, [active])
 
   if (!source) return null
 

@@ -40,7 +40,7 @@ describe('AuthGate', () => {
   })
 
   it('shows the server message and stays on the login page for an unauthorised email', async () => {
-    routes['/api/auth/session'] = () => json({ success: false, error: 'This email is not authorised to use ITO Endpoint.' }, 403)
+    routes['/api/auth/session'] = () => json({ success: false, error: 'This email is not authorised to use EndPoint+.' }, 403)
     app()
     await userEvent.type(await screen.findByLabelText('Work email'), 'someone@zinnia.com')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -87,7 +87,7 @@ describe('AuthGate', () => {
     Object.defineProperty(window, 'location', { configurable: true, value: { ...original, set href(v: string) { assign(v) }, get href() { return 'http://localhost/' } } })
     try {
       app()
-      await userEvent.click(await screen.findByRole('button', { name: /Sign in with Zinnia/ }))
+      await userEvent.click(await screen.findByRole('button', { name: /Sign in with Microsoft/ }))
       await waitFor(() => expect(assign).toHaveBeenCalledWith(expect.stringContaining('login.microsoftonline.com')))
     } finally {
       Object.defineProperty(window, 'location', { configurable: true, value: original })
@@ -97,7 +97,7 @@ describe('AuthGate', () => {
   it('hides the email form when only Microsoft sign-in is enabled', async () => {
     routes['/api/auth/config'] = () => json({ success: true, data: { passwordRequired: false, emailSignIn: false, microsoft: true } })
     app()
-    expect(await screen.findByRole('button', { name: /Sign in with Zinnia/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Sign in with Microsoft/ })).toBeInTheDocument()
     expect(screen.queryByLabelText('Work email')).not.toBeInTheDocument()
   })
 
@@ -129,7 +129,7 @@ describe('AuthGate', () => {
     routes['/api/auth/config'] = () => json({ success: true, data: { passwordRequired: false, emailSignIn: false, microsoft: true } })
     localStorage.setItem('ito.lastEmail', 'avinash.verma@zinnia.com')
     app()
-    expect(await screen.findByRole('button', { name: /Sign in with Zinnia/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Sign in with Microsoft/ })).toBeInTheDocument()
     expect(screen.queryByLabelText('Work email')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('avinash.verma@zinnia.com')).not.toBeInTheDocument()
   })

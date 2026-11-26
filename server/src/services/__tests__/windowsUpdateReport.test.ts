@@ -8,6 +8,7 @@ vi.mock('../../store/integrationStore.js', () => ({ getSlackConfig: vi.fn() }))
 
 import { classifyWindowsUpdate, buildWindowsUpdateRows, buildWindowsUpdateOverview, prioritize, topUpdatesToDeploy, compareSnapshots, buildFeatureUpdateRows } from '../windowsUpdateReport.js'
 import type { MissingPatch, PatchSystemStatus } from '../endpointCentralPatch.js'
+import type { Json } from '../../test/json.js'
 
 const patch = (o: Partial<MissingPatch>): MissingPatch => ({ patchId: '1', name: 'Windows11.0-KB5030000-x64.msu', description: '', severity: 'Important', category: 'OS update', vendor: 'Microsoft', updateType: null, kb: null, bulletinId: null, cves: [], releasedAt: '2026-10-01T00:00:00.000Z', rebootRequirement: null, approvalStatus: null, deploymentStatus: null, ...o })
 const sys = (o: Partial<PatchSystemStatus>): PatchSystemStatus => ({ resourceId: 'r', detailResourceId: 'd', platform: 'Windows', osName: 'Windows 11 Enterprise Edition (x64)', names: ['PC-1'], missingOsPatches: 1, missingThirdPartyPatches: 0, missingDriverPatches: 0, missingBiosPatches: 0, criticalPatchCount: 0, importantPatchCount: 0, moderatePatchCount: 0, lowPatchCount: 0, lastScanTime: null, lastSuccessfulScanTime: null, scanSucceeded: true, ...o })
@@ -73,7 +74,7 @@ describe('smart helpers', () => {
 })
 
 describe('buildFeatureUpdateRows', () => {
-  const dev = (deviceName: string, osVersion: string, operatingSystem = 'Windows') => ({ deviceName, osVersion, operatingSystem, lastSyncDateTime: '2026-11-05T10:00:00Z' }) as any
+  const dev = (deviceName: string, osVersion: string, operatingSystem = 'Windows') => ({ deviceName, osVersion, operatingSystem, lastSyncDateTime: '2026-11-05T10:00:00Z' }) as Json
   it('flags clients below the target build, skipping current, newer, server and non-Windows devices', () => {
     const rows = buildFeatureUpdateRows([
       dev('ON-25H2', '10.0.26200.1000'), dev('NEWER', '10.0.26300.1'), dev('ON-24H2', '10.0.26100.5000'), dev('ON-23H2', '10.0.22631.4000'),

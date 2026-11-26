@@ -415,7 +415,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     id: 'fleet-risk-score', group: 'Fleet Overview',
     title: 'Inventory Data Gaps',
     description: 'Devices with a missing or unknown last check-in or macOS version in the current MDM inventory.',
-    accentColor: '#F59E0B',
+    accentColor: '#818CF8',
     filterFn: devices => devices.filter(d => daysSinceCheckIn(d.lastCheckIn) === 999 || !hasReportedOsVersion(d)),
     getValue: devices => devices.filter(d => daysSinceCheckIn(d.lastCheckIn) === 999 || !hasReportedOsVersion(d)).length,
     columns: FLEET_COLS,
@@ -535,7 +535,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     id: 'missing-security-updates', group: 'Patch Health',
     title: 'Missing Security Updates',
     description: 'Devices with missing OS patches per Patch Manager. Only devices running the Patch Manager agent are assessed.',
-    accentColor: '#F59E0B',
+    accentColor: '#818CF8',
     getUnavailableReason: patchUnavailableReason,
     filterFn: devices => devices.filter(missingOsUpdates),
     getValue: devices => devices.some(hasPatchData) ? devices.filter(missingOsUpdates).length : 'N/A',
@@ -577,7 +577,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     id: 'stale-devices', group: 'Device Lifecycle',
     title: 'Stale Devices',
     description: 'Devices that have not checked in within the configured stale threshold. May indicate connectivity issues or user absence.',
-    accentColor: '#F59E0B',
+    accentColor: '#818CF8',
     filterFn: (devices, opts) => {
       const thresh = opts?.staleThresholdDays ?? 30
       return devices.filter(d => {
@@ -642,7 +642,7 @@ export const KPI_CONFIGS: Record<KpiId, KpiConfig> = {
     id: 'macos-outdated', group: 'OS Health',
     title: 'Outdated macOS',
     description: `Macs on macOS ${OLDEST_SUPPORTED_MACOS_MAJOR}–${CURRENT_MACOS_MAJOR - 1}: still supported by Apple but behind the current release.`,
-    accentColor: '#F59E0B',
+    accentColor: '#818CF8',
     filterFn: devices => devices.filter(macosOutdated),
     getCountSize: devices => devices.filter(macosOutdated).length,
     getPopulationSize: devices => devices.filter(hasReportedOsVersion).length,

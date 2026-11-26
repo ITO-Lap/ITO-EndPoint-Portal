@@ -1,11 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 115 160" fill="none">
-  <!-- Red – largest loop -->
-  <path d="M62 11C88 11 104 35 104 59C104 91 80 119 62 125C44 119 20 91 20 59C20 35 36 11 62 11Z"
-        stroke="#E02020" stroke-width="8" stroke-linejoin="round"/>
-  <!-- Orange – medium loop -->
-  <path d="M71 35C93 35 108 55 108 75C108 101 88 125 71 131C54 125 36 101 36 75C36 55 49 35 71 35Z"
-        stroke="#F07820" stroke-width="7" stroke-linejoin="round"/>
-  <!-- Yellow – small loop -->
-  <path d="M66 103C81 103 96 115 96 131C96 147 81 155 66 155C51 155 36 147 36 131C36 115 51 103 66 103Z"
-        stroke="#F5C500" stroke-width="6.5" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4F46E5"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>
+  <rect x="14" y="14" width="7" height="36" rx="2" fill="#fff"/>
+  <rect x="14" y="14" width="24" height="7" rx="2" fill="#fff"/>
+  <rect x="14" y="28.5" width="19" height="7" rx="2" fill="#fff"/>
+  <rect x="14" y="43" width="24" height="7" rx="2" fill="#fff"/>
+  <rect x="41" y="29.5" width="15" height="5" rx="2.5" fill="#FDE047"/>
+  <rect x="46" y="24.5" width="5" height="15" rx="2.5" fill="#FDE047"/>
 </svg>

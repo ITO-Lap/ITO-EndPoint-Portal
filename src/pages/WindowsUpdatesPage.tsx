@@ -27,10 +27,10 @@ const SEV: Record<string, string> = {
   Critical: 'bg-red-50 text-red-700 border-red-200', Important: 'bg-orange-50 text-orange-700 border-orange-200',
   Moderate: 'bg-amber-50 text-amber-700 border-amber-200', Low: 'bg-slate-50 text-slate-600 border-slate-200',
 }
-const PRIORITY: Record<string, string> = { 'P1 Urgent': 'bg-red-100 text-red-700', 'P2 High': 'bg-orange-100 text-orange-700', 'P3 Normal': 'bg-slate-100 text-slate-600' }
+const PRIORITY: Record<string, string> = { 'P1 Urgent': 'bg-red-100 text-red-700', 'P2 High': 'bg-indigo-100 text-indigo-700', 'P3 Normal': 'bg-slate-100 text-slate-600' }
 const BAND: Record<WuBand, string> = { Critical: 'bg-red-100 text-red-700', High: 'bg-orange-100 text-orange-700', Medium: 'bg-amber-100 text-amber-700', Low: 'bg-emerald-100 text-emerald-700' }
 const BAND_BAR: Record<WuBand, string> = { Critical: 'bg-red-500', High: 'bg-orange-500', Medium: 'bg-amber-400', Low: 'bg-emerald-500' }
-const KEV_STATUS = { overdue: { cls: 'bg-red-100 text-red-700', label: 'Overdue' }, 'due-soon': { cls: 'bg-orange-100 text-orange-700', label: 'Due soon' }, 'on-track': { cls: 'bg-emerald-100 text-emerald-700', label: 'On track' } } as const
+const KEV_STATUS = { overdue: { cls: 'bg-red-100 text-red-700', label: 'Overdue' }, 'due-soon': { cls: 'bg-indigo-100 text-indigo-700', label: 'Due soon' }, 'on-track': { cls: 'bg-emerald-100 text-emerald-700', label: 'On track' } } as const
 const kevWhen = (d: number): string => (d < 0 ? `${-d} day${d === -1 ? '' : 's'} overdue` : d === 0 ? 'due today' : `${d} day${d === 1 ? '' : 's'} left`)
 const PRIORITY_RANK: Record<string, number> = { 'P1 Urgent': 0, 'P2 High': 1, 'P3 Normal': 2 }
 const SEV_RANK: Record<string, number> = { Critical: 0, Important: 1, Moderate: 2, Low: 3, '': 4 }
@@ -62,7 +62,7 @@ function exportRowsCsv(rows: WuRow[]): void {
 function downloadIcs(title: string, isoDate: string): void {
   const d = isoDate.replace(/-/g, '')
   const next = new Date(Date.parse(isoDate) + 86_400_000).toISOString().slice(0, 10).replace(/-/g, '')
-  download(`${title.toLowerCase().replace(/\W+/g, '-')}.ics`, ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ITO Endpoint//Windows Updates//EN', 'BEGIN:VEVENT', `UID:${d}-${title.replace(/\W+/g, '')}@ito-endpoint`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`, `SUMMARY:${title}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n'), 'text/calendar')
+  download(`${title.toLowerCase().replace(/\W+/g, '-')}.ics`, ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//EndPoint+//Windows Updates//EN', 'BEGIN:VEVENT', `UID:${d}-${title.replace(/\W+/g, '')}@ito-endpoint`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`, `SUMMARY:${title}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n'), 'text/calendar')
 }
 
 // ── Small building blocks ────────────────────────────────────────────────────────
@@ -76,25 +76,25 @@ function Card({ title, right, children }: { title: string; right?: ReactNode; ch
   )
 }
 function Kpi({ label, value, tone = 'text-slate-900', hint, onClick, active }: { label: string; value: ReactNode; tone?: string; hint?: string; onClick?: () => void; active?: boolean }) {
-  const body = <><p className="flex items-center justify-between text-xs font-semibold text-slate-500">{label}{onClick && <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-orange-500" />}</p><p className={`mt-1 text-2xl font-bold ${tone}`}>{value}</p>{hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}</>
+  const body = <><p className="flex items-center justify-between text-xs font-semibold text-slate-500">{label}{onClick && <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-indigo-500" />}</p><p className={`mt-1 text-2xl font-bold ${tone}`}>{value}</p>{hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}</>
   return onClick
-    ? <button type="button" onClick={onClick} aria-pressed={active} className={`group w-full rounded-2xl border bg-white p-4 text-left transition hover:border-orange-300 hover:shadow-sm ${active ? 'border-orange-400 ring-2 ring-orange-100' : 'border-slate-200'}`}>{body}</button>
+    ? <button type="button" onClick={onClick} aria-pressed={active} className={`group w-full rounded-2xl border bg-white p-4 text-left transition hover:border-indigo-300 hover:shadow-sm ${active ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'}`}>{body}</button>
     : <div className="rounded-2xl border border-slate-200 bg-white p-4">{body}</div>
 }
 const Pill = ({ cls, children, onClick, title }: { cls: string; children: ReactNode; onClick?: () => void; title?: string }) => onClick
-  ? <button type="button" title={title} onClick={e => { e.stopPropagation(); onClick() }} className={`inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold transition hover:ring-2 hover:ring-orange-200 ${cls}`}>{children}</button>
+  ? <button type="button" title={title} onClick={e => { e.stopPropagation(); onClick() }} className={`inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold transition hover:ring-2 hover:ring-indigo-200 ${cls}`}>{children}</button>
   : <span className={`inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold ${cls}`}>{children}</span>
 const Loading = ({ what }: { what: string }) => <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> {what}</div>
 const ErrorBox = ({ msg }: { msg: string }) => <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{msg}</div>
 const Th = ({ children, onClick, sorted }: { children: ReactNode; onClick?: () => void; sorted?: 'asc' | 'desc' | undefined }) => (
-  <th className="px-4 py-2.5 font-semibold">{onClick ? <button type="button" onClick={onClick} className="inline-flex items-center gap-1 hover:text-slate-800">{children}<span className="text-[0.6rem] text-orange-500">{sorted === 'asc' ? '▲' : sorted === 'desc' ? '▼' : ''}</span></button> : children}</th>
+  <th className="px-4 py-2.5 font-semibold">{onClick ? <button type="button" onClick={onClick} className="inline-flex items-center gap-1 hover:text-slate-800">{children}<span className="text-[0.6rem] text-indigo-500">{sorted === 'asc' ? '▲' : sorted === 'desc' ? '▼' : ''}</span></button> : children}</th>
 )
-const rowCls = 'cursor-pointer align-top transition hover:bg-orange-50/40'
+const rowCls = 'cursor-pointer align-top transition hover:bg-indigo-50/40'
 const CveChip = ({ id, onOpen }: { id: string; onOpen: (id: string) => void }) => (
   <button type="button" onClick={e => { e.stopPropagation(); onOpen(id) }} className="rounded-md bg-sky-50 px-1.5 py-0.5 font-mono text-[0.68rem] font-semibold text-sky-700 hover:bg-sky-100">{id}</button>
 )
 const FilterChip = ({ children, onClear }: { children: ReactNode; onClear: () => void }) => (
-  <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">{children}<button type="button" aria-label="Clear filter" onClick={onClear}><X className="h-3 w-3" /></button></span>
+  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">{children}<button type="button" aria-label="Clear filter" onClick={onClear}><X className="h-3 w-3" /></button></span>
 )
 
 // ── CVE table + detail ───────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ function CveTable({ cves, epss, onOpen }: { cves: WuCve[]; epss: WuEpss; onOpen:
               {c.kev && <Pill cls="bg-red-100 text-red-700">CISA KEV{c.kevDueDate ? ` · due ${fmtDate(c.kevDueDate)}` : ''}</Pill>}
               {c.ransomware && <Pill cls="bg-purple-100 text-purple-700">Ransomware use</Pill>}
               {c.disclosed && <Pill cls="bg-amber-100 text-amber-700">Publicly disclosed</Pill>}
-              {c.exploitability === 'Exploitation More Likely' && <Pill cls="bg-orange-100 text-orange-700">Exploitation more likely</Pill>}
+              {c.exploitability === 'Exploitation More Likely' && <Pill cls="bg-indigo-100 text-indigo-700">Exploitation more likely</Pill>}
               {!c.exploited && !c.kev && !c.disclosed && c.exploitability !== 'Exploitation More Likely' && <span className="text-slate-400">{c.exploitability || 'No known exploitation'}</span>}
             </div></td>
             <td className="px-4 py-3"><span className={`rounded-full border px-2 py-0.5 font-semibold ${SEV[c.severity] ?? SEV['Low']}`}>{c.severity}</span></td>
@@ -183,10 +183,10 @@ function BuildDevices({ build, fixed, onOpen }: { build: WuFleetBuild; fixed: { 
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold text-slate-800">{rows.length} device{rows.length === 1 ? '' : 's'}{build.devices > rows.length ? ` (showing first ${rows.length})` : ''}{fixed && !Number.isNaN(target) ? ` · ${patched} on ${fixed.kb} or newer · ${rows.length - patched} not yet` : ''}</p>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search device" className="ml-auto rounded-lg border border-slate-200 px-2 py-1" />
-        {fixed && !Number.isNaN(target) && (['all', 'patched', 'unpatched'] as const).map(k => <button key={k} type="button" onClick={() => setShow(k)} className={`rounded-full border px-2.5 py-1 font-semibold ${show === k ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-600'}`}>{k === 'all' ? 'All' : k === 'patched' ? 'Patched' : 'Not yet'}</button>)}
+        {fixed && !Number.isNaN(target) && (['all', 'patched', 'unpatched'] as const).map(k => <button key={k} type="button" onClick={() => setShow(k)} className={`rounded-full border px-2.5 py-1 font-semibold ${show === k ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600'}`}>{k === 'all' ? 'All' : k === 'patched' ? 'Patched' : 'Not yet'}</button>)}
       </div>
       <div className="max-h-72 overflow-auto rounded-xl border border-slate-200"><table className="w-full text-left"><thead className="sticky top-0 bg-slate-50 text-slate-500"><tr><Th>Device</Th><Th>OS version</Th>{fixed && <Th>{fixed.kb}</Th>}</tr></thead><tbody className="divide-y divide-slate-100">
-        {shown.map(d => <tr key={d.name} onClick={() => onOpen(d.name)} className={rowCls}><td className="px-3 py-2 font-semibold text-slate-800">{d.name}</td><td className="px-3 py-2 font-mono text-slate-600">{d.osVersion}</td>{fixed && <td className="px-3 py-2">{d.patched === null ? <span className="text-slate-400">—</span> : <Pill cls={d.patched ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}>{d.patched ? 'Patched' : 'Missing'}</Pill>}</td>}</tr>)}
+        {shown.map(d => <tr key={d.name} onClick={() => onOpen(d.name)} className={rowCls}><td className="px-3 py-2 font-semibold text-slate-800">{d.name}</td><td className="px-3 py-2 font-mono text-slate-600">{d.osVersion}</td>{fixed && <td className="px-3 py-2">{d.patched === null ? <span className="text-slate-400">—</span> : <Pill cls={d.patched ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}>{d.patched ? 'Patched' : 'Missing'}</Pill>}</td>}</tr>)}
         {!shown.length && <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-500">No devices match.</td></tr>}
       </tbody></table></div>
     </div>
@@ -253,10 +253,36 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
     setLoadingIntel(true); setIntelErr(null)
     try { setIntel(await windowsUpdatesApi.intel(refresh)) } catch (e) { setIntelErr(e instanceof Error ? e.message : 'Could not load Microsoft intelligence') } finally { setLoadingIntel(false) }
   }, [])
-  useEffect(() => { void loadFleet(); void loadIntel() }, [loadFleet, loadIntel])
+  // Initial load — both loading flags start true and both errors null.
+  useEffect(() => {
+    let cancelled = false
+    windowsUpdatesApi.fleet(false)
+      .then(f => { if (!cancelled) setFleet(f) })
+      .catch((e: unknown) => { if (!cancelled) setFleetErr(e instanceof Error ? e.message : 'Could not load fleet data') })
+      .finally(() => { if (!cancelled) setLoadingFleet(false) })
+    windowsUpdatesApi.intel(false)
+      .then(i => { if (!cancelled) setIntel(i) })
+      .catch((e: unknown) => { if (!cancelled) setIntelErr(e instanceof Error ? e.message : 'Could not load Microsoft intelligence') })
+      .finally(() => { if (!cancelled) setLoadingIntel(false) })
+    return () => { cancelled = true }
+  }, [])
   // The fleet view is served without waiting for Microsoft data; once that arrives, reload it to add support status and CVE context.
   const fleetNeedsIntel = !!fleet?.warnings.some(w => w.includes('still loading'))
-  useEffect(() => { if (intel && fleetNeedsIntel) void loadFleet() }, [intel, fleetNeedsIntel, loadFleet])
+  const reloadTrigger = intel && fleetNeedsIntel ? intel : null
+  const [prevReloadTrigger, setPrevReloadTrigger] = useState(reloadTrigger)
+  if (reloadTrigger !== prevReloadTrigger) {
+    setPrevReloadTrigger(reloadTrigger)
+    if (reloadTrigger) { setLoadingFleet(true); setFleetErr(null) }
+  }
+  useEffect(() => {
+    if (!reloadTrigger) return
+    let cancelled = false
+    windowsUpdatesApi.fleet(false)
+      .then(f => { if (!cancelled) setFleet(f) })
+      .catch((e: unknown) => { if (!cancelled) setFleetErr(e instanceof Error ? e.message : 'Could not load fleet data') })
+      .finally(() => { if (!cancelled) setLoadingFleet(false) })
+    return () => { cancelled = true }
+  }, [reloadTrigger])
 
   const latest = intel?.latestRelease ?? null
   const topIds = latest?.topCves.map(c => c.cve).join(',') ?? ''
@@ -317,7 +343,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
       </div>
 
       <div role="tablist" className="flex flex-wrap gap-1 border-b border-slate-200">
-        {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition ${tab === t.id ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{t.label}</button>)}
+        {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition ${tab === t.id ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{t.label}</button>)}
       </div>
 
       {(tab === 'exposure' || tab === 'risk' || tab === 'devices') && (fleetErr ? <ErrorBox msg={fleetErr} /> : loadingFleet && !fleet ? <Loading what="Reading Endpoint Central and Intune…" /> : fleet && <>
@@ -328,7 +354,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi label="Devices affected" value={fleet.devicesAffected} hint={`of ${fleet.devicesChecked} Windows client devices · click for the list`} onClick={() => setDrill({ type: 'devices-affected' })} />
             <Kpi label="Missing security updates" value={fleet.totals.security} tone="text-red-600" hint="device × update pairs · click to filter" onClick={() => goDevices({ kind: 'Security update' })} />
-            <Kpi label="Missing feature updates" value={fleet.totals.feature} tone="text-orange-600" hint={`target ${fleet.target.label} · click to filter`} onClick={() => goDevices({ kind: 'Feature update' })} />
+            <Kpi label="Missing feature updates" value={fleet.totals.feature} tone="text-indigo-600" hint={`target ${fleet.target.label} · click to filter`} onClick={() => goDevices({ kind: 'Feature update' })} />
             <Kpi label="Urgent (P1)" value={fleet.totals.urgent} tone={fleet.totals.urgent ? 'text-red-600' : 'text-slate-900'} hint={`${fleet.totals.high} high · ${fleet.totals.normal} normal · click to filter`} onClick={() => goDevices({ priority: 'P1 Urgent' })} />
           </div>
           {fleet.target.newerReleaseAvailable && <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">Feature updates are measured against <b>{fleet.target.label}</b> (build {fleet.target.build}). Microsoft has since released <b>{fleet.target.newerReleaseAvailable.version}</b> (build {fleet.target.newerReleaseAvailable.build}). Set <code className="rounded bg-white px-1">WINDOWS_FEATURE_TARGET_BUILD={fleet.target.newerReleaseAvailable.build}</code> on the server to track it.</div>}
@@ -351,7 +377,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
             <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><Th>Version</Th><Th>Build</Th><Th>Devices</Th><Th>vs target</Th><Th>Microsoft support</Th></tr></thead><tbody className="divide-y divide-slate-100">
               {fleet.builds.map(b => (
                 <tr key={b.build} onClick={() => setDrill({ type: 'build', build: b })} className={rowCls}><td className="px-4 py-3 font-semibold text-slate-800">{b.label}</td><td className="px-4 py-3 font-mono text-slate-600">{b.build}</td><td className="px-4 py-3 font-semibold text-slate-800">{b.devices}</td>
-                  <td className="px-4 py-3"><Pill cls={b.status === 'behind' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}>{b.status === 'behind' ? 'Behind target' : b.status === 'current' ? 'On target' : 'Ahead of target'}</Pill></td>
+                  <td className="px-4 py-3"><Pill cls={b.status === 'behind' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}>{b.status === 'behind' ? 'Behind target' : b.status === 'current' ? 'On target' : 'Ahead of target'}</Pill></td>
                   <td className="px-4 py-3"><Pill cls={lifeOf(b.lifecycle).cls}>{lifeOf(b.lifecycle).label}</Pill>{b.endOfServicing.map(e => <span key={e.edition} className="ml-2 text-slate-400">{e.edition}: {fmtDate(e.date)}</span>)}</td></tr>
               ))}
               {!fleet.builds.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No Windows builds were reported by Intune.</td></tr>}
@@ -427,13 +453,13 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
         <MonthTiles month={latest} previous={intel.previousRelease} filter={cveFilter} onFilter={setCveTile} />
         <Card title="Vulnerability impact breakdown" right={impact ? <FilterChip onClear={() => setImpact(null)}>{impact}</FilterChip> : <span className="text-xs text-slate-500">Click a bar to filter</span>}>
           <div className="space-y-1 p-3">{latest.byImpact.map(i => { const max = Math.max(1, ...latest.byImpact.map(x => x.count)); return (
-            <button key={i.impact} type="button" onClick={() => { setImpact(impact === i.impact ? null : i.impact); setCveLimit(25) }} aria-pressed={impact === i.impact} className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-xs transition hover:bg-orange-50/60 ${impact === i.impact ? 'bg-orange-50' : ''}`}><span className="w-44 shrink-0 text-left text-slate-600">{i.impact}</span><div className="h-2 flex-1 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-sky-500" style={{ width: `${(i.count / max) * 100}%` }} /></div><span className="w-10 text-right font-semibold text-slate-700">{i.count}</span></button>
+            <button key={i.impact} type="button" onClick={() => { setImpact(impact === i.impact ? null : i.impact); setCveLimit(25) }} aria-pressed={impact === i.impact} className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-xs transition hover:bg-indigo-50/60 ${impact === i.impact ? 'bg-indigo-50' : ''}`}><span className="w-44 shrink-0 text-left text-slate-600">{i.impact}</span><div className="h-2 flex-1 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-sky-500" style={{ width: `${(i.count / max) * 100}%` }} /></div><span className="w-10 text-right font-semibold text-slate-700">{i.count}</span></button>
           ) })}</div>
         </Card>
         <Card title="Highest-risk CVEs this release" right={<span className="text-xs text-slate-500">Ranked: exploited → CISA KEV → disclosed → severity → CVSS · click a row for NVD/EPSS details</span>}>
           {(cveFilter !== 'all' || impact) && <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">Showing {cves.length} of the {latest.topCves.length} highest-risk CVEs that match{cveFilter !== 'all' ? ` “${cveFilter}”` : ''}{impact ? ` · ${impact}` : ''}. Tile totals count every Windows CVE this month.</p>}
           <CveTable cves={cves.slice(0, cveLimit)} epss={epss} onOpen={openCve} />
-          {cves.length > cveLimit && <div className="border-t border-slate-100 px-4 py-2"><button type="button" onClick={() => setCveLimit(l => l + 25)} className="text-xs font-semibold text-orange-600 hover:underline">Show 25 more ({cves.length - cveLimit} remaining)</button></div>}
+          {cves.length > cveLimit && <div className="border-t border-slate-100 px-4 py-2"><button type="button" onClick={() => setCveLimit(l => l + 25)} className="text-xs font-semibold text-indigo-600 hover:underline">Show 25 more ({cves.length - cveLimit} remaining)</button></div>}
         </Card>
         <Card title="Fixed build per Windows version" right={<span className="text-xs text-slate-500">Click a KB to open Microsoft's article · click a device count to list the devices</span>}>
           <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><Th>Windows version</Th><Th>Update (KB)</Th><Th>Fixed build</Th><Th>Your devices</Th></tr></thead><tbody className="divide-y divide-slate-100">
@@ -473,7 +499,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
             {deviceSummary.slice(0, 200).map(d => <tr key={d.device} onClick={() => setDrill({ type: 'device', name: d.device })} className={rowCls}><td className="px-4 py-2.5"><p className="font-semibold text-slate-800">{d.device}</p><p className="text-slate-400">{d.os}</p></td><td className="px-4 py-2.5"><Pill cls={PRIORITY[d.worst] ?? ''}>{d.worst}</Pill></td><td className="px-4 py-2.5 font-semibold text-slate-800">{d.updates}</td><td className="px-4 py-2.5 text-slate-600">{d.days >= 0 ? `${d.days} days` : '—'}</td></tr>)}
           </tbody></table></div>
           {deviceSummary.length > 200 && <p className="mt-2 text-xs text-slate-500">Showing 200 of {deviceSummary.length}. Use the Devices tab for filtering and export.</p>}
-          <button type="button" onClick={() => goDevices({})} className="mt-3 text-xs font-semibold text-orange-600 hover:underline">Open the Devices tab →</button>
+          <button type="button" onClick={() => goDevices({})} className="mt-3 text-xs font-semibold text-indigo-600 hover:underline">Open the Devices tab →</button>
         </Modal>
       )}
 
@@ -493,7 +519,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
                 <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-100"><table className="w-full text-left text-xs"><tbody className="divide-y divide-slate-100">
                   {list.slice(0, 200).map((r, i) => <tr key={`${r.device}-${i}`} onClick={() => setDrill({ type: 'device', name: r.device })} className={rowCls}><td className="px-3 py-2 font-semibold text-slate-800">{r.device}</td><td className="px-3 py-2"><Pill cls={PRIORITY[r.priority] ?? ''}>{r.priority}</Pill></td><td className="px-3 py-2 text-slate-500">{r.daysMissing === '' ? '—' : `${r.daysMissing} days`}</td></tr>)}
                 </tbody></table></div></div>
-              <div className="flex flex-wrap gap-3"><button type="button" onClick={() => goDevices({ search: u.kb || u.update })} className="text-xs font-semibold text-orange-600 hover:underline">Filter the Devices tab for this update →</button>
+              <div className="flex flex-wrap gap-3"><button type="button" onClick={() => goDevices({ search: u.kb || u.update })} className="text-xs font-semibold text-indigo-600 hover:underline">Filter the Devices tab for this update →</button>
                 <button type="button" onClick={() => exportRowsCsv(list)} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:underline"><Download className="h-3 w-3" /> Export these devices</button></div>
             </div>
           </Modal>
@@ -515,7 +541,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
                 </div>
               ))}
               {!list.length && <p className="text-sm text-slate-500">No missing updates found for this device in the current data.</p>}
-              <button type="button" onClick={() => goDevices({ search: drill.name })} className="text-xs font-semibold text-orange-600 hover:underline">Show only this device in the Devices tab →</button>
+              <button type="button" onClick={() => goDevices({ search: drill.name })} className="text-xs font-semibold text-indigo-600 hover:underline">Show only this device in the Devices tab →</button>
             </div>
           </Modal>
         )
@@ -528,7 +554,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
             <div className="space-y-3 text-xs">
               <div className="flex flex-wrap items-center gap-2"><Pill cls={KEV_STATUS[k.status].cls}>{KEV_STATUS[k.status].label}</Pill>{k.ransomware && <Pill cls="bg-red-100 text-red-700">Known ransomware use</Pill>}<button type="button" onClick={() => openCve(k.cve)} className="font-semibold text-sky-700 hover:underline">Open CVE details →</button></div>
               <p className="font-semibold text-slate-800">{k.devices} device{k.devices === 1 ? '' : 's'} still exposed{k.devices > k.deviceNames.length ? ` (showing ${k.deviceNames.length})` : ''}</p>
-              <div className="flex flex-wrap gap-1.5">{k.deviceNames.map(n => <button key={n} type="button" onClick={() => setDrill({ type: 'device', name: n })} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:border-orange-300 hover:text-orange-600">{n}</button>)}</div>
+              <div className="flex flex-wrap gap-1.5">{k.deviceNames.map(n => <button key={n} type="button" onClick={() => setDrill({ type: 'device', name: n })} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:border-indigo-300 hover:text-indigo-600">{n}</button>)}</div>
             </div>
           </Modal>
         )
@@ -539,10 +565,10 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
         return (
           <Modal open title={b.label} description={`Build ${b.build} · ${b.devices} of your devices`} onClose={() => setDrill(null)} size="lg">
             <div className="space-y-3 text-sm">
-              <div className="flex flex-wrap gap-2"><Pill cls={b.status === 'behind' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}>{b.status === 'behind' ? 'Behind target' : b.status === 'current' ? 'On target' : 'Ahead of target'}</Pill><Pill cls={lifeOf(b.lifecycle).cls}>{lifeOf(b.lifecycle).label}</Pill></div>
+              <div className="flex flex-wrap gap-2"><Pill cls={b.status === 'behind' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}>{b.status === 'behind' ? 'Behind target' : b.status === 'current' ? 'On target' : 'Ahead of target'}</Pill><Pill cls={lifeOf(b.lifecycle).cls}>{lifeOf(b.lifecycle).label}</Pill></div>
               {life ? <><p className="text-slate-700">{lifecycleAdvice(life, b.devices)}</p><LifecycleTable rows={[life]} fleetByBuild={fleetByBuild} onOpen={() => undefined} /></> : <p className="text-slate-600">Microsoft lifecycle data has no entry for build {b.build}; check Windows release health for its support dates.</p>}
               <BuildDevices build={b} fixed={drill.fixed} onOpen={name => setDrill({ type: 'device', name })} />
-              {b.status === 'behind' && <button type="button" onClick={() => goDevices({ kind: 'Feature update' })} className="text-xs font-semibold text-orange-600 hover:underline">See devices missing the feature update →</button>}
+              {b.status === 'behind' && <button type="button" onClick={() => goDevices({ kind: 'Feature update' })} className="text-xs font-semibold text-indigo-600 hover:underline">See devices missing the feature update →</button>}
             </div>
           </Modal>
         )
@@ -557,7 +583,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
               <p className="text-slate-700">{lifecycleAdvice(r, f?.devices ?? 0)}</p>
               <ul className="space-y-1 text-xs text-slate-600">{r.endOfServicing.map(e => { const d = Math.round((Date.parse(e.date) - Date.now()) / 86_400_000); return <li key={e.edition}><b>{e.edition}:</b> {fmtDate(e.date)} — {d >= 0 ? `${d} days remaining` : `ended ${-d} days ago`}</li> })}</ul>
               <div className="flex flex-wrap gap-3 text-xs">
-                {f && <button type="button" onClick={() => setDrill({ type: 'build', build: f })} className="font-semibold text-orange-600 hover:underline">{f.devices} of your devices →</button>}
+                {f && <button type="button" onClick={() => setDrill({ type: 'build', build: f })} className="font-semibold text-indigo-600 hover:underline">{f.devices} of your devices →</button>}
                 {r.endOfServicing.filter(e => Date.parse(e.date) > Date.now()).slice(0, 1).map(e => <button key={e.date} type="button" onClick={() => downloadIcs(`${r.version} end of servicing (${e.edition})`, e.date)} className="inline-flex items-center gap-1 font-semibold text-slate-600 hover:underline"><CalendarPlus className="h-3 w-3" /> Add end date to calendar</button>)}
                 <a href="https://learn.microsoft.com/windows/release-health/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-sky-700 hover:underline">Windows release health<ExternalLink className="h-3 w-3" /></a>
               </div>
@@ -573,7 +599,7 @@ export function WindowsUpdatesPage({ onBack }: { onBack: () => void }) {
             {latest && <p>Last release (<b>{latest.title}</b>) fixed <b>{latest.totals.cves}</b> Windows CVEs, <b>{latest.totals.critical}</b> critical, <b>{latest.totals.exploited}</b> exploited when released. Expect a similar volume.</p>}
             {fleet && <p>Today <b>{fleet.devicesAffected}</b> devices already miss updates ({fleet.totals.urgent} urgent). Clearing that backlog before the release keeps the next cycle manageable.</p>}
             <div className="flex flex-wrap gap-3 text-xs">
-              <button type="button" onClick={() => downloadIcs('Windows Patch Tuesday', intel.upcoming.nextPatchTuesday.date)} className="inline-flex items-center gap-1 font-semibold text-orange-600 hover:underline"><CalendarPlus className="h-3 w-3" /> Add to calendar</button>
+              <button type="button" onClick={() => downloadIcs('Windows Patch Tuesday', intel.upcoming.nextPatchTuesday.date)} className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:underline"><CalendarPlus className="h-3 w-3" /> Add to calendar</button>
               <a href="https://msrc.microsoft.com/update-guide/releaseNote" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-sky-700 hover:underline">Microsoft release notes<ExternalLink className="h-3 w-3" /></a>
               {intel.earlyRelease && <button type="button" onClick={() => { setDrill(null); setTab('security') }} className="font-semibold text-slate-600 hover:underline">View latest release →</button>}
             </div>
@@ -600,7 +626,7 @@ function MonthTiles({ month, previous, filter, onFilter }: { month: WuMonth; pre
       <Kpi label="Critical" value={t.critical} tone="text-red-600" hint={delta(t.critical, p?.critical)} onClick={() => toggle('critical')} active={filter === 'critical'} />
       <Kpi label="Exploited (Microsoft)" value={t.exploited} tone={t.exploited ? 'text-red-600' : 'text-slate-900'} hint={delta(t.exploited, p?.exploited)} onClick={() => toggle('exploited')} active={filter === 'exploited'} />
       <Kpi label="In CISA KEV" value={t.inKev} tone={t.inKev ? 'text-red-600' : 'text-slate-900'} hint="Known exploited in the wild" onClick={() => toggle('kev')} active={filter === 'kev'} />
-      <Kpi label="Exploitation more likely" value={t.exploitationMoreLikely} tone="text-orange-600" hint={`${t.publiclyDisclosed} publicly disclosed`} onClick={() => toggle('likely')} active={filter === 'likely'} />
+      <Kpi label="Exploitation more likely" value={t.exploitationMoreLikely} tone="text-indigo-600" hint={`${t.publiclyDisclosed} publicly disclosed`} onClick={() => toggle('likely')} active={filter === 'likely'} />
     </div>
   )
 }

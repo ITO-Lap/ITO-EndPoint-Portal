@@ -1,17 +1,17 @@
 // Jira REST API v3 integration
-// Falls back to mock data when JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN are not set
+// Needs a Jira URL, email and API token (Settings -> Integrations, or JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN)
 
-const JIRA_BASE_URL   = process.env.JIRA_BASE_URL
-const JIRA_EMAIL      = process.env.JIRA_EMAIL
-const JIRA_API_TOKEN  = process.env.JIRA_API_TOKEN
-const JIRA_PROJECT_KEY = process.env.JIRA_PROJECT_KEY ?? 'ITO'
+import { getJiraConfig } from '../store/atlassianConfig.js'
 
+// Read on every call (not once at start-up), so credentials pushed from Settings -> Integrations apply immediately.
 export function isJiraConfigured(): boolean {
-  return !!(JIRA_BASE_URL && JIRA_EMAIL && JIRA_API_TOKEN)
+  const c = getJiraConfig()
+  return !!(c.baseUrl && c.email && c.apiToken)
 }
 
 function authHeaders(): Record<string, string> {
-  const creds = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString('base64')
+  const c = getJiraConfig()
+  const creds = Buffer.from(`${c.email}:${c.apiToken}`).toString('base64')
   return { Authorization: `Basic ${creds}`, 'Content-Type': 'application/json', Accept: 'application/json' }
 }
 
@@ -38,7 +38,7 @@ export interface JiraIssue {
 export async function createJiraIssue(input: JiraIssueInput): Promise<JiraIssue> {
   if (!isJiraConfigured()) throw new Error('Jira is not configured — add JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN in Settings → Integrations')
 
-  const projectKey = input.projectKey ?? JIRA_PROJECT_KEY
+  const projectKey = input.projectKey ?? getJiraConfig().projectKey
   const body = {
     fields: {
       project:     { key: projectKey },
@@ -50,21 +50,21 @@ export async function createJiraIssue(input: JiraIssueInput): Promise<JiraIssue>
     },
   }
 
-  const res = await fetch(`${JIRA_BASE_URL}/rest/api/3/issue`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
+  const res = await fetch(`${getJiraConfig().baseUrl}/rest/api/3/issue`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
   if (!res.ok) throw new Error(`Jira API error ${res.status}: ${await res.text()}`)
 
   const data = await res.json() as { id: string; key: string }
-  return { id: data.id, key: data.key, summary: input.summary, status: 'Open', priority: input.priority, issueType: input.issueType, url: `${JIRA_BASE_URL}/browse/${data.key}`, created: new Date().toISOString() }
+  return { id: data.id, key: data.key, summary: input.summary, status: 'Open', priority: input.priority, issueType: input.issueType, url: `${getJiraConfig().baseUrl}/browse/${data.key}`, created: new Date().toISOString() }
 }
 
 export async function searchJiraIssues(query: string): Promise<JiraIssue[]> {
   if (!isJiraConfigured()) return []
 
-  const jql = `project = ${JIRA_PROJECT_KEY} AND text ~ "${query}" ORDER BY created DESC`
-  const res = await fetch(`${JIRA_BASE_URL}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=10`, { headers: authHeaders() })
+  const jql = `project = ${getJiraConfig().projectKey} AND text ~ "${query}" ORDER BY created DESC`
+  const res = await fetch(`${getJiraConfig().baseUrl}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=10`, { headers: authHeaders() })
   if (!res.ok) throw new Error(`Jira search error: ${res.status}`)
 
   const data = await res.json() as { issues: Array<{ id: string; key: string; fields: { summary: string; status: { name: string }; priority: { name: string }; issuetype: { name: string }; created: string } }> }
-  return data.issues.map(i => ({ id: i.id, key: i.key, summary: i.fields.summary, status: i.fields.status.name, priority: i.fields.priority.name, issueType: i.fields.issuetype.name, url: `${JIRA_BASE_URL}/browse/${i.key}`, created: i.fields.created }))
+  return data.issues.map(i => ({ id: i.id, key: i.key, summary: i.fields.summary, status: i.fields.status.name, priority: i.fields.priority.name, issueType: i.fields.issuetype.name, url: `${getJiraConfig().baseUrl}/browse/${i.key}`, created: i.fields.created }))
 }
 

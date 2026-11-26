@@ -22,7 +22,7 @@ export function CopilotConversationList({ conversations, activeId, loading, erro
       <button
         type="button"
         onClick={onNew}
-        className="flex items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 transition"
+        className="flex items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
       >
         <Plus className="h-3.5 w-3.5" />
         New conversation

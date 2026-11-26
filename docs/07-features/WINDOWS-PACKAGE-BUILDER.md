@@ -1,15 +1,15 @@
 # Windows Package Builder
 
 Upload an installer, inspect it, review/edit the configuration, validate it on Windows, build the `.intunewin`,
-and follow a guided publishing checklist for Intune and Endpoint Central. **Nothing is published, assigned or
-deployed automatically.** The Swift Brew builder and the WinGet workflow are separate and unchanged.
+and open the output folder. **This module only packages applications — it does not publish, assign or deploy
+anything to Intune or Endpoint Central.** The Swift Brew builder and the WinGet workflow are separate and unchanged.
 
 Code: `server/src/routes/winPackager.ts`, `winPackagerWorker.ts`, `server/src/services/winPackager/*`,
 `src/pages/WindowsPackageBuilderPage.tsx`, `src/api/winPackager.ts`.
 
 ## Workflow and states
 
-1 Upload Source → 2 Inspect & Analyze → 3 Review Configuration → 4 Validate on Windows → 5 Create Package → 6 Publishing Guide & Download.
+1 Upload Source → 2 Inspect & Analyze → 3 Review Configuration → 4 Validate on Windows → 5 Create Package → 6 Output Folder (finished files are copied to `~/Desktop/win-packager/<Application name>/` — override with `WIN_PACKAGER_OUTPUT_DIR`; shows that path with a copy button; "Open output folder" opens it in the file manager, only when the server runs on your own computer — set `WIN_PACKAGER_ALLOW_OPEN_FOLDER=true` to allow it in production for a local-only deployment). Downloads (.intunewin, source, scripts, reports) are on step 5.
 
 States: **Processing**, **Review Required**, **Validation Failed**, **Unsupported**, **API Unavailable**, **Ready**.
 *Ready* is only reached when Windows validation passed (install, detection, uninstall, detection-after-uninstall) and,
@@ -21,7 +21,8 @@ after packaging, the `.intunewin` exists. A package made without a passed valida
 | Where | What |
 |---|---|
 | ITO server | Store + SHA-256 the upload (isolated `DATA_DIR/win-packager/<jobId>`), **read-only** inspection (MSI Property table, MSIX manifest, PE headers/version strings/installer markers, ZIP central directory), safe ZIP extraction, config validation, script/metadata generation, guides, audit. **Never executes an uploaded file.** |
-| Windows worker | Silent install/detect/uninstall validation, Authenticode validity, `IntuneWinAppUtil.exe`. |
+| Windows worker | Silent install/detect/uninstall validation and Authenticode validity. Optional: without it, packages are built here but marked "Windows Installation Not Tested". |
+| This server (built-in packager) | Creates the `.intunewin` natively (zip + AES-256-CBC + HMAC + `Detection.xml`); nothing from the source is executed. |
 
 Server-side signature reporting is honest: a signature blob is reported as *present — not verified*; only the worker can prove validity.
 
@@ -39,22 +40,20 @@ Detection values are restricted to safe character sets and escaped again in gene
 
 | Method & path | Permission | Purpose |
 |---|---|---|
-| `GET /status` | read | limits, worker state, publishing capability |
+| `GET /status` | read | limits, worker state |
 | `GET /jobs`, `GET /jobs/:id` | read | list / get |
 | `POST /jobs` (raw body, `x-file-name`) | write | upload + auto-inspect |
 | `POST /jobs/:id/inspect`, `/select-installer {entry}` | write | re-inspect; ZIP installer pick + safe extract |
-| `PUT /jobs/:id/config`, `/icon` | write | edit configuration (zod-validated, unknown keys rejected); logo |
+| `DELETE /jobs/:id` | validate | with a package: removes its files from the output folder (`Desktop/win-packager/<app>`), keeps the uploaded job so it can be re-packaged; without one: removes the job |
+| `PUT /jobs/:id/config` | write | edit configuration (zod-validated, unknown keys rejected) |
 | `POST /jobs/:id/validate` | validate | async Windows validation (202) |
 | `POST /jobs/:id/approve {acceptUntested?}` | validate | engineer approval for **packaging** |
 | `POST /jobs/:id/package` | validate | async `.intunewin` creation (202) |
 | `GET /jobs/:id/artifacts[/:name]` | read | install/uninstall/detection.ps1, package-info.json, README.md, validation-report.json, source, package, sha256.txt, package.log |
-| `GET /jobs/:id/guide` | read | Intune + Endpoint Central guide |
-| `POST /jobs/:id/publishing-approval {confirm:true}` | publish | records the engineer's explicit confirmation (audit only) |
-| `POST /jobs/:id/publish` | publish | **501** — disabled until Microsoft Graph permissions and implementation are verified |
 | `DELETE /jobs/:id` | validate | remove workspace |
 
 Editing a command, detection rule, setup file, architecture, name or version after validation/approval/packaging clears all three.
-Every upload, inspect, edit, validate, approve, package, download and publishing approval is an event on the job and an `audit_logs` row.
+Every upload, inspect, edit, validate, approve, package and download is an event on the job and an `audit_logs` row.
 
 ## Windows worker contract
 

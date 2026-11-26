@@ -1,5 +1,5 @@
 import { registerReport } from './engine.js'
-import type { ReportContext, ReportSummaryCard } from './engine.js'
+import type { ReportSummaryCard } from './engine.js'
 import type { EntraSignIn, EntraMfaRegistration, EntraUser, EntraRiskySignIn, EntraDirectoryAudit } from '../services/entra.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

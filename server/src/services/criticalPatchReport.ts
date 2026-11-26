@@ -99,7 +99,7 @@ export async function createCriticalPatchReport(force = false): Promise<{ conten
   const overview = buildCriticalPatchOverview(systems, patchesBySystem, now)
   const content = await exportToExcel(rows.map(row => ({ ...row })), columns, {
     title: 'Critical Patching Report', subtitle: 'Missing critical patches on Windows client and macOS endpoints, reported by Endpoint Central Patch Manager',
-    generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, ...(overview.dataChecks ? { dataChecks: overview.dataChecks } : {}),
+    generatedAt: now.toISOString(), generatedBy: 'EndPoint+', recordCount: rows.length, ...(overview.dataChecks ? { dataChecks: overview.dataChecks } : {}),
   })
   return { content, filename: `critical-patching-${date}.xlsx`, criticalDevices: new Set(rows.map(row => row.device)).size, rows: rows.length, overview }
 }

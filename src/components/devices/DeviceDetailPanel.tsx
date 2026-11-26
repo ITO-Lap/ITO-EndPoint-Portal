@@ -9,7 +9,7 @@ import {
 import { api } from '../../api'
 import { CopyText } from '../ui/CopyText'
 import { DeviceLogsTab } from './DeviceLogsTab'
-import { useOptionalPermissions } from '../../context/PermissionsContext'
+import { useOptionalPermissions } from '../../context/permissionsHooks'
 import type { ApiDevice, AppStatus, ManageEngineDeviceProfileSnapshot } from '../../api'
 
 type Tab = 'overview' | 'hardware' | 'network' | 'security' | 'apps' | 'compliance' | 'logs'
@@ -35,7 +35,7 @@ interface Props {
 
 function PlatformIcon({ p, size = 'md' }: { p: string; size?: 'sm' | 'md' | 'lg' }) {
   const cls = size === 'lg' ? 'h-8 w-8' : size === 'sm' ? 'h-3.5 w-3.5' : 'h-5 w-5'
-  if (p === 'Windows') return <Monitor className={`${cls} text-orange-500`} />
+  if (p === 'Windows') return <Monitor className={`${cls} text-indigo-500`} />
   if (p === 'macOS')   return <Laptop  className={`${cls} text-lime-500`} />
   return                      <Globe   className={`${cls} text-emerald-500`} />
 }
@@ -62,8 +62,8 @@ function ComplianceBadge({ state }: { state: string }) {
 
 function SourcePill({ src }: { src: string }) {
   if (src === 'Microsoft Intune')
-    return <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-semibold text-orange-700">Microsoft Intune</span>
-  return   <span className="inline-flex rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-semibold text-orange-700">ManageEngine</span>
+    return <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">Microsoft Intune</span>
+  return   <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">ManageEngine</span>
 }
 
 function StatusDot({ ok, label }: { ok: boolean; label: string }) {
@@ -371,7 +371,7 @@ function SecurityTab({ d }: { d: ApiDevice }) {
 function AppTypeBadge({ type }: { type?: string }) {
   if (!type) return null
   const [bg, text] =
-    type === 'App Store'    ? ['bg-orange-50 border-orange-200 text-orange-700', ''] :
+    type === 'App Store'    ? ['bg-indigo-50 border-indigo-200 text-indigo-700', ''] :
     type === 'System'       ? ['bg-slate-100 border-slate-200 text-slate-500', ''] :
     type === 'MDM Managed'  ? ['bg-lime-50 border-lime-200 text-lime-700', ''] :
     ['bg-slate-50 border-slate-200 text-slate-500', '']
@@ -387,20 +387,23 @@ function AppTypeBadge({ type }: { type?: string }) {
 function AppsTab({ d }: { d: ApiDevice }) {
   const [filter, setFilter] = useState<'all' | 'installed' | 'failed' | 'pending'>('all')
   const [fetchedApps, setFetchedApps] = useState<AppStatus[] | null>(null)
-  const [appsLoading, setAppsLoading] = useState(false)
+  const [fetchedFor, setFetchedFor] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const hasBundledApps = !!(d.apps && d.apps.length > 0)   // already have data — no round-trip needed
+  const appsLoading = !hasBundledApps && fetchedFor !== d.id
 
   // Lazy-fetch from server — the endpoint returns what's available for the
   // device's management source (mock data or live API).
   // Only skip if the device already has app data bundled in the sync payload.
   useEffect(() => {
-    if (d.apps && d.apps.length > 0) return   // already have data — no round-trip needed
-    setAppsLoading(true)
+    if (hasBundledApps) return
+    let cancelled = false
     api.fetchDeviceApps(d.id)
-      .then(apps => setFetchedApps(apps.length > 0 ? apps : null))
-      .catch(() => setFetchedApps(null))
-      .finally(() => setAppsLoading(false))
-  }, [d.id])
+      .then(apps => { if (!cancelled) setFetchedApps(apps.length > 0 ? apps : null) })
+      .catch(() => { if (!cancelled) setFetchedApps(null) })
+      .finally(() => { if (!cancelled) setFetchedFor(d.id) })
+    return () => { cancelled = true }
+  }, [d.id, hasBundledApps])
 
   // fetchedApps=null means "fetch returned nothing useful", fall back to bundled data
   const allApps = fetchedApps ?? d.apps ?? []
@@ -449,7 +452,7 @@ function AppsTab({ d }: { d: ApiDevice }) {
             key={btn.key}
             type="button"
             onClick={() => setFilter(btn.key)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
               filter === btn.key ? btn.activeClass : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
             }`}
           >
@@ -466,7 +469,7 @@ function AppsTab({ d }: { d: ApiDevice }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search apps…"
-            className="h-7 w-44 rounded-full border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition"
+            className="h-7 w-44 rounded-full border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition"
           />
           {search && (
             <button
@@ -549,7 +552,7 @@ function AppsTab({ d }: { d: ApiDevice }) {
             <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400 rounded-xl border border-slate-200 bg-white">
               <Search className="h-7 w-7 text-slate-200" />
               <p className="text-sm font-medium">No apps match "{search}"</p>
-              <button type="button" onClick={() => setSearch('')} className="text-xs text-orange-500 hover:underline">Clear search</button>
+              <button type="button" onClick={() => setSearch('')} className="text-xs text-indigo-500 hover:underline">Clear search</button>
             </div>
           )
         }
@@ -758,7 +761,7 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 transition focus-visible:ring-2 focus-visible:ring-orange-300 rounded"
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 transition focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> {backLabel}
           </button>
@@ -806,7 +809,7 @@ export function DeviceDetailPanel({ device: d, onBack, backLabel = 'All Devices'
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex-shrink-0 px-3 py-2 text-xs font-semibold border-b-2 transition focus-visible:ring-2 focus-visible:ring-orange-300 rounded-t ${
+                className={`relative flex-shrink-0 px-3 py-2 text-xs font-semibold border-b-2 transition focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-t ${
                   activeTab === tab.id
                     ? 'border-sky-500 text-sky-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'

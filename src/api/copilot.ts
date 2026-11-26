@@ -21,7 +21,18 @@ export interface CopilotCitation {
   recordId: string
   freshness: string // ISO timestamp
   url?: string
+  /** 'doc' = project documentation; a citation with a url is a public web source; anything else is live tool data. */
+  kind?: 'doc' | 'live' | 'web'
+  /** Documentation citations: which indexed document/section the statement came from. */
+  docId?: string
+  chunkId?: string
+  title?: string
+  section?: string
+  path?: string
 }
+
+export type AnswerMode = 'documentation' | 'live' | 'mixed' | 'general'
+export type DocsStatus = 'found' | 'none' | 'admin-only' | 'not-indexed' | 'not-searched'
 
 export interface CopilotMessage {
   role: 'user' | 'assistant'
@@ -29,7 +40,7 @@ export interface CopilotMessage {
   citations?: CopilotCitation[]
 }
 
-/** Structured, safe page-context hints — see src/context/CopilotContextProvider.tsx.
+/** Structured, safe page-context hints — see src/context/copilotContext.ts.
  *  Never include credentials/tokens/free-text page content here. */
 export interface CopilotRequestContext {
   page?: string
@@ -52,6 +63,9 @@ export interface CopilotChatResponse {
   message: CopilotMessage
   pendingAction?: CopilotPendingAction
   available: boolean
+  /** Where the answer came from: project documentation, live data, both, or neither. */
+  mode?: AnswerMode
+  docs?: { status: DocsStatus; retrieval: 'hybrid' | 'keyword' | null; count: number; indexedDocuments: number }
 }
 
 export interface CopilotConfirmResponse {

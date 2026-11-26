@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useCopilotPageContext } from '../context/CopilotContextProvider'
+import { useCopilotPageContext } from '../context/copilotContext'
 import { GitBranch, RefreshCw, XCircle, AlertTriangle, Info, ChevronDown, ChevronRight } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { PolicyConflict } from '../api/intelligence'
@@ -37,7 +37,18 @@ export function PolicyConflictPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    intelApi.policies()
+      .then(res => {
+        if (cancelled) return
+        if (res.success) setData(res)
+        else setError('Failed to load policy data.')
+      })
+      .catch(() => { if (!cancelled) setError('Network error loading policies.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   // Page-context awareness for the Endpoint Operations Copilot.
   const setCopilotPageContext = useCopilotPageContext()
@@ -48,7 +59,7 @@ export function PolicyConflictPage({ onBack }: { onBack: () => void }) {
   }, [expanded, setCopilotPageContext])
 
   const toggle = (id: string) =>
-    setExpanded(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+    setExpanded(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
 
   const conflicts = data?.conflicts ?? []
   const filtered  = filter === 'all' ? conflicts : conflicts.filter(c => c.severity === filter || c.type === filter)
@@ -62,7 +73,7 @@ export function PolicyConflictPage({ onBack }: { onBack: () => void }) {
             <button onClick={onBack} className="hover:text-slate-600 transition">← Back</button>
             <span>/</span>
             <span className="text-slate-700 font-medium flex items-center gap-1.5">
-              <GitBranch className="h-4 w-4 text-orange-500" /> Policy Conflicts
+              <GitBranch className="h-4 w-4 text-indigo-500" /> Policy Conflicts
             </span>
           </div>
           <p className="text-xs text-slate-500">Detected duplicates, stale policies, and scope conflicts across your Intune tenant.</p>
@@ -114,7 +125,7 @@ export function PolicyConflictPage({ onBack }: { onBack: () => void }) {
           {/* Filter bar */}
           {conflicts.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {['all', 'high', 'medium', 'low', 'duplicate_name', 'stale_policy'].map(f => (
+              {['all', 'high', 'medium', 'low', 'duplicate_name', 'stale_policy', 'scope_conflict', 'version_drift'].map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
@@ -200,9 +211,9 @@ function ConflictCard({ conflict, isExpanded, onToggle }: {
               ))}
             </div>
           </div>
-          <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
-            <p className="text-xs font-semibold text-orange-700 mb-0.5">Recommendation</p>
-            <p className="text-xs text-orange-800 leading-relaxed">{conflict.recommendation}</p>
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+            <p className="text-xs font-semibold text-indigo-700 mb-0.5">Recommendation</p>
+            <p className="text-xs text-indigo-800 leading-relaxed">{conflict.recommendation}</p>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { PackageJob, PackagerStatus, PublishingGuide } from '../../api/winPackager'
+import type { PackageJob, PackagerStatus } from '../../api/winPackager'
 
 vi.mock('../../api/winPackager', async importOriginal => {
   const actual = await importOriginal<typeof import('../../api/winPackager')>()
@@ -9,7 +9,7 @@ vi.mock('../../api/winPackager', async importOriginal => {
     ...actual,
     winPackagerApi: {
       status: vi.fn(), jobs: vi.fn(), job: vi.fn(), upload: vi.fn(), inspect: vi.fn(), selectInstaller: vi.fn(), saveConfig: vi.fn(),
-      uploadIcon: vi.fn(), validate: vi.fn(), approve: vi.fn(), createPackage: vi.fn(), artifacts: vi.fn(), guide: vi.fn(), confirmPublishing: vi.fn(),
+      validate: vi.fn(), approve: vi.fn(), createPackage: vi.fn(), artifacts: vi.fn(), outputFolder: vi.fn(), openOutputFolder: vi.fn(),
       remove: vi.fn(), download: vi.fn(),
     },
   }
@@ -22,13 +22,12 @@ import pageSource from '../WindowsPackageBuilderPage.tsx?raw'
 import apiSource from '../../api/winPackager.ts?raw'
 
 const api = vi.mocked(winPackagerApi)
-const ALL = { 'winPackager.read': true, 'winPackager.write': true, 'winPackager.validate': true, 'winPackager.publish': true }
+const ALL = { 'winPackager.read': true, 'winPackager.write': true, 'winPackager.validate': true }
 
 const status = (ready = false): PackagerStatus => ({
   limits: { maxUploadBytes: 2 * 1024 ** 3, maxIntuneBytes: 30 * 1024 ** 3 },
   windowsWorker: ready ? { configured: true, state: 'ready', name: 'WIN-01', canPackage: true } : { configured: false, state: 'api-unavailable', reason: 'No Windows worker is configured.' },
   workerLinksConfigured: ready,
-  publishing: { intune: { enabled: false, reason: 'Publish to Intune is disabled until Microsoft Graph permissions and implementation are verified.' }, endpointCentral: { configured: false, message: 'Endpoint Central publishing API not configured — use guided manual publishing.' } },
 })
 
 const exeJob = (over: Partial<PackageJob> = {}): PackageJob => ({
@@ -42,8 +41,8 @@ const exeJob = (over: Partial<PackageJob> = {}): PackageJob => ({
   },
   config: {
     appName: 'Widget', publisher: 'Acme', version: '1.0', description: '', installCommand: '"setup.exe" /S', uninstallCommand: '', detection: { type: 'registry-uninstall', value: 'Widget', minVersion: '1.0' },
-    installBehavior: 'system', architecture: 'x64', minimumOs: 'Windows 10 1809', restartBehavior: 'intune-decides', returnCodes: [{ code: 0, type: 'success' }],
-    dependencies: '', supersedenceNotes: '', assignmentNotes: '', setupFile: 'setup.exe', acknowledgedUnverifiedCommands: false,
+    installBehavior: 'system', architecture: 'x64',
+    setupFile: 'setup.exe', acknowledgedUnverifiedCommands: false,
   },
   events: [], ...over,
 })
@@ -63,7 +62,7 @@ describe('Windows Package Builder page', () => {
   it('shows the 6-step workflow and an honest API Unavailable worker state', async () => {
     renderPage()
     expect(await screen.findByText(/Windows worker: API Unavailable/)).toBeInTheDocument()
-    for (const label of ['Upload Source', 'Inspect & Analyze', 'Review Configuration', 'Validate on Windows', 'Create Package', 'Publishing Guide & Download']) {
+    for (const label of ['Upload Source', 'Inspect & Analyze', 'Review Configuration', 'Validate on Windows', 'Create Package', 'Output Folder']) {
       expect(screen.getByRole('button', { name: new RegExp(label.replace('&', '&')) })).toBeInTheDocument()
     }
     expect(screen.getByText(/never executed on this server/)).toBeInTheDocument()
@@ -115,6 +114,21 @@ describe('Windows Package Builder page', () => {
     expect(await screen.findByText(/Commands are not verified/)).toBeInTheDocument()
   })
 
+  it('saves unsaved edits when leaving the Review step, and no longer shows return codes or restart behavior', async () => {
+    api.jobs.mockResolvedValue([exeJob()])
+    api.saveConfig.mockResolvedValue({ data: exeJob(), problems: [] })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByText('Widget'))
+    await user.click(screen.getByRole('button', { name: /3\. Review Configuration/ }))
+    expect(screen.queryByText('Return codes')).not.toBeInTheDocument()
+    expect(screen.queryByText('Restart behavior')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('App name'), ' Pro')
+    expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /4\. Validate on Windows/ }))
+    expect(api.saveConfig).toHaveBeenCalledWith('job-1', expect.objectContaining({ appName: 'Widget Pro' }))
+  })
+
   it('shows "Not Tested" with a retry action when no worker is available', async () => {
     api.jobs.mockResolvedValue([exeJob({ state: 'api-unavailable', stateReason: 'No Windows worker is configured.', validation: { outcome: 'not-tested', at: '', steps: [], message: 'Package Created / Windows Installation Not Tested. No Windows worker is configured.' } })])
     const user = userEvent.setup()
@@ -140,30 +154,68 @@ describe('Windows Package Builder page', () => {
     expect(api.approve).toHaveBeenCalledWith('job-1', true)
   })
 
-  it('guide: copy buttons, EC fallback message, publishing needs explicit confirmation, Intune publish stays disabled', async () => {
-    const guide: PublishingGuide = {
-      ready: true, banner: 'Package Created / Windows Installation Not Tested. Pilot on a test device before any wider assignment.',
-      intune: [{ title: 'Program', items: [{ label: 'Install command', value: '"setup.exe" /S', copy: true }] }],
-      endpointCentral: [{ title: 'Commands', items: [{ label: 'Installation command', value: '"setup.exe" /S', copy: true }] }],
-      endpointCentralApi: { configured: false, message: 'Endpoint Central publishing API not configured — use guided manual publishing.' },
-    }
+  it('step 6 Output Folder shows the path and opens it on click', async () => {
     const job = exeJob({ output: { fileName: 'Widget-1.0-x64.intunewin', sizeBytes: 1024, sha256: 'c'.repeat(64), createdAt: '' } })
-    api.jobs.mockResolvedValue([job]); api.guide.mockResolvedValue(guide); api.confirmPublishing.mockResolvedValue(job)
+    api.jobs.mockResolvedValue([job])
+    api.outputFolder.mockResolvedValue({ path: '/data/win-packager/job-1/artifacts', fileName: job.output!.fileName, canOpen: true })
+    api.openOutputFolder.mockResolvedValue({ path: '/data/win-packager/job-1/artifacts' })
     api.artifacts.mockResolvedValue({ files: [{ name: 'package', kind: 'intunewin', available: true }], output: job.output!, sourceSha256: '' })
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByText('Widget'))
-    expect(await screen.findByText(/Windows Installation Not Tested/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /copy install command/i })).toBeInTheDocument()
-    await user.click(screen.getByRole('tab', { name: 'Endpoint Central' }))
-    expect(screen.getByText(/Endpoint Central publishing API not configured — use guided manual publishing/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Publish to Intune (disabled)' })).toBeDisabled()
-    const record = screen.getByRole('button', { name: 'Record publishing approval' })
-    expect(record).toBeDisabled()
-    await user.click(screen.getByRole('checkbox', { name: /publish this package manually/ }))
-    await waitFor(() => expect(record).toBeEnabled())
-    await user.click(record)
-    expect(api.confirmPublishing).toHaveBeenCalledWith('job-1')
+    expect(await screen.findByText('/data/win-packager/job-1/artifacts')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Open output folder/ }))
+    expect(api.openOutputFolder).toHaveBeenCalledWith('job-1')
+  })
+
+  it('delete asks for confirmation; a job without a package is removed entirely', async () => {
+    const job = exeJob({})
+    api.jobs.mockResolvedValue([job])
+    api.remove.mockResolvedValue({ jobRemoved: true })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Widget')
+    await user.click(screen.getByRole('button', { name: 'Delete Widget' }))
+    expect(confirm).toHaveBeenCalled()
+    expect(api.remove).toHaveBeenCalledWith('job-1')
+    confirm.mockRestore()
+  })
+
+  it('delete on a packaged job removes the package from the output folder and keeps the job', async () => {
+    const job = exeJob({ output: { fileName: 'Widget-1.0-x64.intunewin', sizeBytes: 1, sha256: 'c'.repeat(64), createdAt: '', exportDir: '/Users/me/Desktop/win-packager/Widget' } })
+    api.jobs.mockResolvedValue([job])
+    api.remove.mockResolvedValue({ jobRemoved: false, job: exeJob({}) })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Widget')
+    await user.click(screen.getByRole('button', { name: 'Delete Widget' }))
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('/Users/me/Desktop/win-packager/Widget'))
+    expect(api.remove).toHaveBeenCalledWith('job-1')
+    expect(await screen.findByText('Widget')).toBeInTheDocument() // job still listed
+    confirm.mockRestore()
+  })
+
+  it('open is disabled when the server is not local', async () => {
+    const job = exeJob({ output: { fileName: 'Widget-1.0-x64.intunewin', sizeBytes: 1024, sha256: 'c'.repeat(64), createdAt: '' } })
+    api.jobs.mockResolvedValue([job])
+    api.outputFolder.mockResolvedValue({ path: '/srv/x', fileName: null, canOpen: false })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByText('Widget'))
+    await screen.findByText('/srv/x')
+    expect(screen.getByRole('button', { name: /Open output folder/ })).toBeDisabled()
+  })
+
+  it('create is available without a Windows worker (packaging is built in)', async () => {
+    const job = exeJob({ approval: { by: 'a@b.c', at: '2026-11-17T00:00:00Z' } })
+    api.jobs.mockResolvedValue([job])
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByText('Widget'))
+    expect(screen.queryByText(/package cannot be created yet/i)).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Create .intunewin package' })).toBeEnabled()
   })
 
   it('never exposes provider credentials to the browser', () => {

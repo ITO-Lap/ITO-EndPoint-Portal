@@ -284,6 +284,20 @@ Freeform chat with the IT assistant. Optional device context focuses the respons
 
 ---
 
+## Security Posture
+
+All routes need a session. Details: [SECURITY-POSTURE.md](../07-features/SECURITY-POSTURE.md).
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/security-posture` | Overall score, four pillars, breakdowns, agent coverage, data-health. Query: `source=all\|intune\|manageengine`, `refresh=1`. Cached 2 minutes |
+| GET | `/api/security-posture/pillars/:id/devices` | Devices behind a pillar (`encryption`, `patching`, `compliance`, `checkin`). Query: `source`, `status=pass\|fail\|unknown`, `platform`, `sourceKey`, `q`, `sortKey`, `sortDir`, `page`, `pageSize`. Rows include `items`, `facts` and `patchResourceId` |
+| GET | `/api/security-posture/diagnostics` | How Intune, Endpoint Central and Patch Manager were reconciled; `?format=csv` downloads it. Requires the Settings page permission |
+| GET | `/api/security-inventory/coverage` | CrowdStrike Falcon and Zscaler coverage. Returns `{ scanning: true, progress }` while the first scan runs, or `stale: true` when showing the previous scan |
+| POST | `/api/security-inventory/scan` | Force a fresh coverage scan |
+| GET | `/api/security-inventory/missing` | Devices missing an agent (`platform=Windows\|macOS`, `agent=zscaler\|crowdstrike`); 503 until the first scan finishes |
+| GET | `/api/endpoint-central/devices/:resourceId/missing-patches` | One device's missing patches (`view=critical\|all\|os\|app`, `refresh=1`) |
+
 ## Error responses
 
 All errors follow this shape:
@@ -297,3 +311,7 @@ All errors follow this shape:
 | 404 | Resource not found |
 | 503 | External service not configured |
 | 500 | Unexpected server error |
+
+## Data sync (`/api/sync`)
+
+`GET /status` and `POST /kick` need a session; `POST /run`, `PUT /schedule` and `GET /logs` need `sync.manage`. Details: [../17-database-sync-architecture.md](../17-database-sync-architecture.md).

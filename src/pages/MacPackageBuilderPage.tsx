@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Apple, Check, Copy, Download, Loader2, Package, RefreshCw } from 'lucide-react'
 import { macPackagerApi, type MacPackagerInfo } from '../api/macPackager'
 import { hasPermission } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/permissionsHooks'
 
 const fmtBytes = (n: number): string => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 

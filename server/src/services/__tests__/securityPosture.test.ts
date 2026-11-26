@@ -20,7 +20,7 @@ const patchSys = (over: Partial<PatchSystemStatus> = {}): PatchSystemStatus => (
   resourceId: '1', detailResourceId: '2', platform: 'Windows', names: ['HOST-SERIAL0001'],
   missingOsPatches: 0, missingThirdPartyPatches: 0, missingDriverPatches: 0, missingBiosPatches: 0,
   criticalPatchCount: 0, importantPatchCount: 0, moderatePatchCount: 0, lowPatchCount: 0,
-  lastScanTime: null, lastSuccessfulScanTime: null, scanSucceeded: true, ...over,
+  lastScanTime: null, lastSuccessfulScanTime: null, lastContactTime: null, scanSucceeded: true, ...over,
 })
 
 const pillar = (r: ReturnType<typeof buildPosture>, id: string) => r.pillars.find(p => p.id === id)!
@@ -51,10 +51,10 @@ describe('buildPosture', () => {
     expect(p.scorePct).toBeNull()
   })
 
-  it('compliance only assesses Intune; ManageEngine is not reported', () => {
+  it('compliance assesses Intune natively and ManageEngine / Endpoint Central from derived state', () => {
     const devices = [dev({ id: 'i1' }), dev({ id: 'i2', complianceState: 'Non-Compliant', primaryIssue: 'Password' }), dev({ id: 'me', managementSource: 'ManageEngine' })]
     const p = pillar(buildPosture(devices, null, 'all', NOW), 'compliance')
-    expect(p).toMatchObject({ assessed: 2, passing: 1, failing: 1, notReported: 1 })
+    expect(p).toMatchObject({ assessed: 3, passing: 2, failing: 1, notReported: 0 })
     expect(listPillarDevices(devices, null, null, { pillarId: 'compliance', status: 'fail' }, NOW).rows[0]!.detail).toBe('Non-Compliant: Password')
   })
 
@@ -74,6 +74,73 @@ describe('buildPosture', () => {
     expect(p).toMatchObject({ assessed: 2, passing: 1, failing: 1, notReported: 1 })
     expect(listPillarDevices(devices, systems, null, { pillarId: 'patching', status: 'fail' }, NOW).rows[0]!.detail).toBe('2 critical, 1 important patch missing')
     expect(p.unavailableReason).toBeUndefined()
+  })
+
+  it('patching matches Endpoint Central rows (no serial) by resource id and host name, and Macs by serial', () => {
+    const devices = [
+      dev({ id: 'ec-RID1', deviceName: 'EC-WIN-1', serialNumber: 'Unknown', managementSource: 'ManageEngine' }),
+      dev({ id: 'mdm-9', deviceName: 'byname-host', serialNumber: 'Unknown', managementSource: 'ManageEngine' }),
+      dev({ id: 'mac', platform: 'macOS', serialNumber: 'C02MACSERIAL', managementSource: 'ManageEngine' }),
+    ]
+    const systems = [
+      patchSys({ detailResourceId: 'RID1', names: ['other-name'], criticalPatchCount: 3 }),
+      patchSys({ detailResourceId: 'RID2', names: ['BYNAME-HOST.corp.local'] }),
+      patchSys({ detailResourceId: 'RID3', platform: 'Mac', names: ['Mac-C02MACSERIAL'], criticalPatchCount: 1 }),
+    ]
+    const list = listPillarDevices(devices, systems, null, { pillarId: 'patching' }, NOW)
+    expect(list.rows.map(r => [r.id, r.status])).toEqual([['ec-RID1', 'fail'], ['mdm-9', 'pass'], ['mac', 'fail']])
+    expect(list.rows[0]!.facts?.find(f => f.label === 'Missing patches')?.value).toMatch(/^3 critical/)
+  })
+
+  it('hybrid Windows (Intune + Endpoint Central): check-in uses the freshest signal, patching comes from EC, facts show both', () => {
+    const intune = dev({ id: 'i1', deviceName: 'HYB-1.corp', serialNumber: 'SERIAL0009', lastCheckIn: ago(30) })
+    const ec = dev({ id: 'ec-R9', deviceName: 'hyb-1', serialNumber: 'Unknown', managementSource: 'ManageEngine', lastCheckIn: ago(1), complianceState: 'Non-Compliant', primaryIssue: '2 critical OS patches missing' })
+    const systems = [patchSys({ detailResourceId: 'R9', names: ['HYB-1'], criticalPatchCount: 2 })]
+    const checkin = listPillarDevices([intune], systems, null, { pillarId: 'checkin' }, NOW, [ec]).rows[0]!
+    expect(checkin.status).toBe('pass')
+    expect(checkin.detail).toBe('Checked in 1d ago (Intune 30d · Endpoint Central 1d)')
+    expect(checkin.facts?.find(f => f.label === 'Managed by')?.value).toMatch(/hybrid/)
+    expect(listPillarDevices([intune], systems, null, { pillarId: 'checkin' }, NOW).rows[0]!.status).toBe('fail') // Intune alone: stale
+    const patch = listPillarDevices([intune], systems, null, { pillarId: 'patching' }, NOW, [ec]).rows[0]!
+    expect(patch.status).toBe('fail')
+    expect(patch.facts?.find(f => f.label === 'Endpoint Central state')?.value).toMatch(/critical/)
+  })
+
+  it('Mac (MDM + Endpoint Central agent): check-in uses the freshest of MDM and agent contact; patching by serial', () => {
+    const mac = dev({ id: 'm1', platform: 'macOS', managementSource: 'ManageEngine', serialNumber: 'C02MACSERIAL', lastCheckIn: ago(20), encryptionStatus: 'Encrypted' })
+    const systems = [patchSys({ platform: 'Mac', names: ['Mac-C02MACSERIAL'], lastContactTime: ago(2), criticalPatchCount: 1 })]
+    const ci = listPillarDevices([mac], systems, null, { pillarId: 'checkin' }, NOW).rows[0]!
+    expect(ci.status).toBe('pass')
+    expect(ci.detail).toBe('Checked in 2d ago (MDM 20d · Endpoint Central 2d)')
+    expect(ci.facts?.find(f => f.label === 'Managed by')?.value).toBe('Endpoint Central (MDM + agent)')
+    expect(listPillarDevices([mac], systems, null, { pillarId: 'patching' }, NOW).rows[0]!.status).toBe('fail')
+  })
+
+  it('compliance: agent-only Windows and unreadable Mac MDM details are not reported, never failing', () => {
+    const devices = [
+      dev({ id: 'ec-1', managementSource: 'ManageEngine', complianceState: 'Non-Compliant', primaryIssue: '2 critical OS patches missing' }),
+      dev({ id: 'mac-bad', platform: 'macOS', managementSource: 'ManageEngine', complianceState: 'Warning', primaryIssue: 'Compliance details unavailable' }),
+      dev({ id: 'mac-ok', platform: 'macOS', managementSource: 'ManageEngine', complianceState: 'Compliant' }),
+      dev({ id: 'mac-fail', platform: 'macOS', managementSource: 'ManageEngine', complianceState: 'Non-Compliant', primaryIssue: 'Storage encryption disabled' }),
+    ]
+    expect(pillar(buildPosture(devices, null, 'all', NOW), 'compliance')).toMatchObject({ assessed: 2, passing: 1, failing: 1, notReported: 2 })
+  })
+
+  it('never matches on an ambiguous host name; MAC address wins for hybrid Windows', () => {
+    const a = dev({ id: 'a', deviceName: 'DUP-1', serialNumber: 'Unknown', lastCheckIn: ago(30), macAddress: 'AA:BB:CC:00:00:01' })
+    const b = dev({ id: 'b', deviceName: 'DUP-1', serialNumber: 'Unknown', lastCheckIn: ago(30), macAddress: 'AA:BB:CC:00:00:02' })
+    const ec = dev({ id: 'ec-1', deviceName: 'dup-1', managementSource: 'ManageEngine', lastCheckIn: ago(1), macAddress: 'aabbcc000002' })
+    const rows = listPillarDevices([a, b], null, null, { pillarId: 'checkin' }, NOW, [ec]).rows
+    expect(rows.find(r => r.id === 'a')!.status).toBe('fail') // shares the name but not the MAC → not matched
+    expect(rows.find(r => r.id === 'b')!.status).toBe('pass')
+    const systems = [patchSys({ detailResourceId: 'X', names: ['DUP-1'], criticalPatchCount: 1 })]
+    expect(listPillarDevices([a, b], systems, null, { pillarId: 'patching' }, NOW).rows.every(r => r.status === 'unknown')).toBe(true)
+  })
+
+  it('reports patch-manager systems that match no inventory device', () => {
+    const systems = [patchSys({ names: ['A-SERIAL0001'] }), patchSys({ detailResourceId: 'Z', names: ['agent-only-mac'], platform: 'Mac' })]
+    const p = pillar(buildPosture([dev()], systems, 'all', NOW), 'patching')
+    expect(p.unmatchedAgents).toEqual({ windows: 0, macos: 1 })
   })
 
   it('flags patching as unavailable when Patch Manager data could not be loaded', () => {

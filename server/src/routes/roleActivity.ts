@@ -24,7 +24,7 @@
 // the old (also-removed) Intune-only live audit-browse page used, for the
 // same reason: protecting upstream Graph/Management-API rate limits.
 //
-// requireAuditRole('Audit Reader') gating stays on both routes below — real
+// requireCapability('pages.Role Activity Audit') gating stays on both routes below — real
 // service credentials are still being used to call Microsoft's APIs on the
 // caller's behalf, so it's still worth auditing who viewed what.
 //
@@ -100,7 +100,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { identifyAuditActor, requireAuditRole } from '../middleware/requireRole.js'
+import { identifyAuditActor, requireCapability } from '../middleware/requireRole.js'
 import { getIntuneConfig } from '../store/integrationStore.js'
 import { recordAppTrail } from '../services/intuneAuditTrail.js'
 import { pullEntraRoleActivity } from '../services/entraRoleAuditPuller.js'
@@ -162,7 +162,7 @@ const FILTER_OPTIONS = {
 }
 
 // GET /api/role-activity/filter-options
-router.get('/filter-options', requireAuditRole('Audit Reader'), (_req, res) => {
+router.get('/filter-options', requireCapability('pages.Role Activity Audit'), (_req, res) => {
   res.json({ success: true, data: FILTER_OPTIONS })
 })
 
@@ -320,7 +320,7 @@ export async function getRoleActivityEventsLive(
 }
 
 // GET /api/role-activity/events
-router.get('/events', requireAuditRole('Audit Reader'), asyncHandler(async (req, res) => {
+router.get('/events', requireCapability('pages.Role Activity Audit'), asyncHandler(async (req, res) => {
   const parsed = listQuerySchema.parse(req.query)
   const result = await getRoleActivityEventsLive(parsed, { email: req.auditActor!.email, appRole: req.auditActor!.appRole })
   res.json({ success: true, ...result })

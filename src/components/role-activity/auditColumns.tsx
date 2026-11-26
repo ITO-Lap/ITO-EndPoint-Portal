@@ -14,7 +14,7 @@ export interface ColumnDef {
 // bg-*-50/text-*-700 pattern the old Result badge used.
 const SOURCE_BADGE_STYLE: Record<RoleActivityEvent['source'], string> = {
   entra_role_mgmt: 'bg-sky-50 text-sky-700',
-  intune_rbac: 'bg-orange-50 text-orange-700',
+  intune_rbac: 'bg-indigo-50 text-indigo-700',
   sharepoint_admin: 'bg-emerald-50 text-emerald-700',
 }
 

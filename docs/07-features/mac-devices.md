@@ -47,7 +47,7 @@ When you navigate to **Mac Devices**, the page greets you with a live summary ba
 
 | Control | Function |
 |---------|----------|
-| **← Dashboard** | Returns to the main ITO Endpoint dashboard |
+| **← Dashboard** | Returns to the main EndPoint+ dashboard |
 | **+ Add Device** | Opens a form to manually enroll a new macOS device |
 | **Refresh** | Re-fetches live device data from the ManageEngine API |
 | **Subtitle** | Displays the data source — "Managed by ManageEngine — device, application & security reports" |
@@ -495,4 +495,4 @@ The table is paginated at 10 devices per page with numbered page controls. The f
 
 ---
 
-*Last updated: June 2026 · ITO Endpoint v2.0 · Managed by ManageEngine*
+*Last updated: June 2026 · EndPoint+ v2.0 · Managed by ManageEngine*

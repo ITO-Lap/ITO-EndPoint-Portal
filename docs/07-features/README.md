@@ -17,8 +17,18 @@ Each feature in the dashboard has its own deep-dive doc.
 | Automation Engine | `Automation` | Live | [AUTOMATION-ENGINE.md](AUTOMATION-ENGINE.md) |
 | Entra Intelligence | `Entra Intelligence` | Live | [ENTRA-INTELLIGENCE.md](ENTRA-INTELLIGENCE.md) |
 | Endpoint Operations Copilot | (cross-cutting) | Live | [AI-COPILOT.md](AI-COPILOT.md) |
-| Settings | `Settings` | Live | — |
-| Documentation | `Documentation` | Live | — |
+| Security Posture | `Security Posture` | Live | [SECURITY-POSTURE.md](SECURITY-POSTURE.md) |
+| Patch Operations | `Patch Operations` | Live | [PATCH-OPERATIONS.md](PATCH-OPERATIONS.md) |
+| Windows Updates | `Windows Updates` | Live | [WINDOWS-UPDATES.md](WINDOWS-UPDATES.md) |
+| Policy Conflicts | `Policy Conflicts` | Live | [POLICY-CONFLICTS.md](POLICY-CONFLICTS.md) |
+| Risk Scoring | `Risk Scoring` | Live | [RISK-SCORING.md](RISK-SCORING.md) |
+| Role Activity Audit | `Role Activity Audit` | Live | [ROLE-ACTIVITY-AUDIT.md](ROLE-ACTIVITY-AUDIT.md) |
+| App Guardian | `App Guardian` | Live (read-only inventory) | [APP-GUARDIAN.md](APP-GUARDIAN.md) |
+| Reports & Analytics | `Reports & Analytics` | Live | [REPORTS-ANALYTICS.md](REPORTS-ANALYTICS.md) |
+| Scheduled Reports | `Scheduled Reports` | Live | [SCHEDULED-REPORTS.md](SCHEDULED-REPORTS.md) |
+| Ocean assistant | (floating button) | Live | [OCEAN.md](OCEAN.md) |
+| Settings | `Settings` | Live | [SETTINGS.md](SETTINGS.md) |
+| Documentation | `Documentation` | Live | The in-app Documentation page mirrors these files (`src/components/docs/FeatureSections.tsx`); update both |
 
 ---
 

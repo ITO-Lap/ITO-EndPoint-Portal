@@ -39,7 +39,7 @@ import {
 import {
   Laptop2, AlertTriangle, ShieldCheck, ShieldAlert, ClipboardList, Monitor, Apple, Lock,
 } from 'lucide-react'
-import { ZinniaBadge } from './components/ui/ZinniaLogo'
+import { EndpointPlusBadge } from './components/ui/EndpointPlusLogo'
 import type { StatCardData, UserToolRole } from './types'
 import { canAccess, isPageListed } from './lib/permissions'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
@@ -81,7 +81,7 @@ function AccessDenied({ page, onBack }: { page: string; onBack: () => void }) {
       <button
         type="button"
         onClick={onBack}
-        className="rounded-lg bg-orange-500 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition"
+        className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-600 transition"
       >
         Back to Dashboard
       </button>
@@ -91,12 +91,12 @@ function AccessDenied({ page, onBack }: { page: string; onBack: () => void }) {
 
 // Static card templates — only icons/colors/titles, values come from live stats
 const STAT_CARD_TEMPLATES: Omit<StatCardData, 'value' | 'trend' | 'trendChange'>[] = [
-  { title: 'Total Devices',      icon: Laptop2,       accent: 'text-orange-700',     iconBg: 'bg-orange-100',     iconText: 'text-orange-600'     },
+  { title: 'Total Devices',      icon: Laptop2,       accent: 'text-indigo-700',     iconBg: 'bg-indigo-100',     iconText: 'text-indigo-600'     },
   { title: 'Compliant Devices',  icon: ShieldCheck,   accent: 'text-emerald-700', iconBg: 'bg-emerald-100', iconText: 'text-emerald-600' },
   { title: 'Non-Compliant',      icon: ShieldAlert,   accent: 'text-red-700',     iconBg: 'bg-red-100',     iconText: 'text-red-600'     },
   { title: 'Warning Devices',    icon: AlertTriangle, accent: 'text-amber-700',   iconBg: 'bg-amber-100',   iconText: 'text-amber-600'   },
-  { title: 'Open Issues',        icon: ClipboardList, accent: 'text-orange-700',  iconBg: 'bg-orange-100',  iconText: 'text-orange-600'  },
-  { title: 'Windows Devices',    icon: Monitor,       accent: 'text-orange-700',    iconBg: 'bg-orange-100',    iconText: 'text-orange-600'    },
+  { title: 'Open Issues',        icon: ClipboardList, accent: 'text-indigo-700',  iconBg: 'bg-indigo-100',  iconText: 'text-indigo-600'  },
+  { title: 'Windows Devices',    icon: Monitor,       accent: 'text-indigo-700',    iconBg: 'bg-indigo-100',    iconText: 'text-indigo-600'    },
   { title: 'Mac Devices',        icon: Apple,         accent: 'text-slate-700',   iconBg: 'bg-slate-100',   iconText: 'text-slate-600'   },
 ]
 
@@ -367,8 +367,8 @@ function AppContent({ viewerRole, displayName, userEmail, onSignOut }: { viewerR
                   />
                 )}
                 <footer className="mt-6 flex flex-col items-center gap-2">
-                  <ZinniaBadge />
-                  <p className="text-[0.62rem] text-slate-400">© 2026 Zinnia Technologies · ITO Endpoint · All rights reserved.</p>
+                  <EndpointPlusBadge />
+                  <p className="text-[0.62rem] text-slate-400">© 2026 EndPoint+ · All rights reserved.</p>
                 </footer>
               </div>
             </main>

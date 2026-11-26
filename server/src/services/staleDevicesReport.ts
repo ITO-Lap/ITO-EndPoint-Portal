@@ -58,7 +58,7 @@ export async function createStaleDevicesReport() {
     }))
   const now = new Date()
   const content = await exportToExcel(rows, columns, {
-    title: 'Stale Devices Report', subtitle: `Devices without a check-in for ${STALE_DAYS}+ days`, generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, dataChecks,
+    title: 'Stale Devices Report', subtitle: `Devices without a check-in for ${STALE_DAYS}+ days`, generatedAt: now.toISOString(), generatedBy: 'EndPoint+', recordCount: rows.length, dataChecks,
   })
   return { content, rows, filename: `stale-devices-${now.toISOString().slice(0, 10)}.xlsx`, overview: buildStaleOverview(rows, devices.length, dataChecks) }
 }

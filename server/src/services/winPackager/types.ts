@@ -79,7 +79,6 @@ export interface PackageAnalysis {
   windowsValidationRequired: true
 }
 
-export interface ReturnCode { code: number; type: 'success' | 'softReboot' | 'hardReboot' | 'retry' | 'failed' }
 
 export interface PackageConfig {
   appName: string
@@ -91,12 +90,6 @@ export interface PackageConfig {
   detection: DetectionRule
   installBehavior: 'system' | 'user'
   architecture: Architecture
-  minimumOs: string
-  restartBehavior: 'none' | 'allow' | 'force' | 'intune-decides'
-  returnCodes: ReturnCode[]
-  dependencies: string
-  supersedenceNotes: string
-  assignmentNotes: string
   /** Installer file name relative to the source folder; this is the IntuneWinAppUtil setup file. */
   setupFile: string
   /** Set true by the engineer once they accept that an unverified command has not been tested. */
@@ -125,6 +118,8 @@ export interface ValidationResult {
 
 export interface PackageOutput {
   fileName: string
+  /** Folder the deliverables were copied to (Desktop/win-packager/<app>). */
+  exportDir?: string
   sizeBytes: number
   sha256: string
   createdAt: string
@@ -148,7 +143,6 @@ export interface PackageJob {
   analysis?: PackageAnalysis
   config?: PackageConfig
   /** Optional logo, stored in artifacts/ — never inside the source folder. */
-  iconFile?: string
   validation?: ValidationResult
   approval?: { by: string; at: string }
   output?: PackageOutput

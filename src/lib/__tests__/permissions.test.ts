@@ -7,7 +7,7 @@ import { navItems } from '../../data/dashboardData'
 // server-side in server/src/services/rolePermissions.ts and are covered
 // there (see server/src/store/__tests__/rolesStore.test.ts).
 const ALL_PAGES: PermissionMap = Object.fromEntries(navItems.map(i => [pageKey(i.title), true]))
-const HELPDESK_EXCLUDED = ['Policy Conflicts', 'Risk Scoring', 'Automation', 'Reports & Analytics', 'Scheduled Reports', 'Settings', 'Windows Package Builder']
+const HELPDESK_EXCLUDED = ['Policy Conflicts', 'Risk Scoring', 'Automation', 'Reports & Analytics', 'Scheduled Reports', 'Settings', 'Windows Package Builder', 'Mac Package Builder']
 const HELPDESK_PERMS: PermissionMap = Object.fromEntries(
   navItems.filter(i => !HELPDESK_EXCLUDED.includes(i.title)).map(i => [pageKey(i.title), true]),
 )

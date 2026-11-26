@@ -3,7 +3,7 @@
 
 > **Document type:** Product Design Specification · Implementation Reference  
 > **Module:** Mac Fleet Reports  
-> **Platform:** ITO Endpoint (iru-compatible)  
+> **Platform:** EndPoint+ (iru-compatible)  
 > **Version:** 1.0  
 > **Last updated:** 2026-06-01  
 > **Status:** Design Approved — Ready for Engineering  

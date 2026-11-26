@@ -33,6 +33,29 @@ function normalise(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '').trim()
 }
 
+/** True when two or more policies in the group target the same platform. */
+function hasSamePlatformPair(group: Array<{ platformType: string }>): boolean {
+  const seen = new Set<string>()
+  for (const p of group) {
+    const key = (p.platformType ?? '').toLowerCase()
+    if (seen.has(key)) return true
+    seen.add(key)
+  }
+  return false
+}
+
+/** The distinct versions (ascending) when same-platform copies disagree, else null. */
+function driftingVersions(group: GraphConfigProfile[]): number[] | null {
+  const byPlatform = new Map<string, Set<number>>()
+  for (const p of group) {
+    if (typeof p.version !== 'number') continue
+    const key = (p.platformType ?? '').toLowerCase()
+    byPlatform.set(key, (byPlatform.get(key) ?? new Set()).add(p.version))
+  }
+  for (const versions of byPlatform.values()) if (versions.size > 1) return [...versions].sort((a, b) => a - b)
+  return null
+}
+
 export function detectConflicts(
   compliancePolicies: GraphCompliancePolicy[],
   configProfiles: GraphConfigProfile[]
@@ -50,12 +73,14 @@ export function detectConflicts(
   }
   for (const [, group] of compByName) {
     if (group.length < 2) continue
+    const samePlatform = hasSamePlatformPair(group)
     conflicts.push({
       id: id(),
       type: 'duplicate_name',
-      severity: 'medium',
+      // Same name AND same platform is the real collision (both can be assigned to the same devices); across platforms it is mainly confusing.
+      severity: samePlatform ? 'high' : 'medium',
       title: `Duplicate compliance policy: "${group[0]?.displayName ?? ''}"`,
-      description: `${group.length} compliance policies share the same effective name, which causes ambiguity during assignment and troubleshooting.`,
+      description: `${group.length} compliance policies share the same effective name, which causes ambiguity during assignment and troubleshooting.${samePlatform ? ' At least two target the same platform, so they can be assigned to the same devices.' : ''}`,
       affectedPolicies: group.map(p => ({ id: p.id, name: p.displayName, type: 'compliance' as const })),
       recommendation: 'Consolidate into a single policy or rename each to reflect its distinct scope (e.g., by platform or department).',
     })
@@ -70,15 +95,29 @@ export function detectConflicts(
   }
   for (const [, group] of configByName) {
     if (group.length < 2) continue
+    const samePlatform = hasSamePlatformPair(group)
     conflicts.push({
       id: id(),
       type: 'duplicate_name',
-      severity: 'medium',
+      severity: samePlatform ? 'high' : 'medium',
       title: `Duplicate configuration profile: "${group[0]?.displayName ?? ''}"`,
-      description: `${group.length} configuration profiles share the same effective name. Duplicate profiles may apply conflicting settings to the same device groups.`,
+      description: `${group.length} configuration profiles share the same effective name. Duplicate profiles may apply conflicting settings to the same device groups.${samePlatform ? ' At least two target the same platform.' : ''}`,
       affectedPolicies: group.map(p => ({ id: p.id, name: p.displayName, type: 'config' as const })),
       recommendation: 'Merge duplicate profiles or assign distinct names and scoped assignments.',
     })
+    // Copies of one profile at different versions: devices get different settings depending on which copy they are assigned.
+    const drift = driftingVersions(group)
+    if (drift) {
+      conflicts.push({
+        id: id(),
+        type: 'version_drift',
+        severity: 'medium',
+        title: `Version drift: "${group[0]?.displayName ?? ''}"`,
+        description: `Copies of this profile on the same platform are at different versions (${drift.join(', ')}), so the settings a device receives depend on which copy is assigned to it.`,
+        affectedPolicies: group.map(p => ({ id: p.id, name: p.displayName, type: 'config' as const })),
+        recommendation: 'Keep one authoritative copy at the intended version and retire or re-point the others.',
+      })
+    }
   }
 
   // ── 3. Stale policies (not modified in > 180 days) ────────────────────────

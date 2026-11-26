@@ -1,11 +1,15 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
-import { getIntuneDevices, isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies, requestIntuneDiagnostics, getIntuneDiagnosticsStatus } from '../services/intune.js'
+import { isIntuneConfigured, getIntuneDeviceApps, getIntuneDevicePolicies, requestIntuneDiagnostics, getIntuneDiagnosticsStatus } from '../services/intune.js'
 import { requireCapability } from '../middleware/requireRole.js'
 import { collectDeviceLog, logToCsv, logToExcel, logFilename } from '../services/deviceLogs.js'
-import { getManageEngineDevices, isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies, getManageEngineDeviceProfileResults, getManageEngineDeviceProfileResultsForDevices } from '../services/manageEngine.js'
+import { isManageEngineConfigured, getManageEngineDeviceApps, getManageEngineDevicePolicies, getManageEngineDeviceProfileResults, getManageEngineDeviceProfileResultsForDevices } from '../services/manageEngine.js'
+import { isEndpointCentralDeviceId } from '../services/endpointCentralDevices.js'
 import { recordFetchResult } from '../store/integrationStore.js'
+import { fetchSourceDevices } from '../services/deviceSources.js'
+import { getSyncStatus, importSnapshotsIfEmpty, onDataChanged, runSync, startDueSyncs } from '../services/sync/syncEngine.js'
+import { getBackend, storeFirstEnabled } from '../services/sync/backend.js'
 import { loadSourceDevices, saveSourceDevices, type DeviceSource } from '../store/deviceSnapshotStore.js'
 import type { Device, DashboardStats } from '../types.js'
 
@@ -16,6 +20,7 @@ const listSchema = z.object({
   source:     z.enum(['intune', 'manageengine', 'all']).optional().default('all'),
   compliance: z.enum(['Compliant', 'Non-Compliant', 'Warning']).optional(),
   platform:   z.enum(['Windows', 'macOS', 'Linux', 'Android', 'iOS']).optional(),
+  issueCategory: z.string().max(60).optional(),
   limit:      z.coerce.number().int().min(1).max(10000).optional().default(100),
 })
 
@@ -41,7 +46,6 @@ function categorizeIssue(primaryIssue: string): string | null {
 // (apps/policies/detail) re-fetches the entire fleet (5000+ Intune devices)
 // from Graph just to find one record, which took ~100s in practice.
 const CACHE_TTL_MS = 5 * 60 * 1000
-const SOURCE_FETCH_TIMEOUT_MS = 60_000
 export interface FetchedDevices {
   devices: Device[]
   mock: boolean
@@ -55,29 +59,74 @@ let devicesCache: (FetchedDevices & { expiresAt: number }) | null = null
 let devicesFetchInFlight: Promise<FetchedDevices> | null = null
 let warmStartTried = false
 
-async function fetchWithDeadline<T>(source: string, fetcher: () => Promise<T>): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined
+/** Endpoint Central rows have no serial, so a Windows machine also enrolled in Intune is matched by hostname and
+ *  kept once (the Intune row, which carries the richer compliance data). */
+function dropEcDuplicatesOfIntune(devices: Device[]): Device[] {
+  const norm = (n: string): string => n.trim().toLowerCase().split('.')[0] ?? ''
+  const intuneNames = new Set(devices.filter(d => d.managementSource === 'Microsoft Intune').map(d => norm(d.deviceName)))
+  if (!intuneNames.size) return devices
+  return devices.filter(d => !(isEndpointCentralDeviceId(d.id) && intuneNames.has(norm(d.deviceName))))
+}
+
+// ── Store-first read ────────────────────────────────────────────────────────────────────────────────────
+// Devices come from the sync store immediately (PostgreSQL when connected, local files otherwise); the sync
+// engine refreshes the store in the background.
+// A short in-memory copy avoids re-reading thousands of rows for every request.
+const DB_READ_TTL_MS = 30_000
+let dbFleet: { value: FetchedDevices; expiresAt: number } | null = null
+let firstSyncTried = false
+onDataChanged(() => { dbFleet = null })
+
+async function fetchFromDatabase(): Promise<FetchedDevices | null> {
+  if (!storeFirstEnabled()) return null
   try {
-    return await Promise.race([
-      fetcher(),
-      new Promise<T>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(`${source} device request timed out after ${SOURCE_FETCH_TIMEOUT_MS / 1000}s`)), SOURCE_FETCH_TIMEOUT_MS)
-      }),
-    ])
-  } finally {
-    if (timeout) clearTimeout(timeout)
+    if (dbFleet && Date.now() < dbFleet.expiresAt) { void startDueSyncs('dashboard'); return pick(dbFleet.value) }
+    let devices = await getBackend().loadActive()
+    if (!devices.length && !firstSyncTried) {
+      // Empty database, first request since it was created: use the last on-disk snapshot, else pull live once.
+      firstSyncTried = true
+      await importSnapshotsIfEmpty()
+      devices = await getBackend().loadActive()
+      if (!devices.length) {
+        const sources = (['intune', 'manageengine'] as const).filter(s => s === 'intune' ? isIntuneConfigured() : isManageEngineConfigured())
+        await Promise.all(sources.map(s => runSync(s, 'devices', { trigger: 'startup' })))
+        devices = await getBackend().loadActive()
+      }
+    }
+    if (!devices.length) return null
+    const staleSources = (await getSyncStatus())
+      .filter(s => s.module === 'devices' && s.configured && s.stale && s.lastSuccessAt)
+      .map(s => ({ source: s.source as DeviceSource, savedAt: s.lastSuccessAt! }))
+    const value: FetchedDevices = { devices: dropEcDuplicatesOfIntune(devices), mock: false, ...(staleSources.length ? { staleSources } : {}) }
+    dbFleet = { value, expiresAt: Date.now() + DB_READ_TTL_MS }
+    void startDueSyncs('dashboard')
+    return pick(value)
+  } catch (e) {
+    console.warn('[fetchAllDevices] stored-data read failed, falling back to a live fetch:', e instanceof Error ? e.message : e)
+    return null
   }
 }
 
 export async function fetchAllDevices(): Promise<FetchedDevices> {
+  if (storeFirstEnabled() && (isIntuneConfigured() || isManageEngineConfigured())) {
+    const stored = await fetchFromDatabase()
+    if (stored) return stored
+  }
   if (devicesCache && Date.now() < devicesCache.expiresAt) {
     return pick(devicesCache)
   }
   // While the post-restart background sync runs, keep answering from the saved lists rather than queueing behind it.
-  if (devicesFetchInFlight) return devicesCache?.expiresAt === 0 ? pick(devicesCache) : devicesFetchInFlight
+  // Stale-while-revalidate: once a list exists, an expired cache is served immediately and refreshed in the background
+  // (a full Intune pull takes ~90s, so nobody should wait on it every 5 minutes).
+  if (devicesFetchInFlight) return devicesCache ? pick(devicesCache) : devicesFetchInFlight
 
   const anyConfigured = isIntuneConfigured() || isManageEngineConfigured()
   if (!anyConfigured) return { devices: [], mock: false }
+
+  if (devicesCache && devicesCache.devices.length > 0) {
+    void refreshDevices().catch(error => console.error('[fetchAllDevices] background refresh failed:', error))
+    return pick(devicesCache)
+  }
 
   // First call after a restart/deploy: answer at once from the last saved lists and sync in the background,
   // instead of making the first page wait (up to 30s) on Intune and ManageEngine.
@@ -109,8 +158,8 @@ async function refreshDevices(): Promise<FetchedDevices> {
 
   const fetchPromise = (async () => {
     const [intuneResult, meResult] = await Promise.allSettled([
-      isIntuneConfigured()       ? (async () => { const t0 = Date.now(); const d = await fetchWithDeadline('Intune', getIntuneDevices);       recordFetchResult('intune',       { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })()       : Promise.resolve([]),
-      isManageEngineConfigured() ? (async () => { const t0 = Date.now(); const d = await fetchWithDeadline('ManageEngine', getManageEngineDevices); recordFetchResult('manageengine', { deviceCount: d.length, lastFetchAt: Date.now(), latencyMs: Date.now() - t0, error: null }); return d })() : Promise.resolve([]),
+      isIntuneConfigured()       ? fetchSourceDevices('intune', null) : Promise.resolve([]),
+      isManageEngineConfigured() ? fetchSourceDevices('manageengine', (() => { const p = loadSourceDevices('manageengine'); return p ? { savedAt: p.savedAt, devices: p.devices } : null })()) : Promise.resolve([]),
     ])
 
     const devices: Device[] = []
@@ -123,8 +172,9 @@ async function refreshDevices(): Promise<FetchedDevices> {
 
     for (const { result, key } of sources) {
       if (result.status === 'fulfilled') {
-        devices.push(...result.value)
-        saveSourceDevices(key as DeviceSource, result.value)
+        const list = result.value
+        devices.push(...list)
+        saveSourceDevices(key as DeviceSource, list)
       } else {
         console.error(`[fetchAllDevices] ${key} error:`, result.reason)
         // Keep showing the last good list for a source that is down, and say so, rather than dropping its devices.
@@ -140,7 +190,7 @@ async function refreshDevices(): Promise<FetchedDevices> {
       }
     }
 
-    const fetched: FetchedDevices = { devices, mock: false, ...(failedSources.length ? { failedSources } : {}), ...(staleSources.length ? { staleSources } : {}) }
+    const fetched: FetchedDevices = { devices: dropEcDuplicatesOfIntune(devices), mock: false, ...(failedSources.length ? { failedSources } : {}), ...(staleSources.length ? { staleSources } : {}) }
     devicesCache = { ...fetched, expiresAt: Date.now() + CACHE_TTL_MS }
     return fetched
   })()
@@ -171,6 +221,7 @@ router.get('/', asyncHandler(async (req, res) => {
   }
   if (params.compliance) filtered = filtered.filter(d => d.complianceState === params.compliance)
   if (params.platform)   filtered = filtered.filter(d => d.platform === params.platform)
+  if (params.issueCategory) filtered = filtered.filter(d => categorizeIssue(d.primaryIssue) === params.issueCategory)
   if (params.source !== 'all') {
     const label = sourceLabel[params.source]
     if (label) filtered = filtered.filter(d => d.managementSource === label)
@@ -236,7 +287,7 @@ router.get('/:id/apps', asyncHandler(async (req, res) => {
   }
 
   // For live ManageEngine devices, lazy-fetch installed-app inventory
-  if (isManageEngineConfigured() && device?.managementSource === 'ManageEngine') {
+  if (isManageEngineConfigured() && device?.managementSource === 'ManageEngine' && !isEndpointCentralDeviceId(deviceId)) {
     const apps = await getManageEngineDeviceApps(deviceId)
     res.json({ success: true, data: apps })
     return
@@ -264,7 +315,7 @@ router.get('/:id/policies', asyncHandler(async (req, res) => {
     return
   }
 
-  if (isManageEngineConfigured() && device?.managementSource === 'ManageEngine') {
+  if (isManageEngineConfigured() && device?.managementSource === 'ManageEngine' && !isEndpointCentralDeviceId(deviceId)) {
     const policies = await getManageEngineDevicePolicies(deviceId)
     res.json({ success: true, data: policies })
     return
@@ -303,7 +354,7 @@ router.get('/:id/profile-results', asyncHandler(async (req, res) => {
 
   const { devices } = await fetchAllDevices()
   const device = devices.find(d => d.id === deviceId)
-  if (!device || device.managementSource !== 'ManageEngine' || !isManageEngineConfigured()) {
+  if (!device || device.managementSource !== 'ManageEngine' || isEndpointCentralDeviceId(deviceId) || !isManageEngineConfigured()) {
     res.json({ success: true, data: [] })
     return
   }
@@ -338,7 +389,7 @@ router.get('/:id/logs/export', requireCapability('devices.logs'), asyncHandler(a
   }
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   res.setHeader('Content-Disposition', `attachment; filename="${logFilename(log, 'xlsx')}"`)
-  res.send(await logToExcel(log, req.header('x-user-email') ?? 'ITO Endpoint'))
+  res.send(await logToExcel(log, req.header('x-user-email') ?? 'EndPoint+'))
 }))
 
 // POST /api/devices/:id/diagnostics — ask Intune to collect diagnostics from a Windows device.

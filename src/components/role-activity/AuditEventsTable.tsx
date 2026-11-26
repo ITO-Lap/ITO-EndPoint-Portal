@@ -51,7 +51,7 @@ export function AuditEventsTable({
         <div className="flex items-center gap-2">
           <label htmlFor="audit-page-size" className="text-[0.68rem] text-slate-500">Rows:</label>
           <select id="audit-page-size" value={pageSize} onChange={e => onPageSizeChange(Number(e.target.value))}
-            className="h-7 rounded-lg border border-slate-200 bg-white px-1.5 text-xs text-slate-700 focus:outline-none focus:border-orange-400">
+            className="h-7 rounded-lg border border-slate-200 bg-white px-1.5 text-xs text-slate-700 focus:outline-none focus:border-indigo-400">
             {[10, 25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
           <div className="relative">
@@ -100,7 +100,7 @@ export function AuditEventsTable({
               {events.map(event => (
                 <tr key={event.id} tabIndex={0} onClick={() => onRowClick(event)}
                   onKeyDown={e => { if (e.key === 'Enter') onRowClick(event) }}
-                  className="hover:bg-slate-50/60 focus:bg-orange-50/50 transition-colors cursor-pointer focus:outline-none">
+                  className="hover:bg-slate-50/60 focus:bg-indigo-50/50 transition-colors cursor-pointer focus:outline-none">
                   {columns.map(c => (
                     <td key={c.key} className="px-3 py-2.5 text-slate-700 max-w-[220px] truncate">{c.render(event, timezone)}</td>
                   ))}

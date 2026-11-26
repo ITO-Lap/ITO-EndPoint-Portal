@@ -82,6 +82,22 @@ export function requireAppRole(allowedRoles: string[]) {
  *  Global Admin can grant/revoke this capability to a custom role without a
  *  code change. Supersedes requireAppRole() for every caller that has been
  *  migrated to a permission key. */
+/** Allows the request when the role has ANY of the listed permissions (used where several pages share one endpoint). */
+export function requireAnyCapability(...keys: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const appRole = req.header('x-user-role') ?? 'End User'
+    permissionsForRole(appRole)
+      .then(perms => {
+        if (!keys.some(k => perms[k] === true)) {
+          res.status(403).json({ success: false, error: `This action requires one of these permissions: ${keys.join(', ')}.` })
+          return
+        }
+        next()
+      })
+      .catch(next)
+  }
+}
+
 export function requireCapability(key: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const appRole = req.header('x-user-role') ?? 'End User'

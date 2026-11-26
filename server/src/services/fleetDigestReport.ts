@@ -96,7 +96,7 @@ const HEADER_FILL = 'FF0F172A'
 export async function buildFleetDigestWorkbook(data: FleetReportData, current: FleetSnapshot, baseline: FleetSnapshot | null, actions: string[], now = new Date(), dataChecks: DataCheck[] = []): Promise<Buffer> {
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'ITO Endpoint'
+  wb.creator = 'EndPoint+'
   wb.created = now
 
   const addTable = (name: string, columns: Column[], rows: Row[], emptyNote: string) => {

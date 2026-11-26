@@ -5,7 +5,7 @@ const STATUS_STYLE: Record<AppStatus, string> = {
   'Up to date':                          'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Update available — existing package': 'bg-sky-50 text-sky-700 border-sky-200',
   'Package required':                    'bg-red-50 text-red-700 border-red-200',
-  'Repackage required':                  'bg-orange-50 text-orange-700 border-orange-200',
+  'Repackage required':                  'bg-indigo-50 text-indigo-700 border-indigo-200',
   'Native update':                       'bg-violet-50 text-violet-700 border-violet-200',
   'Review required':                     'bg-amber-50 text-amber-700 border-amber-200',
   'Data unavailable':                    'bg-slate-50 text-slate-500 border-slate-200',
@@ -41,7 +41,7 @@ export const InstallSourceBadge = ({ source, basis }: { source: InstallSource; b
 // ── Lifecycle badges ────────────────────────────────────────────────────────
 
 const SEVERITY_STYLE: Record<CveSeverity, string> = {
-  CRITICAL: 'bg-red-50 text-red-700 border-red-200', HIGH: 'bg-orange-50 text-orange-700 border-orange-200',
+  CRITICAL: 'bg-red-50 text-red-700 border-red-200', HIGH: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200', LOW: 'bg-sky-50 text-sky-700 border-sky-200',
   NONE: 'bg-slate-50 text-slate-500 border-slate-200', UNKNOWN: 'bg-slate-50 text-slate-500 border-slate-200',
 }
@@ -67,7 +67,7 @@ export function CveCell({ cve }: { cve: AppRow['cve'] }) {
 
 const PACKAGING_LABEL: Record<PackagingState, [string, string]> = {
   current: ['Package current', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
-  behind: ['Package behind', 'bg-orange-50 text-orange-700 border-orange-200'],
+  behind: ['Package behind', 'bg-indigo-50 text-indigo-700 border-indigo-200'],
   'no-package': ['No package', 'bg-red-50 text-red-700 border-red-200'],
   unknown: ['Unknown', 'bg-slate-50 text-slate-500 border-slate-200'],
   'not-applicable': ['Vendor updates', 'bg-violet-50 text-violet-700 border-violet-200'],

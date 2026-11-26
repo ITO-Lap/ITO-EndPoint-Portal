@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Clock, RefreshCw, AlertTriangle, CheckCircle2, XCircle, MessageSquare, Pencil } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -20,30 +20,42 @@ export function SlackScheduleSection({ module, sourceId, canEdit }: SlackSchedul
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
 
-  const load = useCallback(async () => {
-    setState('loading')
-    try {
-      const res = await notificationScheduleApi.get(module, sourceId)
-      if (!res.success && !res.data) {
-        setErrorMsg(res.error ?? 'Failed to load schedule.')
-        setState('error')
-        return
-      }
-      if (!res.data) {
-        // DB not configured — a real unavailable state, never a fabricated schedule.
-        setState('unavailable')
-        return
-      }
-      setSchedule(res.data.schedule)
-      setSlackConfigured(res.data.slackConfigured)
-      setState('ready')
-    } catch {
-      setErrorMsg('Could not reach the server.')
-      setState('error')
-    }
-  }, [module, sourceId])
+  const [reloadTick, setReloadTick] = useState(0)
+  // Retry button: show the loading state and re-run the fetch effect.
+  const load = () => { setState('loading'); setReloadTick(t => t + 1) }
 
-  useEffect(() => { void load() }, [load])
+  // Back to the loading state during render when the target schedule changes.
+  const targetKey = `${module}|${sourceId}`
+  const [prevTargetKey, setPrevTargetKey] = useState(targetKey)
+  if (targetKey !== prevTargetKey) { setPrevTargetKey(targetKey); setState('loading') }
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await notificationScheduleApi.get(module, sourceId)
+        if (cancelled) return
+        if (!res.success && !res.data) {
+          setErrorMsg(res.error ?? 'Failed to load schedule.')
+          setState('error')
+          return
+        }
+        if (!res.data) {
+          // No schedule came back: a real unavailable state, never a fabricated schedule.
+          setState('unavailable')
+          return
+        }
+        setSchedule(res.data.schedule)
+        setSlackConfigured(res.data.slackConfigured)
+        setState('ready')
+      } catch {
+        if (cancelled) return
+        setErrorMsg('Could not reach the server.')
+        setState('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [module, sourceId, reloadTick])
 
   return (
     <div className="rounded-xl border border-slate-200/60 bg-white shadow-sm p-4" data-testid="slack-schedule-section">
@@ -63,7 +75,7 @@ export function SlackScheduleSection({ module, sourceId, canEdit }: SlackSchedul
           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold">Scheduler unavailable</p>
-            <p className="mt-0.5">Notification schedules require PostgreSQL. Set <code className="font-mono">DATABASE_URL</code> in <code className="font-mono">server/.env</code>.</p>
+            <p className="mt-0.5">The schedule could not be read right now. Try again in a moment; if it keeps happening, check the server log.</p>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 # Authors
 
 Avinash Kumar Verma <avinash.verma@zinnia.com>
-  Architect and lead developer: ITO Endpoint AI Copilot, including the scheduled
+  Architect and lead developer: EndPoint+, including the scheduled
   reporting suite (fleet health digest, stale devices, inventory, compliance,
   critical patching, app updates, duplicate Entra device objects) and its
   data-quality checks.

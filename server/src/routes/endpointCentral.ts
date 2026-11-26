@@ -6,7 +6,7 @@ import {
 } from '../services/endpointCentralPatch.js'
 import { getPatchOperationsDashboard, scanPatchDevices, deployPatches } from '../services/patchOperations.js'
 import { createPatchRemediationAction, getPatchRemediationAction, completePatchRemediationAction } from '../services/patchRemediationStore.js'
-import { requireCapability } from '../middleware/requireRole.js'
+import { requireCapability, requireAnyCapability } from '../middleware/requireRole.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -25,7 +25,7 @@ const remediationPreviewSchema = z.discriminatedUnion('type', [
 
 // GET /api/endpoint-central/operations?refresh=1 — client OS only, with
 // explainable health and coverage. This route never performs a write action.
-router.get('/operations', asyncHandler(async (req, res) => {
+router.get('/operations', requireCapability('pages.Patch Operations'), asyncHandler(async (req, res) => {
   res.json({ success: true, data: await getPatchOperationsDashboard(req.query.refresh === '1') })
 }))
 
@@ -94,7 +94,7 @@ router.post('/remediation/:id/confirm', requireCapability('patchOps.scanRemediat
 // :resourceId is the Endpoint Central id stored on the device (PatchSystemStatus.detailResourceId).
 // Always answers 200 with a status so the client can render a specific state; technical
 // details are logged here and never returned.
-router.get('/devices/:resourceId/missing-patches', asyncHandler(async (req, res) => {
+router.get('/devices/:resourceId/missing-patches', requireAnyCapability('pages.Patch Operations', 'pages.Security Posture', 'pages.Reports & Analytics'), asyncHandler(async (req, res) => {
   const resourceId = String(req.params.resourceId ?? '')
   const view = (typeof req.query.view === 'string' ? req.query.view : 'all') as MissingPatchView
   if (!/^\d{6,30}$/.test(resourceId) || !VIEWS.includes(view)) {

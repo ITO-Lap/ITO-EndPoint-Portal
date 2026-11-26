@@ -80,7 +80,8 @@ Keys come from `server/src/services/rolePermissions.ts`. Built-in defaults for I
 | `roleActivity.export` | Defined; export is client-side |
 | `securityPolicies.read` / `.sync` | `/api/security-policies` (router not mounted) |
 | `settings.navigationEdit` | Defined; UI-level |
+| `sync.manage` | `POST /api/sync/run`, `PUT /api/sync/schedule`, `GET /api/sync/logs` |
 | `roles.manage` | `/api/roles` |
-| `pages.<Title>` | Client-side page access (`canAccess`) |
+| `pages.<Title>` | Client-side page access (`canAccess`) **and**, since 2026-11-20, the server-side check on the routes listed in [06 §6](06-authentication-rbac-security.md) (`requireCapability('pages.<Title>')`) |
 
-Routes **without** a capability check (session only) are listed in [06 §6](06-authentication-rbac-security.md).
+Routes that still need only a session are listed at the end of [06 §6](06-authentication-rbac-security.md).

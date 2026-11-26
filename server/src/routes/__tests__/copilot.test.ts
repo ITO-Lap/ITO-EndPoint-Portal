@@ -35,6 +35,7 @@ vi.mock('../../services/copilotEngine.js', () => ({
 const mockGetToolByName = vi.hoisted(() => vi.fn())
 vi.mock('../../services/copilotTools.js', () => ({
   getToolByName: mockGetToolByName,
+  toolsAllowedForRole: (role: string) => (['Global Admin', 'IT Admin', 'Helpdesk'].includes(role) ? [{ name: 'stub' }] : []),
   scrubSecrets: (v: unknown) => v,
   READ_ROLES: ['Global Admin', 'IT Admin', 'Helpdesk'],
   WRITE_ROLES: ['Global Admin', 'IT Admin'],

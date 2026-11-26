@@ -20,7 +20,7 @@ const EMPTY_TEXT: Record<MissingPatchView, string> = {
 
 const SEVERITY_STYLE: Record<MissingPatchSeverity, string> = {
   Critical:  'bg-red-50 text-red-700 border-red-200',
-  Important: 'bg-orange-50 text-orange-700 border-orange-200',
+  Important: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   Moderate:  'bg-amber-50 text-amber-700 border-amber-200',
   Low:       'bg-slate-50 text-slate-600 border-slate-200',
   Unrated:   'bg-slate-50 text-slate-500 border-slate-200',
@@ -71,7 +71,7 @@ function Message({ children, onRetry }: { children: React.ReactNode; onRetry?: (
       <p className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-400" />{children}</p>
       {onRetry && (
         <button type="button" onClick={onRetry}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
           Retry
         </button>
       )}
@@ -162,11 +162,11 @@ export function MissingPatchDrawer({ device, initialView, onClose }: Props) {
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">
             <button type="button" onClick={() => reload(true)} disabled={!resourceId || state.kind === 'loading'} aria-label="Refresh missing patches"
-              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <RefreshCw className={`h-4 w-4 ${state.kind === 'loading' ? 'animate-spin' : ''}`} />
             </button>
             <button ref={closeRef} type="button" onClick={onClose} aria-label="Close missing patch details"
-              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -175,8 +175,8 @@ export function MissingPatchDrawer({ device, initialView, onClose }: Props) {
         <div role="tablist" aria-label="Missing patch filters" className="flex gap-1 px-5 py-2.5" style={{ borderBottom: '1px solid rgba(148,163,184,0.12)' }}>
           {PATCH_TABS.map(t => (
             <button key={t.view} type="button" role="tab" aria-selected={view === t.view} onClick={() => selectView(t.view)}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${
-                view === t.view ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>
+              className={`rounded-lg px-3 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                view === t.view ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>
               {t.label}
             </button>
           ))}

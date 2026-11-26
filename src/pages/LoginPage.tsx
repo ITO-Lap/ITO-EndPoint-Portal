@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { LogIn, Mail, Lock, AlertCircle, Sparkles, ShieldCheck, BellRing, Activity } from 'lucide-react'
-import { ZinniaIcon } from '../components/ui/ZinniaLogo'
+import { EndpointPlusIcon } from '../components/ui/EndpointPlusLogo'
 import { fetchAuthConfig, signIn, startMicrosoftSignIn, type AuthConfig, type SessionUser } from '../api/session'
+import { LoginParticles } from '../components/auth/LoginParticles'
 import './login.css'
 
 // A fixed constellation (0-100 viewBox); nearby nodes are joined, so the graph is stable between renders.
@@ -16,14 +17,14 @@ function NeuralGraph() {
   return (
     <svg className="lg-neural" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
-        <linearGradient id="lg-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#F46C00" stopOpacity=".55" /><stop offset="1" stopColor="#0EA5E9" stopOpacity=".5" /></linearGradient>
-        <radialGradient id="lg-glow"><stop offset="0" stopColor="#FFB020" /><stop offset="1" stopColor="#F46C00" stopOpacity="0" /></radialGradient>
+        <linearGradient id="lg-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#4F46E5" stopOpacity=".55" /><stop offset="1" stopColor="#0EA5E9" stopOpacity=".5" /></linearGradient>
+        <radialGradient id="lg-glow"><stop offset="0" stopColor="#22D3EE" /><stop offset="1" stopColor="#4F46E5" stopOpacity="0" /></radialGradient>
       </defs>
       {EDGES.map(({ i, j }) => (
         <g key={`${i}-${j}`}>
           <line className="lg-edge" x1={NODES[i]![0]} y1={NODES[i]![1]} x2={NODES[j]![0]} y2={NODES[j]![1]} stroke="url(#lg-edge)" strokeWidth=".16" />
           {(i + j) % 3 === 0 && (
-            <line className="lg-packet" x1={NODES[i]![0]} y1={NODES[i]![1]} x2={NODES[j]![0]} y2={NODES[j]![1]} stroke="#F46C00" strokeWidth=".42"
+            <line className="lg-packet" x1={NODES[i]![0]} y1={NODES[i]![1]} x2={NODES[j]![0]} y2={NODES[j]![1]} stroke="#4F46E5" strokeWidth=".42"
               style={{ animationDelay: `${(i * 0.53) % 5}s` }} />
           )}
         </g>
@@ -31,7 +32,7 @@ function NeuralGraph() {
       {NODES.map(([x, y], i) => (
         <g key={i}>
           <circle cx={x} cy={y} r="1.9" fill="url(#lg-glow)" opacity=".35" />
-          <circle className="lg-node" cx={x} cy={y} r=".6" fill="#F46C00" style={{ animationDelay: `${(i * 0.45) % 3.6}s` }} />
+          <circle className="lg-node" cx={x} cy={y} r=".6" fill="#4F46E5" style={{ animationDelay: `${(i * 0.45) % 3.6}s` }} />
         </g>
       ))}
     </svg>
@@ -78,25 +79,27 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
   const showEmail = !!config?.emailSignIn
 
   return (
-    <main className="lg-root">
+    <main className="lg-root" onPointerMove={e => { e.currentTarget.style.setProperty('--mx', `${e.clientX}px`); e.currentTarget.style.setProperty('--my', `${e.clientY}px`) }}>
       <div className="lg-grid" aria-hidden="true" />
+      <div className="lg-spotlight" aria-hidden="true" />
       <div className="lg-blob lg-blob-1" aria-hidden="true" /><div className="lg-blob lg-blob-2" aria-hidden="true" />
       <div className="lg-blob lg-blob-3" aria-hidden="true" /><div className="lg-blob lg-blob-4" aria-hidden="true" />
       <NeuralGraph />
+      <LoginParticles />
 
       <div className="lg-shell">
-        <section className="lg-rise" aria-label="About ITO Endpoint">
+        <section className="lg-rise" aria-label="About EndPoint+">
           <div className="lg-brand">
-            <ZinniaIcon className="h-9 w-auto" />
+            <EndpointPlusIcon className="h-9 w-auto" />
             <span className="lg-brand-sep" aria-hidden="true" />
-            <span className="lg-brand-name">ITO Endpoint</span>
+            <span className="lg-brand-name">EndPoint+</span>
           </div>
-          <span className="lg-pill" style={{ marginTop: '2.2rem' }}><Sparkles size={13} aria-hidden="true" /> AI-powered endpoint operations</span>
+          <span className="lg-pill" style={{ marginTop: '2.2rem' }}><span className="lg-live" aria-hidden="true" /><Sparkles size={13} aria-hidden="true" /> AI-powered endpoint operations</span>
           <h1 className="lg-title">Endpoint intelligence,<br /><span className="lg-gradient-text">made effortless.</span></h1>
           <p className="lg-lede">One place for device health, patching and compliance, with an AI Copilot that turns signals into the next action.</p>
           <ul className="lg-features">
-            {FEATURES.map(({ icon: Icon, text }) => (
-              <li key={text} className="lg-feature"><span className="lg-feature-icon"><Icon size={16} aria-hidden="true" /></span>{text}</li>
+            {FEATURES.map(({ icon: Icon, text }, i) => (
+              <li key={text} className="lg-feature lg-slide" style={{ animationDelay: `${0.35 + i * 0.12}s` }}><span className="lg-feature-icon"><Icon size={16} aria-hidden="true" /></span>{text}</li>
             ))}
           </ul>
         </section>
@@ -104,7 +107,7 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
         <section className="lg-rise lg-rise-2">
           <div className="lg-card">
             <h2>Welcome back</h2>
-            <p className="lg-sub">Sign in with your Zinnia account to continue.</p>
+            <p className="lg-sub">Sign in to continue.</p>
 
             {error && (
               <div role="alert" className="lg-error">
@@ -115,8 +118,11 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
 
             {showMicrosoft && (
               <button type="button" className="lg-btn lg-btn-ms" onClick={() => void microsoft()} disabled={submitting}>
-                <ZinniaIcon className="h-5 w-auto" />
-                Sign in with Zinnia
+                <svg viewBox="0 0 21 21" className="h-5 w-5" aria-hidden="true">
+                  <rect x="1" y="1" width="9" height="9" fill="#F25022" /><rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                  <rect x="1" y="11" width="9" height="9" fill="#00A4EF" /><rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                </svg>
+                Sign in with Microsoft
               </button>
             )}
 
@@ -128,7 +134,7 @@ export function LoginPage({ onSignedIn, initialError = null }: { onSignedIn: (us
                 <div className="lg-field">
                   <Mail aria-hidden="true" />
                   <input id="login-email" className="lg-input" type="email" autoComplete="username" autoFocus={!showMicrosoft} required
-                    value={email} onChange={e => setEmail(e.target.value)} placeholder="you@zinnia.com" />
+                    value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
                 </div>
 
                 {config?.passwordRequired && (

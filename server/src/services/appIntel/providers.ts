@@ -62,7 +62,7 @@ export const liveProviders: AppIntelProviders = {
     // retried with Retry-After, and if retries run out the pages already read are kept: the next round
     // (after a cool-down) continues from the failed page instead of starting the whole read again.
     const progress: PagedProgress<IntuneDetectedRow> = { rows: [], nextUrl: null }
-    let rows: IntuneDetectedRow[] = []
+    let rows: IntuneDetectedRow[]
     for (let round = 0; ; round++) {
       try {
         rows = await graphGetAllResumable<IntuneDetectedRow>(creds(), GRAPH, '/deviceManagement/detectedApps', {

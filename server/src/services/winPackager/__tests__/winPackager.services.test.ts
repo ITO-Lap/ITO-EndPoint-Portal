@@ -14,8 +14,7 @@ import { applyPatch, configPatchSchema, configProblems, defaultConfig, outputFil
 import { detectionScript, installScript, psq, splitCommand, uninstallScript } from '../artifacts.js'
 import { createWorkerClient, evaluateSteps, workerConfig } from '../worker.js'
 import { signedLink, verifyLink } from '../signing.js'
-import { buildGuide } from '../guides.js'
-import type { PackageJob, PackageConfig } from '../types.js'
+import type { PackageConfig } from '../types.js'
 
 const GUID = '{12345678-ABCD-4EF0-9876-0123456789AB}'
 let dir: string
@@ -228,8 +227,8 @@ describe('configuration', () => {
 describe('generated artifacts', () => {
   const cfg = (over: Partial<PackageConfig> = {}): PackageConfig => ({
     appName: "O'Neil Tool", publisher: 'C', version: '1.2', description: '', installCommand: 'msiexec /i "a.msi" /qn /norestart', uninstallCommand: `msiexec /x "${GUID}" /qn /norestart`,
-    detection: { type: 'msi-product-code', value: GUID, minVersion: '1.2' }, installBehavior: 'system', architecture: 'x64', minimumOs: 'Windows 10 1809',
-    restartBehavior: 'none', returnCodes: [], dependencies: '', supersedenceNotes: '', assignmentNotes: '', setupFile: 'a.msi', acknowledgedUnverifiedCommands: true, ...over,
+    detection: { type: 'msi-product-code', value: GUID, minVersion: '1.2' }, installBehavior: 'system', architecture: 'x64',
+    setupFile: 'a.msi', acknowledgedUnverifiedCommands: true, ...over,
   })
   it('escapes PowerShell literals', () => { expect(psq("it's")).toBe("'it''s'") })
   it('splits commands into program and raw arguments', () => {
@@ -309,28 +308,6 @@ describe('signed worker links', () => {
     expect(verifyLink('other', 'job-1', 'source', exp, sig, now)).toBe(false)
     expect(verifyLink('secret', 'job-1', 'source', String(Number(exp) + 1e9), sig, now)).toBe(false)
     expect(verifyLink('secret', 'job-1', 'source', exp, 'zz', now)).toBe(false)
-  })
-})
-
-describe('publishing guide', () => {
-  const job = (over: Partial<PackageJob> = {}): PackageJob => ({
-    id: 'j', state: 'review-required', createdAt: '', updatedAt: '', createdBy: 'a@b.c', events: [],
-    source: { fileName: 'a.msi', storedName: 'a.msi', type: 'msi', sizeBytes: 1, sha256: 'x' }, ...over,
-  })
-  it('is not ready until a package exists', () => { expect(buildGuide(job(), {}).ready).toBe(false) })
-  it('warns when Windows installation was not tested and never claims Endpoint Central publishing', async () => {
-    const a = await analyzeInstaller(put('g.msi', makeMsi({ properties: { ProductCode: GUID, ProductVersion: '1.0', Manufacturer: 'C', ProductName: 'T' } })), 'g.msi')
-    const g = buildGuide(job({ config: defaultConfig(a, 'g.msi'), output: { fileName: 'T-1.0-x64.intunewin', sizeBytes: 1, sha256: 'y', createdAt: '' } }), {})
-    expect(g.ready).toBe(true)
-    expect(g.banner).toMatch(/Windows Installation Not Tested/)
-    expect(g.endpointCentralApi).toEqual({ configured: false, message: 'Endpoint Central publishing API not configured — use guided manual publishing.' })
-    expect(g.intune.find(s => s.title === 'Program')?.items.find(i => i.label === 'Install command')).toMatchObject({ copy: true })
-    expect(g.intune.map(s => s.title)).toEqual(expect.arrayContaining(['App information', 'Program', 'Requirements', 'Detection rules', 'Dependencies', 'Supersedence', 'Assignments', 'Monitoring and troubleshooting']))
-  })
-  it('drops the banner only for validated packages', async () => {
-    const a = await analyzeInstaller(put('g2.msi', makeMsi({ properties: { ProductCode: GUID, ProductVersion: '1.0', Manufacturer: 'C', ProductName: 'T' } })), 'g2.msi')
-    const g = buildGuide(job({ config: defaultConfig(a, 'g2.msi'), output: { fileName: 'f.intunewin', sizeBytes: 1, sha256: 'y', createdAt: '' }, validation: { outcome: 'validated', at: '', steps: [], message: '' } }), {})
-    expect(g.banner).toBeUndefined()
   })
 })
 

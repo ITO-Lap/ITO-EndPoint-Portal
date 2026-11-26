@@ -72,7 +72,7 @@ def cover_banner():
     c = t.rows[0].cells[0]
     set_cell_bg(c, NAVY); cell_margins(c, 200, 180, 220, 220)
     p1 = c.paragraphs[0]
-    r1 = p1.add_run("ITO Endpoint AI Copilot")
+    r1 = p1.add_run("EndPoint+")
     r1.font.size = Pt(26); r1.bold = True; r1.font.color.rgb = rgb(WHITE)
     p2 = c.add_paragraph("Full Product & Feature Documentation")
     p2.runs[0].font.size = Pt(13); p2.runs[0].font.color.rgb = RGBColor(0xA8,0xC4,0xF0)
@@ -916,7 +916,7 @@ doc.add_paragraph()
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 divider()
-fp = doc.add_paragraph("ITO Endpoint AI Copilot  •  Zinnia Technology Platform  •  Full Product Documentation  •  Confidential")
+fp = doc.add_paragraph("EndPoint+  •  Verma Technology Platform  •  Full Product Documentation  •  Confidential")
 fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 for r in fp.runs:
     r.font.size = Pt(8); r.font.color.rgb = rgb(GREY)

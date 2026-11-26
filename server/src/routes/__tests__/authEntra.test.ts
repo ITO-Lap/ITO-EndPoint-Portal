@@ -99,18 +99,18 @@ describe('Microsoft sign-in', () => {
   })
 
   it('uses AUTH_IT_ADMIN_GROUP when set, and says in the log what it did find when refusing', async () => {
-    vi.stubEnv('AUTH_IT_ADMIN_GROUP', 'Zinnia Endpoint Admins')
+    vi.stubEnv('AUTH_IT_ADMIN_GROUP', 'Verma Endpoint Admins')
     memberOf = { status: 200, body: { value: [{ displayName: 'ITO EndPoint Portal' }, { displayName: 'Marketing' }] } }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { location } = await callback()
-    expect(location.searchParams.get('auth_error')).toContain("'Zinnia Endpoint Admins'")
+    expect(location.searchParams.get('auth_error')).toContain("'Verma Endpoint Admins'")
     expect(warn.mock.calls.flat().join(' ')).toContain('belongs to 2 group(s)')
     expect(warn.mock.calls.flat().join(' ')).toContain('Similar names: ITO EndPoint Portal')
     warn.mockRestore()
     vi.unstubAllEnvs()
   })
 
-  it('denies a Zinnia user who is in neither group, without issuing a token', async () => {
+  it('denies a Verma user who is in neither group, without issuing a token', async () => {
     memberOf = { status: 200, body: { value: [{ displayName: 'Marketing' }] } }
     const { location } = await callback()
     expect(location.searchParams.get('auth_error')).toContain('Access denied. pat@zinnia.com is not assigned a role and is not a member')

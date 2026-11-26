@@ -67,24 +67,31 @@ Capability **keys not currently tied to an enforcement point**: `scheduledReport
 | Frontend | `canAccess(role, permissions, pageTitle)` hides sidebar items and shows `AccessDenied` | `src/lib/permissions.ts`, `src/App.tsx` |
 | Backend session | `requireSessionExceptAuth` on `/api` → 401 if missing/invalid; **overwrites** `x-user-email` and `x-user-role` with verified values | `middleware/requireSession.ts` |
 | Backend capability | `requireCapability(key)` looks up the caller's role in the permission store; Global Admin short-circuits | `middleware/requireRole.ts` |
-| Audit roles | `requireAuditRole('Audit Reader')` maps app roles to audit roles (Global/IT Admin: reader+exporter+administrator; Helpdesk: reader) | `middleware/requireRole.ts` |
+| Role Activity Audit | Gated by the `pages.Role Activity Audit` permission, so built-in and custom roles behave the same (`requireAuditRole` still exists for the audit-actor mapping but no longer gates these routes) | `routes/roleActivity.ts` |
 | Two-person style confirm | Patch remediation must be confirmed by the same admin who created the preview | `routes/endpointCentral.ts` |
 
-## 6. Authorization gaps (Verified by reading every router)
+## 6. Server-side authorization (updated 2026-11-20)
 
-These routes require only a valid session — any signed-in role, including Helpdesk or a custom role without the matching page, can call them if they craft the request:
+Every `/api` route needs a valid session. The routes below also enforce the owning **page permission** on the server, so hiding a page in the UI is no longer the only protection (the check is the same `pages.<Title>` key the sidebar uses; Global Admin always passes):
 
-| Route | Effect |
+| Routes | Permission needed |
 |---|---|
-| `POST/PUT/DELETE /api/automations…`, `/scan`, `/ai-build` | Create/modify/delete automation rules; run rules (sends Slack/Jira/Teams) |
-| `POST /api/scheduled-reports`, `PUT/DELETE /:id`, `POST /:id/run` | Manage report schedules; trigger Slack posts |
-| `POST /api/integrations/:id/credentials`, `/sync` | Integration credential/sync endpoints |
-| `POST /api/slack/test`, `/reconnect` | Slack health actions |
-| `POST /api/jira/issues` | Create Jira issues |
-| `POST /api/entra/devices/:id/sync`, `/diagnose` | Device actions through Graph |
-| `GET /api/devices…`, `/users`, `/entra/*`, `/intelligence/*`, `/reports/*`, `/security-*`, `/patch/*` | Read access to fleet and identity data (page hiding is client-side only) |
+| `POST /api/integrations/:id/credentials`, `POST /:id/sync`, `DELETE /postgres/credentials`, `GET /intune/debug`; `POST /api/slack/test`, `/reconnect`, `GET /slack/audit-logs` | `pages.Settings` |
+| `/api/scheduled-reports/*` (all methods) | `pages.Scheduled Reports` |
+| `GET /api/settings`, `PUT /api/settings/:section` | `pages.Settings` |
+| `POST/PUT/PATCH/DELETE /api/automations…`, `/scan`, `/ai-build`, `/:id/test` | `pages.Automation` |
+| `GET /api/intelligence/risk-scores` | `pages.Risk Scoring` |
+| `GET /api/intelligence/policies`, `/devices` | `pages.Policy Conflicts` |
+| `POST /api/intelligence/summary`, `/explain`, `/export` | any of Risk Scoring, Policy Conflicts, Reports & Analytics |
+| `/api/reports/*` | any of Reports & Analytics, Managed Devices, Mac Fleet Reports |
+| `GET /api/patch/systems` | any of Patch Operations, Mac Fleet Reports, Reports & Analytics, Security Posture |
+| `GET /api/endpoint-central/operations` | `pages.Patch Operations` |
+| `GET /api/endpoint-central/devices/:id/missing-patches` | any of Patch Operations, Security Posture, Reports & Analytics |
+| `GET /api/integrations/manageengine/apps` | any of App Guardian, ManageEngine App Inventory |
+| `GET /api/security-posture/findings` | `pages.Security Posture` |
+| `/api/role-activity/*` | `pages.Role Activity Audit` (was a fixed built-in role list, so custom roles failed) |
 
-Recommended fix: wrap these with `requireCapability(...)` using new or existing keys ([12](12-change-management.md), [10](10-risks-limitations-technical-debt.md) R-03).
+Still open to any signed-in role (aggregate or low-risk): `GET /api/integrations/status`, `GET /api/patch/priority-summary`, `GET /api/automations` reads, `GET /api/devices…`, `/users`, `/entra/*`, `/security-*`, `POST /api/jira/issues`, `POST /api/entra/devices/:id/sync` and `/diagnose`. The Dashboard needs the aggregate ones for every role. The rest remain a hardening item.
 
 ## 7. Other security controls and weaknesses
 
@@ -100,7 +107,7 @@ Recommended fix: wrap these with `requireCapability(...)` using new or existing 
 | Token storage | `localStorage` (readable by any script running on the origin — an XSS would expose it) |
 | Audit logging | `requestLogger` logs requests; `rbac_audit_log` (DB) and `schedule_audit_log` exist; patch actions are recorded. There is **no central immutable audit of all admin actions** (*Inferred*) |
 | Mac admin ingest | Shared secret (`MAC_ADMIN_REPORT_KEY`, 16+ chars) compared with `timingSafeEqual`; disabled when unset |
-| PostgreSQL TLS | Production pool uses `ssl: { rejectUnauthorized: false }` — encrypts but does **not** validate the server certificate (Verified in `db/index.ts`) |
+| PostgreSQL TLS | In production the pool uses TLS without validating the server certificate (`rejectUnauthorized: false`); the TLS choice (`auto`, `require`, `disable`) is set in Settings -> Integrations -> PostgreSQL (`db/index.ts`) |
 
 ## 8. Secrets management
 
@@ -112,7 +119,7 @@ Recommended fix: wrap these with `requireCapability(...)` using new or existing 
 
 ## 9. Hardening backlog (priority order)
 
-1. Add capability checks to the routes in §6.
+1. Add capability checks to the routes still open in §6.
 2. Add `helmet` (CSP, frame-ancestors, HSTS at IIS) and restrict CORS to the portal origin.
 3. Make the JWT algorithm explicit (`HS256`) and consider short-lived tokens with refresh.
 4. Validate the PostgreSQL certificate (`rejectUnauthorized: true` with the CA).

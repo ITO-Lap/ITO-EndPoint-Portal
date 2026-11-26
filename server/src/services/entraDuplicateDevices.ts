@@ -188,7 +188,7 @@ export async function collectDuplicateDeviceReport(now = new Date()): Promise<Du
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(/\b(401|403)\b/.test(message)
       ? 'Could not read Entra devices: the app registration needs the Device.Read.All application permission (with admin consent).'
-      : `Could not read Entra devices: ${message}`)
+      : `Could not read Entra devices: ${message}`, { cause: error })
   }
   let intune: GraphManagedDevice[] | null = null
   try { intune = await getManagedDevices(creds) }

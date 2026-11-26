@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { MessageSquare, RefreshCw, Pencil, Clock } from 'lucide-react'
 import { notificationScheduleApi } from '../../api/notificationSchedule'
 import type { NotificationScheduleListItem, UpdateScheduleInput } from '../../api/notificationSchedule'
@@ -15,16 +15,20 @@ export function QuickSlackSchedules({ canEdit, onViewAll }: QuickSlackSchedulesP
   const [schedules, setSchedules] = useState<NotificationScheduleListItem[]>([])
   const [editing, setEditing] = useState<NotificationScheduleListItem | null>(null)
 
-  const load = useCallback(async () => {
-    setState('loading')
-    const res = await notificationScheduleApi.list()
-    if (!res.success) { setState('error'); return }
-    const rows = (res.data ?? []).slice(0, 2)
-    setSchedules(rows)
-    setState(rows.length === 0 ? 'empty' : 'ready')
-  }, [])
+  // Bump to reload (after saving). State starts as 'loading', so the first fetch needs no spinner, and a reload keeps the current rows visible.
+  const [reloadKey, setReloadKey] = useState(0)
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    let cancelled = false
+    void notificationScheduleApi.list().then(res => {
+      if (cancelled) return
+      if (!res.success) { setState('error'); return }
+      const rows = (res.data ?? []).slice(0, 2)
+      setSchedules(rows)
+      setState(rows.length === 0 ? 'empty' : 'ready')
+    })
+    return () => { cancelled = true }
+  }, [reloadKey])
 
   const toggleEnabled = async (schedule: NotificationScheduleListItem) => {
     const input: UpdateScheduleInput = {
@@ -100,7 +104,7 @@ export function QuickSlackSchedules({ canEdit, onViewAll }: QuickSlackSchedulesP
           module={editing.module}
           sourceId={editing.source_id}
           schedule={editing}
-          onSaved={() => { setEditing(null); void load() }}
+          onSaved={() => { setEditing(null); setReloadKey(k => k + 1) }}
         />
       )}
     </div>

@@ -11,7 +11,6 @@ export type Architecture = 'x64' | 'x86' | 'arm64'
 
 export interface SignatureInfo { status: 'unsigned' | 'present-unverified' | 'valid' | 'invalid'; signer?: string; note: string }
 export interface DetectionRule { type: 'msi-product-code' | 'appx-package' | 'file-exists' | 'registry-uninstall' | 'custom-script'; value?: string; minVersion?: string; guidance?: string }
-export interface ReturnCode { code: number; type: 'success' | 'softReboot' | 'hardReboot' | 'retry' | 'failed' }
 export interface ArchiveEntry { name: string; size: number; kind: 'msi' | 'exe' | 'msix' | 'appx' | null }
 
 export interface PackageAnalysis {
@@ -30,21 +29,19 @@ export interface PackageAnalysis {
 export interface PackageConfig {
   appName: string; publisher: string; version: string; description: string
   installCommand: string; uninstallCommand: string; detection: DetectionRule
-  installBehavior: 'system' | 'user'; architecture: Architecture; minimumOs: string
-  restartBehavior: 'none' | 'allow' | 'force' | 'intune-decides'
-  returnCodes: ReturnCode[]; dependencies: string; supersedenceNotes: string; assignmentNotes: string
+  installBehavior: 'system' | 'user'; architecture: Architecture
   setupFile: string; acknowledgedUnverifiedCommands: boolean
 }
 
 export interface ValidationStep { name: 'install' | 'detect-after-install' | 'uninstall' | 'detect-after-uninstall'; status: 'pass' | 'fail' | 'skipped'; exitCode?: number; durationMs?: number; rebootIndicated?: boolean; stdout?: string; stderr?: string }
 export interface ValidationResult { outcome: 'validated' | 'failed' | 'not-tested'; at: string; workerName?: string; steps: ValidationStep[]; message: string }
-export interface PackageOutput { fileName: string; sizeBytes: number; sha256: string; createdAt: string; workerName?: string }
+export interface PackageOutput { fileName: string; exportDir?: string; sizeBytes: number; sha256: string; createdAt: string; workerName?: string }
 export interface JobEvent { at: string; actor: string; action: string; detail?: string }
 
 export interface PackageJob {
   id: string; state: PackageJobState; stateReason?: string; createdAt: string; updatedAt: string; createdBy: string
   source: { fileName: string; storedName: string; type: 'msi' | 'exe' | 'msix' | 'appx' | 'zip'; sizeBytes: number; sha256: string }
-  analysis?: PackageAnalysis; config?: PackageConfig; iconFile?: string
+  analysis?: PackageAnalysis; config?: PackageConfig
   validation?: ValidationResult; approval?: { by: string; at: string }; output?: PackageOutput
   events: JobEvent[]
 }
@@ -53,15 +50,8 @@ export interface PackagerStatus {
   limits: { maxUploadBytes: number; maxIntuneBytes: number }
   windowsWorker: { configured: boolean; state: 'api-unavailable' | 'ready'; name?: string; canPackage?: boolean; reason?: string }
   workerLinksConfigured: boolean
-  publishing: { intune: { enabled: boolean; reason: string }; endpointCentral: { configured: boolean; message: string } }
 }
 
-export interface GuideItem { label: string; value: string; copy?: boolean }
-export interface GuideSection { title: string; items: GuideItem[]; notes?: string[] }
-export interface PublishingGuide {
-  ready: boolean; banner?: string; intune: GuideSection[]; endpointCentral: GuideSection[]
-  endpointCentralApi: { configured: boolean; message: string }
-}
 export interface ArtifactFile { name: string; kind: string; available: boolean }
 
 /** Thrown for non-2xx responses; carries the server's validation `problems` so the UI can list them. */
@@ -93,14 +83,13 @@ export const winPackagerApi = {
   inspect: async (id: string) => (await call<PackageJob>(`/jobs/${id}/inspect`, jsonInit('POST', {}))).data,
   selectInstaller: async (id: string, entry: string) => (await call<PackageJob>(`/jobs/${id}/select-installer`, jsonInit('POST', { entry }))).data,
   saveConfig: async (id: string, patch: Partial<PackageConfig>) => call<PackageJob>(`/jobs/${id}/config`, jsonInit('PUT', patch)),
-  uploadIcon: async (id: string, file: File) => (await call<PackageJob>(`/jobs/${id}/icon`, { method: 'PUT', body: file })).data,
   validate: async (id: string) => (await call<PackageJob>(`/jobs/${id}/validate`, jsonInit('POST', {}))).data,
   approve: async (id: string, acceptUntested: boolean) => (await call<PackageJob>(`/jobs/${id}/approve`, jsonInit('POST', { acceptUntested }))).data,
   createPackage: async (id: string) => (await call<PackageJob>(`/jobs/${id}/package`, jsonInit('POST', {}))).data,
   artifacts: async (id: string) => (await call<{ files: ArtifactFile[]; output: PackageOutput | null; sourceSha256: string }>(`/jobs/${id}/artifacts`)).data,
-  guide: async (id: string) => (await call<PublishingGuide>(`/jobs/${id}/guide`)).data,
-  confirmPublishing: async (id: string) => (await call<PackageJob>(`/jobs/${id}/publishing-approval`, jsonInit('POST', { confirm: true }))).data,
-  remove: async (id: string) => { await call<unknown>(`/jobs/${id}`, { method: 'DELETE' }) },
+  outputFolder: async (id: string) => (await call<{ path: string; fileName: string | null; canOpen: boolean }>(`/jobs/${id}/output-folder`)).data,
+  openOutputFolder: async (id: string) => (await call<{ path: string }>(`/jobs/${id}/output-folder/open`, jsonInit('POST', {}))).data,
+  remove: async (id: string) => (await call<{ jobRemoved: boolean; job?: PackageJob }>(`/jobs/${id}`, { method: 'DELETE' })).data,
 
   /** Downloads through fetch so the Bearer session token is attached (a plain link could not carry it). */
   async download(id: string, name: string, fileName: string): Promise<void> {

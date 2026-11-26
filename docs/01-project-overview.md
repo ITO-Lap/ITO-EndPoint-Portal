@@ -4,7 +4,7 @@
 
 ## 1. What the project is
 
-**ITO Endpoint AI Copilot** (package name `endpoint-ai-copilot`, branded "ITO Endpoint", built on the Zinnia platform) is an internal web portal for Zinnia's IT Operations team. It gives one place to see and act on the state of the company's managed endpoints (Windows and macOS) by combining data from several management systems that otherwise have separate consoles. *(Verified: `package.json`, `docs/README.md`, `src/App.tsx`.)*
+**EndPoint+** (package name `endpoint-ai-copilot`, branded "EndPoint+", built on the Verma platform) is an internal web portal for Verma's IT Operations team. It gives one place to see and act on the state of the company's managed endpoints (Windows and macOS) by combining data from several management systems that otherwise have separate consoles. *(Verified: `package.json`, `docs/README.md`, `src/App.tsx`.)*
 
 ### Business problem
 

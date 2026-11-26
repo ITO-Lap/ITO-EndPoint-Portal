@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search, X, RefreshCw, ShieldCheck, Download, ChevronRight,
   CheckCircle2, XCircle, Minus, PlusCircle, Pencil, MinusCircle,
@@ -16,9 +16,9 @@ import { Badge } from '../components/ui/Badge'
 import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
-import { useToast } from '../components/ui/ToastProvider'
+import { useToast } from '../components/ui/toastHooks'
 import { hasPermission } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/permissionsHooks'
 
 const PAGE_SIZE = 25
 
@@ -37,6 +37,8 @@ function StatusPill({ enabled }: { enabled: boolean | null }) {
   if (enabled === false) return <span className="inline-flex items-center gap-1 text-[0.68rem] font-bold text-slate-400"><XCircle className="h-3 w-3" />Disabled</span>
   return <span className="text-slate-300 text-[0.68rem]">—</span>
 }
+
+const listErrorMessage = (err: unknown) => err instanceof Error ? err.message : 'Failed to load security policies'
 
 function ChangeTypeBadge({ type }: { type: ChangeHistoryItem['changeType'] }) {
   if (type === 'added') return <span className="inline-flex items-center gap-1 text-[0.68rem] font-bold text-emerald-600"><PlusCircle className="h-3 w-3" />Added</span>
@@ -61,9 +63,12 @@ function DetailDrawer({ source, category, policyId, onClose }: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const targetKey = `${source}|${category}|${policyId}`
+  const [prevTargetKey, setPrevTargetKey] = useState(targetKey)
+  if (targetKey !== prevTargetKey) { setPrevTargetKey(targetKey); setLoading(true) }
+
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     securityPoliciesApi.getPolicyDetail(source, category, policyId)
       .then(res => { if (!cancelled) setDetail(res.data) })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load details') })
@@ -178,40 +183,60 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
 
   const categoriesForTab = tab === 'intune' ? INTUNE_CATEGORIES : ENTRA_CATEGORIES
 
+  const listParams = useMemo(() => ({
+    source: tab,
+    category: category === 'all' ? undefined : category,
+    status: status === 'all' ? undefined : status,
+    search: search.trim() || undefined,
+    page, pageSize: PAGE_SIZE, sortBy: sortKey, sortDirection,
+  }), [tab, category, status, search, page, sortKey, sortDirection])
+
+  const applyList = useCallback((res: Awaited<ReturnType<typeof securityPoliciesApi.listPolicies>>) => {
+    setItems(res.data)
+    setTotal(res.pagination.total)
+    setConfigured(res.configured)
+  }, [])
+
+  // Manual reload (after a sync).
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await securityPoliciesApi.listPolicies({
-        source: tab,
-        category: category === 'all' ? undefined : category,
-        status: status === 'all' ? undefined : status,
-        search: search.trim() || undefined,
-        page, pageSize: PAGE_SIZE, sortBy: sortKey, sortDirection,
-      })
-      setItems(res.data)
-      setTotal(res.pagination.total)
-      setConfigured(res.configured)
+      applyList(await securityPoliciesApi.listPolicies(listParams))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load security policies')
+      setError(listErrorMessage(err))
     } finally {
       setLoading(false)
     }
-  }, [tab, category, status, search, page, sortKey, sortDirection])
+  }, [listParams, applyList])
 
-  const loadSyncStatus = useCallback(async () => {
-    try {
-      const res = await securityPoliciesApi.getSyncStatus()
-      setSyncStatus(res.data)
-    } catch {
-      setSyncStatus(null)
-    }
+  // Query changes: reset paging/category and flag loading during render, so the fetch effect never sets state synchronously.
+  const [prevTab, setPrevTab] = useState(tab)
+  if (tab !== prevTab) { setPrevTab(tab); setPage(1); setCategory('all') }
+  const [prevFilters, setPrevFilters] = useState({ category, status, search })
+  if (prevFilters.category !== category || prevFilters.status !== status || prevFilters.search !== search) {
+    setPrevFilters({ category, status, search })
+    setPage(1)
+  }
+  const [prevListParams, setPrevListParams] = useState(listParams)
+  if (prevListParams !== listParams) { setPrevListParams(listParams); setLoading(true); setError(null) }
+
+  useEffect(() => {
+    let cancelled = false
+    securityPoliciesApi.listPolicies(listParams)
+      .then(res => { if (!cancelled) applyList(res) })
+      .catch((err: unknown) => { if (!cancelled) setError(listErrorMessage(err)) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [listParams, applyList])
+
+  useEffect(() => {
+    let cancelled = false
+    securityPoliciesApi.getSyncStatus()
+      .then(res => { if (!cancelled) setSyncStatus(res.data) })
+      .catch(() => { if (!cancelled) setSyncStatus(null) })
+    return () => { cancelled = true }
   }, [])
-
-  useEffect(() => { void load() }, [load])
-  useEffect(() => { void loadSyncStatus() }, [loadSyncStatus])
-  useEffect(() => { setPage(1); setCategory('all') }, [tab])
-  useEffect(() => { setPage(1) }, [category, status, search])
 
   async function handleSync() {
     setSyncing(true)
@@ -270,7 +295,7 @@ export function SecurityPoliciesPage({ viewerRole, userEmail, onBack }: Props) {
             </div>
           ) : (
             <h1 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-orange-600" aria-hidden="true" /> Security Policies
+              <ShieldCheck className="h-5 w-5 text-indigo-600" aria-hidden="true" /> Security Policies
             </h1>
           )}
           <p className="text-xs text-slate-500 mt-0.5">

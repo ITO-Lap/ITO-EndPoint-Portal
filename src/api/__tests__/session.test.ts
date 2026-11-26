@@ -62,7 +62,7 @@ describe('signIn and fetchCurrentUser', () => {
   })
 
   it('throws the server message on refusal and stores nothing', async () => {
-    base.mockResolvedValue(ok({ success: false, error: 'This email is not authorised to use ITO Endpoint.' }, 403))
+    base.mockResolvedValue(ok({ success: false, error: 'This email is not authorised to use EndPoint+.' }, 403))
     await expect(signIn('x@zinnia.com')).rejects.toThrow('not authorised')
     expect(getSession()).toBeNull()
   })

@@ -61,7 +61,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_0
   try {
     return await fetch(url, { ...init, signal: controller.signal })
   } catch (err) {
-    if ((err as Error).name === 'AbortError') throw new Error(`Slack API timed out after ${timeoutMs / 1000}s`)
+    if ((err as Error).name === 'AbortError') throw new Error(`Slack API timed out after ${timeoutMs / 1000}s`, { cause: err })
     throw err
   } finally {
     clearTimeout(timer)

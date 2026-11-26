@@ -290,7 +290,7 @@ off to Node.
 
 1. In IIS Manager's left tree, right-click **Sites** → **Add Website**.
 2. Fill in the dialog:
-   - **Site name:** `ITO Endpoint Copilot` (or anything memorable — it's
+   - **Site name:** `EndPoint+` (or anything memorable — it's
      just a label in IIS Manager, doesn't affect anything else).
    - **Physical path:** click **...** and create/select an **empty** folder,
      e.g. `C:\inetpub\ito-endpoint-site`. Important: this is *not* the same
@@ -351,7 +351,7 @@ from another machine, do this:
 5. **Allow the connection** → Next.
 6. Leave Domain/Private/Public all checked (or narrow to your network's
    profile if your security team requires it) → Next.
-7. Name it something like `IIS - ITO Endpoint HTTP` → Finish.
+7. Name it something like `IIS - EndPoint+ HTTP` → Finish.
 
 ---
 

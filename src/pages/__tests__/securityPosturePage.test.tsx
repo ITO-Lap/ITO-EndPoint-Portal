@@ -6,7 +6,7 @@ import type { PillarDeviceList, PosturePillar, PosturePillarDevice, SecurityPost
 vi.mock('../../api', () => ({
   api: {
     fetchSecurityPosture: vi.fn(), fetchPillarDevices: vi.fn(),
-    fetchEndpointProtectionCoverage: vi.fn(() => new Promise(() => {})), refreshEndpointProtectionCoverage: vi.fn(),
+    fetchMissingPatches: vi.fn(), fetchEndpointProtectionCoverage: vi.fn(() => new Promise(() => {})), refreshEndpointProtectionCoverage: vi.fn(),
   },
 }))
 vi.mock('../../components/security/EndpointProtectionCoverage', () => ({ EndpointProtectionCoverage: () => <div>coverage stub</div> }))
@@ -17,6 +17,7 @@ import { SecurityPosturePage } from '../SecurityPosturePage'
 
 const fetchPosture = vi.mocked(api.fetchSecurityPosture)
 const fetchDevices = vi.mocked(api.fetchPillarDevices)
+const fetchMissing = vi.mocked(api.fetchMissingPatches)
 
 const PATCH_A = 'KB5094125 — 2026-06 Cumulative Update for Windows 11'
 const PATCH_B = 'Microsoft Edge 150.0.1'
@@ -94,21 +95,54 @@ describe('details panel', () => {
     expect(within(panel).getByText('Failing', { selector: 'span.normal-case' })).toBeInTheDocument()
   })
 
-  it('Finding lists the actual missing patches, collapsing long lists', async () => {
+  it('clicking Finding opens a details modal listing every missing patch', async () => {
     const items = ['KB1 — Patch one', 'KB2 — Patch two', 'KB3 — Patch three', 'KB4 — Patch four', 'KB5 — Patch five']
     fetchDevices.mockResolvedValue(list([row({ detail: '5 critical, 0 important patches missing', items })]))
     const panel = await openPillar(/Critical Patching: 25%/)
-    const cell = await within(panel).findByText('5 critical, 0 important patches missing')
-    const finding = cell.parentElement!
-    expect(within(finding).queryByText('KB1 — Patch one')).not.toBeInTheDocument()
-    await userEvent.click(within(finding).getByRole('button', { name: 'Show 5 missing critical patches' }))
-    expect(within(finding).getByText('KB1 — Patch one')).toBeInTheDocument()
-    expect(within(finding).getByText('KB3 — Patch three')).toBeInTheDocument()
-    expect(within(finding).queryByText('KB4 — Patch four')).not.toBeInTheDocument()
-    await userEvent.click(within(finding).getByRole('button', { name: '+2 more' }))
-    expect(within(finding).getByText('KB5 — Patch five')).toBeInTheDocument()
-    await userEvent.click(within(finding).getByRole('button', { name: 'Show fewer' }))
-    expect(within(finding).queryByText('KB5 — Patch five')).not.toBeInTheDocument()
+    expect(screen.queryByText('KB1 — Patch one')).not.toBeInTheDocument()
+    await userEvent.click(await within(panel).findByRole('button', { name: /View finding details/ }))
+    expect(screen.queryByText('KB1 — Patch one')).not.toBeInTheDocument()   // collapsed until the finding is clicked
+    await userEvent.click(screen.getByRole('button', { name: /5 critical, 0 important patches missing/ }))
+    expect(screen.getByText('KB1 — Patch one')).toBeInTheDocument()
+    expect(screen.getByText('KB5 — Patch five')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByText('KB1 — Patch one')).not.toBeInTheDocument()
+  })
+
+  it('Finding modal works when no per-patch items are available', async () => {
+    fetchDevices.mockResolvedValue(list([row({ detail: '4 critical, 3 important patches missing' })]))
+    const panel = await openPillar(/Critical Patching: 25%/)
+    await userEvent.click(await within(panel).findByRole('button', { name: /View finding details/ }))
+    await userEvent.click(screen.getByRole('button', { name: /4 critical, 3 important patches missing/ }))
+    expect(screen.getByText(/No Endpoint Central patch record is linked/)).toBeInTheDocument()
+  })
+
+  it('Finding modal loads the device’s missing patches on demand when the fleet list had none', async () => {
+    const mp = (patchId: string, severity: 'Critical' | 'Important', kb: string) => ({ patchId, name: kb, description: `Update ${kb}`, severity, category: 'OS update' as const, vendor: null, updateType: null, kb, bulletinId: null, cves: [], releasedAt: null, rebootRequirement: null, approvalStatus: null, deploymentStatus: null })
+    fetchMissing.mockResolvedValue({ status: 'ok', patches: [mp('1', 'Critical', 'KB111'), mp('2', 'Important', 'KB222')] })
+    fetchDevices.mockResolvedValue(list([row({ detail: '1 critical, 1 important patches missing', patchResourceId: 'R-77' })]))
+    const panel = await openPillar(/Critical Patching: 25%/)
+    await userEvent.click(await within(panel).findByRole('button', { name: /View finding details/ }))
+    expect(fetchMissing).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /1 critical, 1 important patches missing/ }))
+    expect(await screen.findByText(/KB111 — Update KB111/)).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Critical (1)' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText(/KB222/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Important (1)' }))
+    expect(screen.getByText(/KB222 — Update KB222/)).toBeInTheDocument()
+    expect(screen.queryByText(/KB111/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Low (0)' }))
+    expect(screen.getByText(/No low patches missing/)).toBeInTheDocument()
+    expect(fetchMissing).toHaveBeenCalledWith('R-77', 'all')
+  })
+
+  it('Finding modal explains a failed on-demand load instead of staying blank', async () => {
+    fetchMissing.mockRejectedValue(new Error('429'))
+    fetchDevices.mockResolvedValue(list([row({ detail: '2 critical, 0 important patches missing', patchResourceId: 'R-78' })]))
+    const panel = await openPillar(/Critical Patching: 25%/)
+    await userEvent.click(await within(panel).findByRole('button', { name: /View finding details/ }))
+    await userEvent.click(screen.getByRole('button', { name: /2 critical, 0 important patches missing/ }))
+    expect(await screen.findByText(/could not return this device's patch list/)).toBeInTheDocument()
   })
 
   it('clicking a platform failing number shows that platform’s failing devices', async () => {

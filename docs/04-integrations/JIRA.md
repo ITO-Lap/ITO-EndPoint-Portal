@@ -17,7 +17,7 @@ missing.
 ## Credential setup
 
 1. Go to **id.atlassian.com/manage-profile/security/api-tokens** → **Create API token**
-2. Name it (e.g., `ITO Endpoint Copilot`) and copy the token — it is not shown again
+2. Name it (e.g., `EndPoint+`) and copy the token — it is not shown again
 3. Note your Jira site's base URL and the email address associated with your Atlassian account
 
 ---

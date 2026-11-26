@@ -25,7 +25,22 @@ export function useAutomations(category?: string) {
     }
   }, [category])
 
-  useEffect(() => { load() }, [load])
+  // Show the loading state during render when the category changes; the fetch runs in the effect.
+  const [prevCategory, setPrevCategory] = useState(category)
+  if (category !== prevCategory) { setPrevCategory(category); setLoading(true); setError(null) }
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([api.fetchAutomationRules(category), api.fetchAutomationStats()])
+      .then(([rulesData, statsData]) => {
+        if (cancelled) return
+        setRules(rulesData)
+        setStats(statsData)
+      })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load automation rules') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [category])
 
   const toggle = useCallback(async (id: string) => {
     const updated = await api.toggleAutomationRule(id)
@@ -66,7 +81,18 @@ export function useAutomationExecutions(ruleId?: string, limit = 50) {
     }
   }, [ruleId, limit])
 
-  useEffect(() => { load() }, [load])
+  const execKey = `${ruleId ?? ''}|${limit}`
+  const [prevExecKey, setPrevExecKey] = useState(execKey)
+  if (execKey !== prevExecKey) { setPrevExecKey(execKey); setLoading(true) }
+
+  useEffect(() => {
+    let cancelled = false
+    api.fetchAutomationExecutions({ ruleId, limit })
+      .then(data => { if (!cancelled) setExecutions(data) })
+      .catch(() => { /* silently fail — executions are supplementary */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [ruleId, limit])
 
   return { executions, loading, refresh: load }
 }

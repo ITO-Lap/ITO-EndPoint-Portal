@@ -18,7 +18,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       title={`Copy ${label}`}
       aria-label={`Copy ${label}`}
       onClick={() => { void navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-      className="inline-flex items-center rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition focus-visible:ring-2 focus-visible:ring-orange-300"
+      className="inline-flex items-center rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition focus-visible:ring-2 focus-visible:ring-indigo-300"
     >
       {copied ? <Check className="h-3 w-3 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
     </button>
@@ -47,7 +47,7 @@ export function AuditEventDetailDrawer({ event, timezone, onClose }: Props) {
       <div className="relative z-10 h-full w-full sm:w-[480px] bg-white shadow-2xl overflow-y-auto animate-slide-up sm:animate-none">
         <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-800">Role Activity Event Detail</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 hover:bg-slate-100 transition focus-visible:ring-2 focus-visible:ring-orange-300">
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 hover:bg-slate-100 transition focus-visible:ring-2 focus-visible:ring-indigo-300">
             <X className="h-4 w-4 text-slate-500" aria-hidden="true" />
           </button>
         </div>

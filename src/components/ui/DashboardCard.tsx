@@ -16,7 +16,7 @@ export function DashboardCard({
   title, icon: Icon, action, className = '',
   accent = true, accentColor, hoverable = false, children,
 }: DashboardCardProps) {
-  const color = accentColor ?? '#F46C00'
+  const color = accentColor ?? '#4F46E5'
 
   return (
     <div
@@ -30,7 +30,7 @@ export function DashboardCard({
           className="flex-shrink-0 h-[2.5px] w-full"
           style={{ background: accentColor
             ? `linear-gradient(90deg, transparent, ${color}90, ${color}, transparent)`
-            : 'linear-gradient(90deg, transparent 0%, #FFC600 25%, #F46C00 50%, #FB471F 75%, transparent 100%)',
+            : 'linear-gradient(90deg, transparent 0%, #22D3EE 25%, #4F46E5 50%, #06B6D4 75%, transparent 100%)',
           }}
         />
       )}

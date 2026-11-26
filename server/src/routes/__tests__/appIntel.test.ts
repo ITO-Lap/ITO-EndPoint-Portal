@@ -6,6 +6,7 @@ import { createAppIntelRouter } from '../appIntel.js'
 import { createAppIntelService } from '../../services/appIntel/service.js'
 import { errorHandler } from '../../middleware/errorHandler.js'
 import type { AppIntelProviders } from '../../services/appIntel/providers.js'
+import type { Json } from '../../test/json.js'
 
 const NOW = Date.parse('2026-10-12T10:00:00Z')
 const latest = { ok: true as const, value: { version: '6.1.0', versionSource: 'Homebrew cask API (zoom)', sourceUrl: 'u', lastCheckedAt: new Date(NOW).toISOString(), selfUpdating: false } }
@@ -36,10 +37,10 @@ async function start(p: AppIntelProviders = providers()) {
   return { server, base, service }
 }
 
-function call(url: string, method = 'GET', role: string | null = 'IT Admin'): Promise<{ status: number; text: string; json: any }> {
+function call(url: string, method = 'GET', role: string | null = 'IT Admin'): Promise<{ status: number; text: string; json: Json }> {
   return new Promise((resolve, reject) => {
     const req = http.request(url, { method, headers: role ? { 'x-user-role': role } : {} }, res => {
-      let b = ''; res.on('data', c => { b += c }); res.on('end', () => { let json: any = null; try { json = b ? JSON.parse(b) : null } catch { /* non-JSON (e.g. 404 HTML) */ } resolve({ status: res.statusCode ?? 0, text: b, json }) })
+      let b = ''; res.on('data', c => { b += c }); res.on('end', () => { let json: Json = null; try { json = b ? JSON.parse(b) : null } catch { /* non-JSON (e.g. 404 HTML) */ } resolve({ status: res.statusCode ?? 0, text: b, json }) })
     })
     req.on('error', reject); req.end()
   })
@@ -70,7 +71,7 @@ describe('app-intel route', () => {
     expect(all.total).toBe(2)
     expect(all.rows[0]).toMatchObject({ app: 'zoom.us', status: 'Package required', latestVerifiedVersion: '6.1.0', deployedPackageVersion: null, affectedDevices: 1, providers: ['manageengine-mdm'], latestSource: 'Homebrew cask API (zoom)', confidence: 'high' })
     expect(Object.keys(all.rows[0])).toEqual(expect.arrayContaining(['app', 'publisher', 'platform', 'installedVersions', 'affectedDevices', 'deployedPackageVersion', 'latestVerifiedVersion', 'status', 'action', 'providers', 'lastChecked']))
-    expect((await call(`${base}/apps?platform=macOS&status=Data%20unavailable`)).json.data.rows.map((r: any) => r.app)).toEqual(['Acme'])
+    expect((await call(`${base}/apps?platform=macOS&status=Data%20unavailable`)).json.data.rows.map((r: Json) => r.app)).toEqual(['Acme'])
     expect((await call(`${base}/apps?platform=macOS&q=zoom`)).json.data.total).toBe(1)
     expect((await call(`${base}/apps?platform=macOS&pageSize=1&page=2&sortKey=app&sortDir=asc`)).json.data.rows[0].app).toBe('zoom.us')
     expect((await call(`${base}/apps?platform=windows`)).json.data.total).toBe(0)
@@ -80,8 +81,8 @@ describe('app-intel route', () => {
   it('native apps never appear, and every row carries its install source', async () => {
     const { server, base } = await start()
     const rows = (await call(`${base}/apps?platform=macOS`)).json.data.rows
-    expect(rows.map((r: any) => r.app)).not.toContain('Safari')
-    expect(rows.every((r: any) => ['custom', 'self-service', 'manual'].includes(r.installSource))).toBe(true)
+    expect(rows.map((r: Json) => r.app)).not.toContain('Safari')
+    expect(rows.every((r: Json) => ['custom', 'self-service', 'manual'].includes(r.installSource))).toBe(true)
     expect(rows[0]).toMatchObject({ installSource: 'manual', installSourceBasis: 'none' })
     expect((await call(`${base}/apps?platform=macOS&installSource=manual`)).json.data.total).toBe(2)
     expect((await call(`${base}/apps?platform=macOS&installSource=self-service`)).json.data.total).toBe(0)
@@ -92,7 +93,7 @@ describe('app-intel route', () => {
   it('updateAvailable=1 returns only apps with a confirmed newer version and the summary explains the count', async () => {
     const { server, base } = await start()
     const rows = (await call(`${base}/apps?platform=macOS&updateAvailable=1`)).json.data.rows
-    expect(rows.map((r: any) => r.app)).toEqual(['zoom.us'])
+    expect(rows.map((r: Json) => r.app)).toEqual(['zoom.us'])
     const s = (await call(`${base}/summary?platform=macOS`)).json.data.summary
     expect(s.updateAvailable).toBe(1)
     expect(s.updateBreakdown).toMatchObject({ needsPackaging: 1, devicesBehind: 1 })
@@ -112,7 +113,7 @@ describe('app-intel route', () => {
     const key = encodeURIComponent('mdm|macOS|us.zoom.xos')
     const d = (await call(`${base}/apps/detail?key=${key}`)).json.data
     expect(d.app.status).toBe('Package required')
-    expect(d.app.evidence.map((e: any) => e.label)).toEqual(expect.arrayContaining(['Detected versions', 'Latest verified version', 'Comparison']))
+    expect(d.app.evidence.map((e: Json) => e.label)).toEqual(expect.arrayContaining(['Detected versions', 'Latest verified version', 'Comparison']))
     expect(d.devices).toEqual([{ name: 'Mac-1', user: null, version: '5.0.0', provider: 'manageengine-mdm' }])
     expect(d.packagingIntent).toMatchObject({ sourceKind: 'homebrew', sourceId: 'zoom', targetVersion: '6.1.0', allowedActions: ['build-package'] })
     const noIntent = (await call(`${base}/apps/detail?key=${encodeURIComponent('mdm|macOS|com.acme.tool')}`)).json.data

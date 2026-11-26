@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Settings, ChevronDown } from 'lucide-react'
 import { navItems, connectedSources, NAV_GROUP_ORDER, AUTOMATION_GROUP } from '../../data/dashboardData'
 import { Badge } from '../ui/Badge'
-import { ZinniaHorizontal } from '../ui/ZinniaLogo'
+import { EndpointPlusHorizontal } from '../ui/EndpointPlusLogo'
 import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import type { ConnectedSource, BadgeVariant, UserToolRole } from '../../types'
@@ -39,13 +39,13 @@ function GroupHeader({ label, collapsed, onToggle, isAutomation }: {
     >
       <span
         className="text-[0.55rem] font-black uppercase tracking-[0.18em] select-none"
-        style={{ color: isAutomation ? '#F46C00' : '#94A3B8' }}
+        style={{ color: isAutomation ? '#4F46E5' : '#94A3B8' }}
       >
         {label}
       </span>
       <ChevronDown
         className={`h-3 w-3 transition-transform flex-shrink-0 ${collapsed ? '-rotate-90' : ''}`}
-        style={{ color: isAutomation ? '#F46C00' : '#CBD5E1' }}
+        style={{ color: isAutomation ? '#4F46E5' : '#CBD5E1' }}
       />
     </button>
   )
@@ -73,7 +73,7 @@ function NavButton({ item, isActive, isAutomation, onClick }: {
       } : {
         background: 'transparent',
         border: '1px solid transparent',
-        color: isAutomation ? '#F46C00' : '#64748B',
+        color: isAutomation ? '#4F46E5' : '#64748B',
       }}
     >
       {/* Icon */}
@@ -85,9 +85,9 @@ function NavButton({ item, isActive, isAutomation, onClick }: {
           color: '#0EA5E9',
           boxShadow: '0 4px 12px rgba(14,165,233,0.20)',
         } : {
-          background: isAutomation ? 'rgba(244,108,0,0.08)' : 'rgba(255,255,255,0.60)',
-          border: `1px solid ${isAutomation ? 'rgba(244,108,0,0.20)' : 'rgba(148,163,184,0.20)'}`,
-          color: isAutomation ? '#F46C00' : '#94A3B8',
+          background: isAutomation ? 'rgba(79,70,229,0.08)' : 'rgba(255,255,255,0.60)',
+          border: `1px solid ${isAutomation ? 'rgba(79,70,229,0.20)' : 'rgba(148,163,184,0.20)'}`,
+          color: isAutomation ? '#4F46E5' : '#94A3B8',
         }}
       >
         <Icon className="h-3.5 w-3.5" />
@@ -100,7 +100,7 @@ function NavButton({ item, isActive, isAutomation, onClick }: {
           className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.5rem] font-black"
           style={isActive
             ? { background: 'rgba(14,165,233,0.15)', color: '#0EA5E9' }
-            : { background: 'rgba(244,108,0,0.12)', color: '#F46C00' }}
+            : { background: 'rgba(79,70,229,0.12)', color: '#4F46E5' }}
         >
           {item.badge}
         </span>
@@ -189,14 +189,14 @@ export function Sidebar({
         style={{ borderRight: '1px solid rgba(148,163,184,0.15)', boxShadow: '4px 0 24px rgba(14,165,233,0.06)' }}
       >
         {/* Top accent */}
-        <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 40%, #0EA5E9 70%, #6366F1 100%)' }} />
+        <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 40%, #0EA5E9 70%, #6366F1 100%)' }} />
 
-        {/* Brand lockup — Zinnia official logo */}
+        {/* Brand lockup — Verma official logo */}
         <div
           className="mt-1 mb-5 rounded-2xl px-3 py-2.5 water-glow-card"
-          style={{ background: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.90)', boxShadow: '0 4px 16px rgba(244,108,0,0.08), inset 0 1px 0 rgba(255,255,255,1)' }}
+          style={{ background: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.90)', boxShadow: '0 4px 16px rgba(79,70,229,0.08), inset 0 1px 0 rgba(255,255,255,1)' }}
         >
-          <ZinniaHorizontal iconSize="sm" wordmarkSize="sm" subtitle="ITO Endpoint" />
+          <EndpointPlusHorizontal iconSize="sm" wordmarkSize="sm" subtitle="IT Operations" />
         </div>
 
         {/* Navigation */}
@@ -215,7 +215,7 @@ export function Sidebar({
 
                 {/* Automation accent line */}
                 {isAutomation && !isCollapsed && (
-                  <div className="mb-1.5 ml-3 h-px" style={{ background: 'linear-gradient(90deg, rgba(244,108,0,0.35) 0%, transparent 100%)' }} />
+                  <div className="mb-1.5 ml-3 h-px" style={{ background: 'linear-gradient(90deg, rgba(79,70,229,0.35) 0%, transparent 100%)' }} />
                 )}
 
                 {!isCollapsed && (
@@ -296,9 +296,9 @@ export function Sidebar({
                     <div
                       className="grid h-5 w-5 place-items-center rounded-lg flex-shrink-0"
                       style={{
-                        background: !statusLoading && !configured ? 'rgba(148,163,184,0.10)' : 'rgba(244,108,0,0.10)',
-                        border: `1px solid ${!statusLoading && !configured ? 'rgba(148,163,184,0.20)' : 'rgba(244,108,0,0.20)'}`,
-                        color: !statusLoading && !configured ? '#CBD5E1' : '#F46C00',
+                        background: !statusLoading && !configured ? 'rgba(148,163,184,0.10)' : 'rgba(79,70,229,0.10)',
+                        border: `1px solid ${!statusLoading && !configured ? 'rgba(148,163,184,0.20)' : 'rgba(79,70,229,0.20)'}`,
+                        color: !statusLoading && !configured ? '#CBD5E1' : '#4F46E5',
                       }}
                     >
                       <Icon className="h-2.5 w-2.5" />
@@ -326,7 +326,7 @@ export function Sidebar({
         </div>
 
         {/* Footer */}
-        <p className="mt-3 px-2 text-center text-[0.5rem] text-slate-300">ITO Endpoint v2.0 · Enterprise</p>
+        <p className="mt-3 px-2 text-center text-[0.5rem] text-slate-300">EndPoint+ v2.0 · Enterprise</p>
       </aside>
     </>
   )

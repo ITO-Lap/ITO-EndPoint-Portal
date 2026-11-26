@@ -191,7 +191,7 @@ export async function buildAppUpdatesWorkbook(snap: { apps: AssessedApp[]; synce
   const content = await exportToExcel(rows, columns, {
     title: 'Managed App Report',
     subtitle: `All managed Windows and macOS apps with installed vs latest verified vendor version (winget-pkgs / Homebrew). Inventory synced ${snap.syncedAt}.${caveats.length ? ` Caveats: ${caveats.join(' | ')}` : ''}`,
-    generatedAt: new Date().toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, dataChecks,
+    generatedAt: new Date().toISOString(), generatedBy: 'EndPoint+', recordCount: rows.length, dataChecks,
   })
   return { content, filename: `managed-app-report-${snap.syncedAt.slice(0, 10)}.xlsx`, rows: rows.length, overview: buildUpdatesOverview(snap.apps, snap, dataChecks) }
 }

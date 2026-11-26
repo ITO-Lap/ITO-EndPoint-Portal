@@ -172,7 +172,7 @@ set_cell_bg(cell, NAVY)
 set_cell_margins(cell, 200, 160, 200, 200)
 
 title_p = cell.paragraphs[0]
-title_r = title_p.add_run("ITO Endpoint AI Copilot")
+title_r = title_p.add_run("EndPoint+")
 title_r.font.size = Pt(24)
 title_r.font.bold = True
 title_r.font.color.rgb = WHITE
@@ -221,7 +221,7 @@ for i, label in enumerate(integrations):
     cr.font.color.rgb = BLUE
 
 # ── Footer ────────────────────────────────────────────────────────────────────
-fp = doc.add_paragraph("\nITO Endpoint AI Copilot  •  Zinnia Technology Platform  •  Confidential")
+fp = doc.add_paragraph("\nEndPoint+  •  Verma Technology Platform  •  Confidential")
 fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 for r in fp.runs:
     r.font.size = Pt(8)

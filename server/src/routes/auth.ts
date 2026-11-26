@@ -11,11 +11,12 @@
  *   anyone else                     → 403
  */
 import { Router } from 'express'
-import { createHmac, randomBytes } from 'crypto'
+import { randomBytes } from 'crypto'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
 import { getEntraConfig } from '../store/integrationStore.js'
-import { SESSION_SECRET, allowedEmails, authEnforced, authenticate, emailSignInEnabled, passwordRequired, signSession, verifySession } from '../services/session.js'
+import { SESSION_SECRET, allowedEmails, authEnforced, authenticate, emailSignInEnabled, passwordRequired, signSession, touchSession, verifySession, isIdleExpired, forgetSession, SESSION_TTL_SECS } from '../services/session.js'
+import { IDLE_TIMEOUT_OPTIONS, getIdleTimeoutMin, isIdleTimeout, setIdleTimeoutMin } from '../store/sessionSettings.js'
 import { bearerToken } from '../middleware/requireSession.js'
 import { resolveUserRole, permissionsForRole } from '../services/roleResolution.js'
 
@@ -55,7 +56,6 @@ export function resolveOrigins(req: { get(name: string): string | undefined; pro
   }
 }
 const JWT_SECRET         = SESSION_SECRET
-const TOKEN_TTL_SECS     = 8 * 60 * 60 // 8 hours
 
 // ─── CSRF state: a signed, 10-minute token, so it survives a server restart ─────
 const STATE_PURPOSE = 'oauth-state'
@@ -259,11 +259,7 @@ router.get('/callback', async (req, res) => {
     const role = resolution.role
 
     // 4. Issue a short-lived JWT and send to frontend via URL param
-    const sessionToken = jwt.sign(
-      { role, displayName, email },
-      JWT_SECRET,
-      { expiresIn: TOKEN_TTL_SECS }
-    )
+    const sessionToken = signSession({ role, displayName, email })
 
     // Fragment, not query string: it is never sent to a server, logged, or passed in a Referer header.
     res.redirect(`${frontendOrigin}/#session_token=${sessionToken}`)
@@ -282,7 +278,8 @@ router.post('/verify', (req, res) => {
     return
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { role: string; displayName: string; email: string }
+    const payload = verifySession(token)
+    if (!payload) throw new Error('invalid')
     res.json({ success: true, data: { role: payload.role, displayName: payload.displayName, email: payload.email } })
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired session' })
@@ -307,7 +304,11 @@ router.post('/session', signInLimiter, (req, res, next) => {
   if (!result.ok) { res.status(result.status).json({ success: false, error: result.error }); return }
   // The client needs the permission map on first render (same shape as GET /me), not only after a reload.
   permissionsForRole(result.claims.role)
-    .then(permissions => res.json({ success: true, data: { token: signSession(result.claims), user: { ...result.claims, permissions } } }))
+    .then(permissions => {
+      const token = signSession(result.claims)
+      touchSession(token)
+      res.json({ success: true, data: { token, user: { ...result.claims, permissions, idleTimeoutMin: getIdleTimeoutMin() } } })
+    })
     .catch(next)
 })
 
@@ -319,9 +320,41 @@ router.get('/me', (req, res, next) => {
   const token = bearerToken(req)
   const claims = token ? verifySession(token) : null
   if (!claims) { res.status(401).json({ success: false, error: 'Not signed in.' }); return }
+  // Opening the app is user activity; a token that sat idle past the limit is refused instead.
+  if (isIdleExpired(token!)) { forgetSession(token!); res.status(401).json({ success: false, error: 'You were signed out after a period of inactivity.', code: 'IDLE_TIMEOUT' }); return }
+  touchSession(token!)
   permissionsForRole(claims.role)
-    .then(permissions => res.json({ success: true, data: { ...claims, permissions } }))
+    .then(permissions => res.json({ success: true, data: { ...claims, permissions, idleTimeoutMin: getIdleTimeoutMin() } }))
     .catch(next)
+})
+
+// POST /api/auth/activity — the browser reports real user activity (a click or key press, at most once a
+// minute). Background polling does not call this, so it cannot keep an unattended session alive.
+router.post('/activity', (req, res) => {
+  const token = bearerToken(req)
+  if (!token || !verifySession(token)) { res.status(401).json({ success: false, error: 'Not signed in.' }); return }
+  if (isIdleExpired(token)) { forgetSession(token); res.status(401).json({ success: false, error: 'You were signed out after a period of inactivity.', code: 'IDLE_TIMEOUT' }); return }
+  touchSession(token)
+  res.json({ success: true, data: { idleTimeoutMin: getIdleTimeoutMin(), maxSessionHours: SESSION_TTL_SECS / 3600 } })
+})
+
+// GET /api/auth/session-settings — current auto sign-out time (any signed-in user)
+router.get('/session-settings', (req, res) => {
+  const token = bearerToken(req)
+  if (!token || !verifySession(token)) { res.status(401).json({ success: false, error: 'Not signed in.' }); return }
+  res.json({ success: true, data: { idleTimeoutMin: getIdleTimeoutMin(), options: IDLE_TIMEOUT_OPTIONS, maxSessionHours: SESSION_TTL_SECS / 3600 } })
+})
+
+// PUT /api/auth/session-settings { idleTimeoutMin } — Global Admin only
+router.put('/session-settings', (req, res) => {
+  const token = bearerToken(req)
+  const claims = token ? verifySession(token) : null
+  if (!claims) { res.status(401).json({ success: false, error: 'Not signed in.' }); return }
+  if (claims.role !== 'Global Admin') { res.status(403).json({ success: false, error: 'Only a Global Admin can change the auto sign-out time.' }); return }
+  const value = (req.body as { idleTimeoutMin?: unknown } | undefined)?.idleTimeoutMin
+  if (!isIdleTimeout(value)) { res.status(400).json({ success: false, error: `idleTimeoutMin must be one of ${IDLE_TIMEOUT_OPTIONS.join(', ')}.` }); return }
+  setIdleTimeoutMin(value, claims.email)
+  res.json({ success: true, data: { idleTimeoutMin: value } })
 })
 
 export default router

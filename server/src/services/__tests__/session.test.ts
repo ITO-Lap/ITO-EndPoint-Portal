@@ -69,3 +69,46 @@ describe('displayNameFor', () => {
     expect(displayNameFor('it_admin@zinnia.com')).toBe('It Admin')
   })
 })
+
+describe('session lifetime, restart and inactivity', () => {
+  const claims = { email: 'a@zinnia.com', displayName: 'A', role: 'Global Admin' }
+
+  it('lasts 9 hours at most', async () => {
+    const { SESSION_TTL_SECS } = await import('../session.js')
+    expect(SESSION_TTL_SECS).toBe(9 * 3600)
+    const p = jwt.decode(signSession(claims)) as { iat: number; exp: number }
+    expect(p.exp - p.iat).toBe(9 * 3600)
+  })
+
+  it('rejects a token issued before this server start', () => {
+    const old = jwt.sign({ ...claims, bid: 'previous-boot' }, SESSION_SECRET, { expiresIn: 60 })
+    expect(verifySession(old)).toBeNull()
+    const legacy = jwt.sign(claims, SESSION_SECRET, { expiresIn: 60 }) // no boot id at all
+    expect(verifySession(legacy)).toBeNull()
+    expect(verifySession(signSession(claims))).toMatchObject({ email: 'a@zinnia.com' })
+  })
+})
+
+describe('auto sign-out', () => {
+  it('defaults to 60 minutes and only accepts 15, 30, 45 or 60', async () => {
+    const { getIdleTimeoutMin, setIdleTimeoutMin, isIdleTimeout, DEFAULT_IDLE_TIMEOUT_MIN } = await import('../../store/sessionSettings.js')
+    expect(DEFAULT_IDLE_TIMEOUT_MIN).toBe(60)
+    expect(getIdleTimeoutMin()).toBe(60)
+    expect([15, 30, 45, 60].every(isIdleTimeout)).toBe(true)
+    expect([0, 10, 20, 90, '30', null].some(isIdleTimeout)).toBe(false)
+    setIdleTimeoutMin(45, 'a@zinnia.com')
+    expect(getIdleTimeoutMin()).toBe(45)
+    setIdleTimeoutMin(15, 'a@zinnia.com')
+  })
+
+  it('expires a session only after the idle time passes without activity', async () => {
+    const { touchSession, isIdleExpired } = await import('../session.js')
+    const t = signSession({ email: 'b@zinnia.com', displayName: 'B', role: 'IT Admin' })
+    const t0 = 1_000_000
+    touchSession(t, t0)
+    expect(isIdleExpired(t, t0 + 14 * 60_000)).toBe(false)
+    expect(isIdleExpired(t, t0 + 16 * 60_000)).toBe(true)
+    touchSession(t, t0 + 16 * 60_000) // activity resets the clock
+    expect(isIdleExpired(t, t0 + 20 * 60_000)).toBe(false)
+  })
+})

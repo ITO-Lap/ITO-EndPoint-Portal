@@ -14,7 +14,7 @@ Connects to Microsoft Intune via the **Microsoft Graph API** to fetch managed de
 ## Azure AD setup (one-time)
 
 1. Go to **Azure portal → Azure Active Directory → App registrations → New registration**
-2. Name it (e.g., `ITO Endpoint Copilot`)
+2. Name it (e.g., `EndPoint+`)
 3. Set **Supported account types:** Single tenant
 4. Click **Register** — note the **Application (client) ID** and **Directory (tenant) ID**
 5. Go to **Certificates & secrets → New client secret** — copy the **Value** immediately
@@ -74,7 +74,7 @@ Each device returns:
 
 ## Compliance state mapping
 
-| Graph API value | ITO Endpoint |
+| Graph API value | EndPoint+ |
 |---|---|
 | `compliant` | Compliant |
 | `noncompliant` | Non-Compliant |

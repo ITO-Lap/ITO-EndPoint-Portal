@@ -120,7 +120,7 @@ export function AuditDateRangeControls({ value, onChange, maxRangeDays }: Props)
             <button
               key={p.label} type="button"
               onClick={() => { setCustomError(null); onChange(p.range()) }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-orange-300 transition focus-visible:ring-2 focus-visible:ring-orange-300"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-indigo-300 transition focus-visible:ring-2 focus-visible:ring-indigo-300"
             >
               {p.label}
             </button>
@@ -135,7 +135,7 @@ export function AuditDateRangeControls({ value, onChange, maxRangeDays }: Props)
           </label>
           <input id="audit-start-date" type="date" value={start.dateStr} max={end.dateStr}
             onChange={e => applyCustom('startDate', e.target.value)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400" />
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400" />
         </div>
         <div>
           <label htmlFor="audit-start-time" className="block text-[0.68rem] font-medium text-slate-600 mb-1">
@@ -143,7 +143,7 @@ export function AuditDateRangeControls({ value, onChange, maxRangeDays }: Props)
           </label>
           <input id="audit-start-time" type="time" value={start.timeStr}
             onChange={e => applyCustom('startTime', e.target.value)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400" />
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400" />
         </div>
         <div>
           <label htmlFor="audit-end-date" className="block text-[0.68rem] font-medium text-slate-600 mb-1">
@@ -151,7 +151,7 @@ export function AuditDateRangeControls({ value, onChange, maxRangeDays }: Props)
           </label>
           <input id="audit-end-date" type="date" value={end.dateStr} min={start.dateStr}
             onChange={e => applyCustom('endDate', e.target.value)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400" />
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400" />
         </div>
         <div>
           <label htmlFor="audit-end-time" className="block text-[0.68rem] font-medium text-slate-600 mb-1">
@@ -159,12 +159,12 @@ export function AuditDateRangeControls({ value, onChange, maxRangeDays }: Props)
           </label>
           <input id="audit-end-time" type="time" value={end.timeStr}
             onChange={e => applyCustom('endTime', e.target.value)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400" />
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400" />
         </div>
         <div>
           <label htmlFor="audit-year" className="block text-[0.68rem] font-medium text-slate-600 mb-1">Year</label>
           <select id="audit-year" onChange={e => applyYear(Number(e.target.value))} defaultValue=""
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400">
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400">
             <option value="" disabled>Jump to year…</option>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -175,7 +175,7 @@ export function AuditDateRangeControls({ value, onChange, maxRangeDays }: Props)
           </label>
           <select id="audit-timezone" value={value.timezone}
             onChange={e => onChange({ ...value, timezone: e.target.value })}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400">
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400">
             {timezones.map(tz => <option key={tz} value={tz}>{tz}</option>)}
           </select>
         </div>

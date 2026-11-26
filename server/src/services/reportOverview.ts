@@ -43,7 +43,7 @@ export function buildOverviewMessage(overview: ReportOverview, date: string): { 
     { type: 'section', fields },
     { type: 'section', text: { type: 'mrkdwn', text: `*Recommended action*\n${overview.action}` } },
     ...(notes ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Data quality*\n${notes}` } }] : []),
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `${overview.footnote ? `${overview.footnote} · ` : ''}ITO Endpoint` }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `${overview.footnote ? `${overview.footnote} · ` : ''}EndPoint+` }] },
   ]
   const first = overview.fields[0]
   return { text: `${overview.title} ${date}${first ? `: ${first.label} ${typeof first.value === 'number' ? num(first.value) : first.value}` : ''}`, blocks }

@@ -12,25 +12,33 @@ export function useStats() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const applyStats = useCallback((data: ApiStats) => {
+    setStats(data)
+    setOffline(false)
+    setLastUpdated(new Date())
+    setCountdown(REFRESH_INTERVAL)
+  }, [])
+
   const fetchStats = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
     try {
-      const data = await api.fetchStats()
-      setStats(data)
-      setOffline(false)
-      setLastUpdated(new Date())
-      setCountdown(REFRESH_INTERVAL)
+      applyStats(await api.fetchStats())
     } catch {
       setOffline(true)
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [])
+  }, [applyStats])
 
-  // Initial load
+  // Initial load (loading is already true on first render)
   useEffect(() => {
-    fetchStats(true)
-  }, [fetchStats])
+    let cancelled = false
+    api.fetchStats()
+      .then(data => { if (!cancelled) applyStats(data) })
+      .catch(() => { if (!cancelled) setOffline(true) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [applyStats])
 
   // Auto-refresh every 10 s (real-time)
   useEffect(() => {

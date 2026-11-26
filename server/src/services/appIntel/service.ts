@@ -104,7 +104,7 @@ export function createAppIntelService(deps: AppIntelDeps) {
     })
 
     const packagesReadable = mobileRaw !== null
-    let packages: DeployedPackage[] = []
+    let packages: DeployedPackage[]
     if (mobileRaw) {
       packages = normalizeMobileApps(mobileRaw)
       records = attachPackages(records, packages)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import type { RoleActivityFilters, RoleActivitySource, FilterOptions } from '../../api/roleActivity'
 import { SOURCE_LABELS } from '../../api/roleActivity'
@@ -21,7 +21,8 @@ export function AuditFiltersBar({ filters, onChange, source, onSourceChange, fil
   const [search, setSearch] = useState(filters.search ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => setSearch(filters.search ?? ''), [filters.search])
+  const [prevFilterSearch, setPrevFilterSearch] = useState(filters.search)
+  if (filters.search !== prevFilterSearch) { setPrevFilterSearch(filters.search); setSearch(filters.search ?? '') }
 
   function handleSearchInput(value: string) {
     setSearch(value)
@@ -39,13 +40,13 @@ export function AuditFiltersBar({ filters, onChange, source, onSourceChange, fil
           <input
             type="search" aria-label="Search role activity events" placeholder="Search actor, operation, or target…"
             value={search} onChange={e => handleSearchInput(e.target.value)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 focus:outline-none focus:border-orange-400"
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 focus:outline-none focus:border-indigo-400"
           />
         </div>
         <select
           aria-label="Filter by source" value={source ?? ''}
           onChange={e => onSourceChange((e.target.value || undefined) as RoleActivitySource | undefined)}
-          className="h-8 w-full sm:w-44 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-orange-400"
+          className="h-8 w-full sm:w-44 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400"
         >
           <option value="">All sources</option>
           {(filterOptions?.sources ?? []).map(s => <option key={s} value={s}>{SOURCE_LABELS[s]}</option>)}

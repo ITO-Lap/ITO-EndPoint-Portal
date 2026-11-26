@@ -10,6 +10,7 @@ import type { RequestDeps } from '../../services/appIntel/requests.js'
 import { errorHandler } from '../../middleware/errorHandler.js'
 import type { AppIntelProviders } from '../../services/appIntel/providers.js'
 import type { AssessedApp } from '../../services/appIntel/types.js'
+import type { Json } from '../../test/json.js'
 
 const NOW = Date.parse('2026-10-20T06:00:00Z')
 const iso = new Date(NOW).toISOString()
@@ -53,7 +54,7 @@ async function start(over: Partial<RequestDeps> = {}): Promise<Harness> {
   }
 }
 
-interface Reply { success?: boolean; error?: string; code?: string; existing?: unknown; data?: any }
+interface Reply { success?: boolean; error?: string; code?: string; existing?: unknown; data?: Json }
 function call(url: string, method = 'GET', role: string | null = 'IT Admin', body?: unknown): Promise<{ status: number; json: Reply | null }> {
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = { 'x-user-email': 'avinash@zinnia.com', ...(role ? { 'x-user-role': role } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }

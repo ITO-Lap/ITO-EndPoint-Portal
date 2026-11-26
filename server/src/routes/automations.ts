@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireCapability } from '../middleware/requireRole.js'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import {
@@ -13,7 +14,7 @@ import {
 } from '../services/openai.js'
 import { getManageEngineDevices } from '../services/manageEngine.js'
 import { getIntuneDevices } from '../services/intune.js'
-import type { AutomationRule, AutomationExecution, Device } from '../types.js'
+import type { AutomationRule, Device } from '../types.js'
 
 const router = Router()
 
@@ -105,7 +106,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // ── POST /api/automations ─────────────────────────────────────────────────────
 
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', requireCapability('pages.Automation'), asyncHandler(async (req, res) => {
   const parsed = createRuleSchema.parse(req.body)
   const now = new Date().toISOString()
   const rule: AutomationRule = {
@@ -126,7 +127,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // ── PUT /api/automations/:id ──────────────────────────────────────────────────
 
-router.put('/:id', asyncHandler(async (req, res) => {
+router.put('/:id', requireCapability('pages.Automation'), asyncHandler(async (req, res) => {
   const id = req.params.id as string
   const existing = getRuleById(id)
   if (!existing) { res.status(404).json({ success: false, error: 'Rule not found' }); return }
@@ -137,7 +138,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
 // ── PATCH /api/automations/:id/toggle ────────────────────────────────────────
 
-router.patch('/:id/toggle', asyncHandler(async (req, res) => {
+router.patch('/:id/toggle', requireCapability('pages.Automation'), asyncHandler(async (req, res) => {
   const rule = toggleRule(req.params.id as string)
   if (!rule) { res.status(404).json({ success: false, error: 'Rule not found' }); return }
   res.json({ success: true, data: rule })
@@ -145,7 +146,7 @@ router.patch('/:id/toggle', asyncHandler(async (req, res) => {
 
 // ── DELETE /api/automations/:id ───────────────────────────────────────────────
 
-router.delete('/:id', asyncHandler(async (req, res) => {
+router.delete('/:id', requireCapability('pages.Automation'), asyncHandler(async (req, res) => {
   const id = req.params.id as string
   const deleted = deleteRule(id)
   if (!deleted) { res.status(404).json({ success: false, error: 'Rule not found' }); return }
@@ -156,7 +157,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 // Fetches live devices, evaluates conditions, executes real actions (AI runbooks
 // and scripts run for real; Slack/Jira are simulated in test mode to avoid spam)
 
-router.post('/:id/test', asyncHandler(async (req, res) => {
+router.post('/:id/test', requireCapability('pages.Automation'), asyncHandler(async (req, res) => {
   const rule = getRuleById(req.params.id as string)
   if (!rule) { res.status(404).json({ success: false, error: 'Rule not found' }); return }
 
@@ -176,7 +177,7 @@ router.post('/:id/test', asyncHandler(async (req, res) => {
 // ── POST /api/automations/scan ────────────────────────────────────────────────
 // Scans ALL enabled rules against live devices and fires real actions
 
-router.post('/scan', asyncHandler(async (_req, res) => {
+router.post('/scan', requireCapability('pages.Automation'), asyncHandler(async (_req, res) => {
   const rules   = getRules()
   const devices = await fetchLiveDevices()
   const result  = await scanAllRules(rules, devices)
@@ -191,7 +192,7 @@ router.post('/scan', asyncHandler(async (_req, res) => {
 // ── POST /api/automations/ai-build ───────────────────────────────────────────
 // Natural language → pre-filled rule configuration
 
-router.post('/ai-build', asyncHandler(async (req, res) => {
+router.post('/ai-build', requireCapability('pages.Automation'), asyncHandler(async (req, res) => {
   const { prompt } = z.object({ prompt: z.string().min(5).max(500) }).parse(req.body)
 
   const blueprint = isOpenAIConfigured()

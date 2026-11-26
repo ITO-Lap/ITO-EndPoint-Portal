@@ -7,7 +7,7 @@ import {
   Users, UserX, Building2, KeyRound, Activity, Info,
   Wifi, ShieldBan, CheckCheck, LogIn, Smartphone,
   Calendar, Package, User, ChevronLeft, ChevronRight,
-  FileSpreadsheet, FileCode2,
+  FileSpreadsheet, FileCode2, FileText,
 } from 'lucide-react'
 import { api } from '../api'
 import type { ApiDevice, AppStatus, EntraGroupReportResult, EntraGroupSuggestion } from '../api'
@@ -15,7 +15,7 @@ import { intelApi } from '../api/intelligence'
 import type { DeviceReportData, DeviceReportDevice } from '../api/intelligence'
 import type { UserToolRole } from '../types'
 import { DeviceDetailPanel } from '../components/devices/DeviceDetailPanel'
-import { useToast } from '../components/ui/ToastProvider'
+import { useToast } from '../components/ui/toastHooks'
 import { usePagination } from '../hooks/usePagination'
 import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
@@ -23,7 +23,7 @@ import { sortRows, toggleSortDirection, type SortDirection } from '../lib/tableS
 import { IntuneScriptsConfigTab } from './IntuneScriptsConfigPage'
 import { CopyText } from '../components/ui/CopyText'
 import { hasPermission, type PermissionMap } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions, useOptionalPermissions } from '../context/permissionsHooks'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,23 +46,26 @@ function canSeeTab(tab: Tab, viewerRole: UserToolRole, permissions: PermissionMa
 
 // ── KPI Card (static or clickable) ───────────────────────────────────────────
 
-function KpiCard({ label, value, sub, color, onClick, disabled }: {
+function KpiCard({ label, value, sub, color, onClick, disabled, compact }: {
   label: string; value: string | number; sub?: string; color: string
   onClick?: () => void; disabled?: boolean
+  /** Tighter padding, for a row where many cards share the width. */
+  compact?: boolean
 }) {
+  const pad = compact ? 'p-3' : 'p-4'
   const body = (
     <>
       <div className="h-[2px] absolute top-0 left-0 right-0" style={{ background: color }} />
-      <p className="text-[0.6rem] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+      <p className="text-[0.6rem] font-black uppercase leading-tight tracking-widest text-slate-400 mb-1">{label}</p>
       <p className="text-2xl font-black" style={{ color }}>{value}</p>
       {sub && <p className="text-[0.62rem] text-slate-400 mt-0.5">{sub}</p>}
       {onClick && <p className="text-[0.58rem] mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color }}>View devices →</p>}
     </>
   )
-  if (!onClick) return <div className="glass rounded-2xl p-4 overflow-hidden relative">{body}</div>
+  if (!onClick) return <div className={`glass rounded-2xl ${pad} overflow-hidden relative`}>{body}</div>
   return (
     <button type="button" onClick={onClick} disabled={disabled}
-      className="glass rounded-2xl p-4 overflow-hidden relative text-left w-full group transition-all hover:shadow-lg hover:scale-[1.02] disabled:cursor-default disabled:hover:scale-100 disabled:hover:shadow-none">
+      className={`glass rounded-2xl ${pad} overflow-hidden relative flex flex-col items-start justify-start text-left w-full group transition-all hover:shadow-lg hover:scale-[1.02] disabled:cursor-default disabled:hover:scale-100 disabled:hover:shadow-none`}>
       {body}
     </button>
   )
@@ -94,10 +97,11 @@ interface IntuneAgentAppInventory {
 
 type IntuneAgentFilter = 'all' | 'zscaler' | 'crowdstrike' | 'inventory-failed'
 
-function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', initialPlatform = 'all' }: {
-  devices: ApiDevice[]; loading: boolean; onSelect: (d: ApiDevice) => void
+function DevicesTab({ devices, loading, onSelect, onViewLogs, initialCompliance = 'all', initialPlatform = 'all' }: {
+  devices: ApiDevice[]; loading: boolean; onSelect: (d: ApiDevice) => void; onViewLogs: (d: ApiDevice) => void
   initialCompliance?: string; initialPlatform?: string
 }) {
+  const canLogs = useOptionalPermissions()?.['devices.logs'] === true
   const [search,     setSearch]     = useState('')
   const [compliance, setCompliance] = useState(initialCompliance)
   const [platform,   setPlatform]   = useState(initialPlatform)
@@ -160,7 +164,11 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
     setSortKey(key)
   }
 
-  useEffect(() => { setPage(1) }, [search, compliance, platform])
+  const [prevListFilters, setPrevListFilters] = useState({ search, compliance, platform })
+  if (prevListFilters.search !== search || prevListFilters.compliance !== compliance || prevListFilters.platform !== platform) {
+    setPrevListFilters({ search, compliance, platform })
+    setPage(1)
+  }
 
   const complianceColor = (s: string) => {
     if (s === 'Compliant')     return 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -230,6 +238,7 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
                       ['Device', 'device'], ['User', 'user'], ['Platform', 'platform'], ['OS Version', 'osVersion'],
                       ['Serial', 'serial'], ['Encryption', 'encryption'], ['Compliance', 'compliance'], ['Last Check-in', 'lastCheckIn'],
                     ].map(([label, key]) => <SortableHeader key={key} label={label} sortKey={key} activeSortKey={sortKey} direction={sortDirection} onSort={handleSort} />)}
+                    <th>Logs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,6 +268,11 @@ function DevicesTab({ devices, loading, onSelect, initialCompliance = 'all', ini
                         </span>
                       </td>
                       <td className="text-slate-400 text-[0.68rem]">{d.lastCheckIn || '—'}</td>
+                      <td>
+                        {canLogs && (d.platform === 'Windows' || d.platform === 'macOS')
+                          ? <button type="button" onClick={e => { e.stopPropagation(); onViewLogs(d) }} aria-label={`View logs for ${d.deviceName}`} title="Pull and export this device's log" className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[0.68rem] font-semibold text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"><FileText className="h-3 w-3" />Logs</button>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -319,7 +333,7 @@ function ComplianceTab({ devices }: { devices: ApiDevice[] }) {
   const policies = [
     { name: 'BitLocker Encryption',     pass: devices.filter(d => d.encryptionStatus?.toLowerCase().includes('on')).length,     total, icon: <Lock className="h-3.5 w-3.5" />, color: '#10B981' },
     { name: 'Windows Defender Active',  pass: devices.filter(d => d.antivirusStatus && d.antivirusStatus !== '—').length, total, icon: <Shield className="h-3.5 w-3.5" />, color: '#0EA5E9' },
-    { name: 'Compliance Policy Passed', pass: compliant, total, icon: <ShieldCheck className="h-3.5 w-3.5" />, color: '#F46C00' },
+    { name: 'Compliance Policy Passed', pass: compliant, total, icon: <ShieldCheck className="h-3.5 w-3.5" />, color: '#4F46E5' },
   ]
 
   return (
@@ -327,9 +341,9 @@ function ComplianceTab({ devices }: { devices: ApiDevice[] }) {
       {/* Compliance score */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Compliance Rate', value: `${rate}%`, color: rate >= 90 ? '#10B981' : rate >= 70 ? '#F59E0B' : '#EF4444' },
+          { label: 'Compliance Rate', value: `${rate}%`, color: rate >= 90 ? '#10B981' : rate >= 70 ? '#818CF8' : '#EF4444' },
           { label: 'Compliant',       value: compliant,    color: '#10B981' },
-          { label: 'Warning',         value: warning,      color: '#F59E0B' },
+          { label: 'Warning',         value: warning,      color: '#818CF8' },
           { label: 'Non-Compliant',   value: nonCompliant, color: '#EF4444' },
         ].map(s => <KpiCard key={s.label} {...s} />)}
       </div>
@@ -361,7 +375,7 @@ function ComplianceTab({ devices }: { devices: ApiDevice[] }) {
       {/* Non-compliant device list */}
       {nonCompliant > 0 && (
         <div className="glass rounded-2xl overflow-hidden">
-          <div className="h-[2px]" style={{ background: 'linear-gradient(90deg,#EF4444,#F59E0B)' }} />
+          <div className="h-[2px]" style={{ background: 'linear-gradient(90deg,#EF4444,#818CF8)' }} />
           <div className="px-5 py-3.5 border-b border-slate-100/50">
             <p className="text-sm font-bold text-slate-700">Non-Compliant Devices <span className="text-red-600 ml-1">({nonCompliant})</span></p>
           </div>
@@ -408,10 +422,7 @@ function IntuneSecurityTab({ devices, loading }: { devices: ApiDevice[]; loading
     [devices],
   )
 
-  const loadInventory = useCallback(async () => {
-    setInventoryLoading(true)
-    setInventoryError(null)
-    try {
+  const computeInventory = useCallback(async () => {
       const rows: IntuneAgentAppDevice[] = []
       const batchSize = 8
       for (let start = 0; start < intuneDesktopDevices.length; start += batchSize) {
@@ -439,24 +450,46 @@ function IntuneSecurityTab({ devices, loading }: { devices: ApiDevice[]; loading
         })
       }
       const assessed = rows.filter(row => row.inventoryAvailable)
-      setInventory({
+      return {
         totalDevices: rows.length,
         inventoryAvailableDevices: assessed.length,
         inventoryUnavailableDevices: rows.length - assessed.length,
         zscalerInstalled: assessed.filter(row => row.zscaler.installed).length,
         crowdstrikeInstalled: assessed.filter(row => row.crowdstrike.installed).length,
         devices: rows,
-      })
+      }
+  }, [intuneDesktopDevices])
+
+  // Manual refresh.
+  const loadInventory = useCallback(async () => {
+    setInventoryLoading(true)
+    setInventoryError(null)
+    try {
+      setInventory(await computeInventory())
     } catch (error) {
       setInventoryError(error instanceof Error ? error.message : 'Failed to load Intune app inventory')
     } finally {
       setInventoryLoading(false)
     }
-  }, [intuneDesktopDevices])
+  }, [computeInventory])
+
+  // Flag loading during render when the inventory must be (re)computed; the effect only fetches.
+  const inventoryTarget = loading ? null : computeInventory
+  const [prevInventoryTarget, setPrevInventoryTarget] = useState(inventoryTarget)
+  if (inventoryTarget !== prevInventoryTarget) {
+    setPrevInventoryTarget(inventoryTarget)
+    if (inventoryTarget) { setInventoryLoading(true); setInventoryError(null) }
+  }
 
   useEffect(() => {
-    if (!loading) void loadInventory()
-  }, [loading, loadInventory])
+    if (loading) return
+    let cancelled = false
+    computeInventory()
+      .then(result => { if (!cancelled) setInventory(result) })
+      .catch((error: unknown) => { if (!cancelled) setInventoryError(error instanceof Error ? error.message : 'Failed to load Intune app inventory') })
+      .finally(() => { if (!cancelled) setInventoryLoading(false) })
+    return () => { cancelled = true }
+  }, [loading, computeInventory])
 
   const visibleRows = useMemo(() => {
     const query = search.toLowerCase()
@@ -468,7 +501,11 @@ function IntuneSecurityTab({ devices, loading }: { devices: ApiDevice[]; loading
     })
   }, [inventory, search, filter])
 
-  useEffect(() => { setPage(1) }, [filter, search])
+  const [prevRowFilters, setPrevRowFilters] = useState({ filter, search })
+  if (prevRowFilters.filter !== filter || prevRowFilters.search !== search) {
+    setPrevRowFilters({ filter, search })
+    setPage(1)
+  }
 
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE))
   const sortedRows = sortKey ? sortRows(visibleRows, row => {
@@ -517,8 +554,8 @@ function IntuneSecurityTab({ devices, loading }: { devices: ApiDevice[]; loading
         <button type="button" aria-pressed={filter === 'zscaler'} onClick={() => setFilter('zscaler')} className={`${tileClass} ${filter === 'zscaler' ? 'border-sky-300 bg-sky-100 ring-1 ring-sky-200' : 'border-sky-100 bg-sky-50'}`}>
           <p className="text-[0.6rem] font-black uppercase tracking-widest text-sky-700">Zscaler installed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.zscalerInstalled ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Not installed: {inventory ? zscalerMissing : '—'} · {assessed} assessed</p>
         </button>
-        <button type="button" aria-pressed={filter === 'crowdstrike'} onClick={() => setFilter('crowdstrike')} className={`${tileClass} ${filter === 'crowdstrike' ? 'border-orange-300 bg-orange-100 ring-1 ring-orange-200' : 'border-orange-100 bg-orange-50'}`}>
-          <p className="text-[0.6rem] font-black uppercase tracking-widest text-orange-700">CrowdStrike installed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.crowdstrikeInstalled ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Not installed: {inventory ? crowdstrikeMissing : '—'} · {assessed} assessed</p>
+        <button type="button" aria-pressed={filter === 'crowdstrike'} onClick={() => setFilter('crowdstrike')} className={`${tileClass} ${filter === 'crowdstrike' ? 'border-indigo-300 bg-indigo-100 ring-1 ring-indigo-200' : 'border-indigo-100 bg-indigo-50'}`}>
+          <p className="text-[0.6rem] font-black uppercase tracking-widest text-indigo-700">CrowdStrike installed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.crowdstrikeInstalled ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Not installed: {inventory ? crowdstrikeMissing : '—'} · {assessed} assessed</p>
         </button>
         <button type="button" aria-pressed={filter === 'inventory-failed'} onClick={() => setFilter('inventory-failed')} className={`${tileClass} ${filter === 'inventory-failed' ? 'border-amber-300 bg-amber-100 ring-1 ring-amber-200' : 'border-amber-100 bg-amber-50'}`}>
           <p className="text-[0.6rem] font-black uppercase tracking-widest text-amber-700">Inventory request failed</p><p className="mt-1 text-xl font-black text-slate-800">{inventoryLoading ? '…' : inventory?.inventoryUnavailableDevices ?? '—'}</p><p className="text-[0.62rem] text-slate-500">Could not assess these devices</p>
@@ -581,7 +618,7 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
   const kpiCards = [
     { title: 'BitLocker Coverage', value: total > 0 ? `${Math.round(encrypted/total*100)}%` : '—', sub: `${encrypted}/${total} devices encrypted`, color: '#0EA5E9' },
     { title: 'Compliance Rate',    value: total > 0 ? `${Math.round(compliant/total*100)}%` : '—', sub: `${compliant} fully compliant`,            color: '#10B981' },
-    { title: 'Defender Coverage',  value: total > 0 ? `${Math.round(withEdr/total*100)}%`   : '—', sub: `${withEdr} with active EDR`,              color: '#F46C00' },
+    { title: 'Defender Coverage',  value: total > 0 ? `${Math.round(withEdr/total*100)}%`   : '—', sub: `${withEdr} with active EDR`,              color: '#4F46E5' },
     { title: 'Devices Managed',    value: total.toLocaleString(),                                   sub: 'via Microsoft Intune',                    color: '#6366F1' },
   ]
 
@@ -804,7 +841,7 @@ function ReportsTab({ devices }: { devices: ApiDevice[] }) {
           {/* Device Inventory */}
           <div className="glass rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3 flex-wrap">
-              <Users className="h-3.5 w-3.5 text-orange-400" />
+              <Users className="h-3.5 w-3.5 text-indigo-400" />
               <p className="text-xs font-bold text-slate-700">Device Inventory</p>
               <span className="text-[0.65rem] text-slate-400">{filtered.length.toLocaleString()} devices</span>
               <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -978,10 +1015,8 @@ function EntraIDTab() {
   const [deviceSortKey, setDeviceSortKey] = useState<string | null>(null)
   const [deviceSortDirection, setDeviceSortDirection] = useState<SortDirection>('asc')
 
-  function load() {
-    setLoading(true)
-    setLoadError(null)
-    Promise.allSettled([
+  function requestEntra() {
+    return Promise.allSettled([
       api.fetchEntraStatus(),
       api.fetchEntraOverview(),
       api.fetchEntraUsers(),
@@ -1001,7 +1036,14 @@ function EntraIDTab() {
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])  
+  function load() {
+    setLoading(true)
+    setLoadError(null)
+    void requestEntra()
+  }
+
+  // loading is already true and loadError null on first render.
+  useEffect(() => { void requestEntra() }, [])
 
   const filteredUsers   = useMemo(() => { const q = uSearch.toLowerCase(); return q ? users.filter(u => u.displayName.toLowerCase().includes(q) || u.upn.toLowerCase().includes(q) || (u.department ?? '').toLowerCase().includes(q)) : users }, [users, uSearch])
   const filteredDevices = useMemo(() => { const q = dSearch.toLowerCase(); return q ? devices.filter(d => d.deviceName.toLowerCase().includes(q) || d.primaryUser.toLowerCase().includes(q)) : devices }, [devices, dSearch])
@@ -1068,7 +1110,7 @@ function EntraIDTab() {
             { label: 'Total Devices',      value: overview?.totalDevices               ?? '—', icon: <Monitor    className="h-4 w-4" />, color: '#0EA5E9' },
             { label: 'Compliant',          value: overview?.compliantDevices           ?? '—', icon: <ShieldCheck className="h-4 w-4" />, color: '#10B981' },
             { label: 'Non-Compliant',      value: overview?.nonCompliantDevices        ?? '—', icon: <ShieldBan  className="h-4 w-4" />, color: '#EF4444' },
-            { label: 'Missing Encryption', value: overview?.devicesMissingEncryption   ?? '—', icon: <Lock       className="h-4 w-4" />, color: '#F59E0B' },
+            { label: 'Missing Encryption', value: overview?.devicesMissingEncryption   ?? '—', icon: <Lock       className="h-4 w-4" />, color: '#818CF8' },
             { label: 'Groups',             value: groups.length > 0 ? groups.length   : '—',  icon: <Building2  className="h-4 w-4" />, color: '#6366F1' },
           ].map(c => (
             <div key={c.label} className="glass rounded-2xl px-4 py-3 overflow-hidden relative">
@@ -1146,7 +1188,7 @@ function EntraIDTab() {
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <div className="h-6 w-6 rounded-full flex items-center justify-center text-[0.55rem] font-black text-white flex-shrink-0"
-                              style={{ background: u.riskLevel === 'High' ? '#EF4444' : u.riskLevel === 'Medium' ? '#F59E0B' : '#0078D4' }}>
+                              style={{ background: u.riskLevel === 'High' ? '#EF4444' : u.riskLevel === 'Medium' ? '#818CF8' : '#0078D4' }}>
                               {(u.displayName || '?').charAt(0).toUpperCase()}
                             </div>
                             <CopyText value={u.displayName} label="User name"><span className="font-semibold text-slate-700 truncate max-w-[140px]">{u.displayName}</span></CopyText>
@@ -1473,7 +1515,7 @@ function EntraGroupsReportTab() {
             )}
           </div>
           <select value={osFilter} onChange={e => handleOsFilterChange(e.target.value as OsFilter)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400">
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value="all">All OS</option>
             <option value="Windows">Windows</option>
             <option value="macOS">macOS</option>
@@ -1527,7 +1569,7 @@ function EntraGroupsReportTab() {
               </button>
               <button type="button" onClick={() => handleExport('excel')} disabled={exporting !== null}
                 className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-white water-glow disabled:opacity-60"
-                style={{ background: 'linear-gradient(135deg,#F46C00,#FB471F)' }}>
+                style={{ background: 'linear-gradient(135deg,#4F46E5,#06B6D4)' }}>
                 {exporting === 'excel' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}Excel
               </button>
             </div>
@@ -1626,12 +1668,11 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [panelDevice, setPanelDevice] = useState<ApiDevice | null>(null)
+  const [panelTab, setPanelTab] = useState<'overview' | 'logs'>('overview')
   const isRateLimited = fetchError ? /\b429\b/.test(fetchError) : false
 
-  const fetchDevices = useCallback(() => {
-    setLoading(true)
-    setFetchError(null)
-    api.fetchAllDevicesRaw({ source: 'intune', limit: 10000 })
+  const requestDevices = useCallback(() => {
+    return api.fetchAllDevicesRaw({ source: 'intune', limit: 10000 })
       .then(r => {
         setDevices(r.devices)
         setFetchError(null)
@@ -1643,7 +1684,14 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { fetchDevices() }, [fetchDevices])
+  const fetchDevices = useCallback(() => {
+    setLoading(true)
+    setFetchError(null)
+    void requestDevices()
+  }, [requestDevices])
+
+  // loading is already true and fetchError null on first render.
+  useEffect(() => { void requestDevices() }, [requestDevices])
 
   const [kpiFilter,    setKpiFilter]    = useState<{ compliance?: string; platform?: string }>({})
   const [kpiFilterKey, setKpiFilterKey] = useState(0)
@@ -1680,7 +1728,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
           {apiStatusPill}
           <button type="button" onClick={fetchDevices}
             className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#4F46E5]' : ''}`} />Refresh
           </button>
         </div>
       ) : (
@@ -1704,7 +1752,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
               {apiStatusPill}
               <button type="button" onClick={fetchDevices}
                 className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow">
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#F46C00]' : ''}`} />Refresh
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#4F46E5]' : ''}`} />Refresh
               </button>
             </div>
           </div>
@@ -1740,40 +1788,46 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
         </div>
       )}
 
-      {/* KPI Stats — all cards clickable, drill into Devices tab with filter */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-        <KpiCard label="Total Devices"   value={loading ? '—' : stats.total.toLocaleString()}
-          color="#0078D4" disabled={loading}
-          onClick={() => drillToDevices({})} />
-        <KpiCard label="Compliant"       value={loading ? '—' : stats.compliant.toLocaleString()}
-          color="#10B981" sub="policy passed" disabled={loading}
-          onClick={() => drillToDevices({ compliance: 'Compliant' })} />
-        <KpiCard label="Non-Compliant"   value={loading ? '—' : stats.nonCompliant.toLocaleString()}
-          color="#EF4444" sub="action needed" disabled={loading}
-          onClick={() => drillToDevices({ compliance: 'Non-Compliant' })} />
-        <KpiCard label="BitLocker / Enc" value={loading ? '—' : (stats.total > 0 ? `${Math.round(stats.encrypted/stats.total*100)}%` : '—')}
-          color="#0EA5E9" sub={loading ? undefined : `${stats.encrypted.toLocaleString()} encrypted`} disabled={loading}
-          onClick={() => drillToDevices({})} />
-        <KpiCard label="Defender Active" value={loading ? '—' : (stats.total > 0 ? `${Math.round(stats.withEdr/stats.total*100)}%` : '—')}
-          color="#6366F1" sub={loading ? undefined : `${stats.withEdr.toLocaleString()} devices`} disabled={loading}
-          onClick={() => drillToDevices({})} />
-      </div>
-
-      {/* Platform breakdown row — visible once loaded */}
-      {!loading && (stats.android > 0 || stats.ios > 0) && (
-        <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Windows"  value={stats.windows.toLocaleString()}
-            color="#0078D4" sub="desktop / laptop" onClick={() => drillToDevices({ platform: 'Windows' })} />
-          {stats.android > 0 && (
-            <KpiCard label="Android" value={stats.android.toLocaleString()}
-              color="#3DDC84" sub="mobile devices" onClick={() => drillToDevices({ platform: 'Android' })} />
-          )}
-          {stats.ios > 0 && (
-            <KpiCard label="iOS / iPad" value={stats.ios.toLocaleString()}
-              color="#007AFF" sub="mobile devices" onClick={() => drillToDevices({ platform: 'iOS' })} />
-          )}
-        </div>
-      )}
+      {/* KPI Stats and platform breakdown in ONE row (from 1280px up; four per row, then two, on smaller windows).
+          All cards are clickable and drill into the Devices tab with a filter. */}
+      {(() => {
+        const showPlatforms = !loading && (stats.android > 0 || stats.ios > 0)
+        const cards = 5 + (showPlatforms ? 1 + (stats.android > 0 ? 1 : 0) + (stats.ios > 0 ? 1 : 0) : 0)
+        return (
+          <div style={{ '--cols': cards } as React.CSSProperties}
+            className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]">
+            <KpiCard compact label="Total Devices"   value={loading ? '—' : stats.total.toLocaleString()}
+              color="#0078D4" disabled={loading}
+              onClick={() => drillToDevices({})} />
+            <KpiCard compact label="Compliant"       value={loading ? '—' : stats.compliant.toLocaleString()}
+              color="#10B981" sub="policy passed" disabled={loading}
+              onClick={() => drillToDevices({ compliance: 'Compliant' })} />
+            <KpiCard compact label="Non-Compliant"   value={loading ? '—' : stats.nonCompliant.toLocaleString()}
+              color="#EF4444" sub="action needed" disabled={loading}
+              onClick={() => drillToDevices({ compliance: 'Non-Compliant' })} />
+            <KpiCard compact label="BitLocker / Enc" value={loading ? '—' : (stats.total > 0 ? `${Math.round(stats.encrypted/stats.total*100)}%` : '—')}
+              color="#0EA5E9" sub={loading ? undefined : `${stats.encrypted.toLocaleString()} encrypted`} disabled={loading}
+              onClick={() => drillToDevices({})} />
+            <KpiCard compact label="Defender Active" value={loading ? '—' : (stats.total > 0 ? `${Math.round(stats.withEdr/stats.total*100)}%` : '—')}
+              color="#6366F1" sub={loading ? undefined : `${stats.withEdr.toLocaleString()} devices`} disabled={loading}
+              onClick={() => drillToDevices({})} />
+            {showPlatforms && (
+              <>
+                <KpiCard compact label="Windows"  value={stats.windows.toLocaleString()}
+                  color="#0078D4" sub="desktop / laptop" onClick={() => drillToDevices({ platform: 'Windows' })} />
+                {stats.android > 0 && (
+                  <KpiCard compact label="Android" value={stats.android.toLocaleString()}
+                    color="#3DDC84" sub="mobile devices" onClick={() => drillToDevices({ platform: 'Android' })} />
+                )}
+                {stats.ios > 0 && (
+                  <KpiCard compact label="iOS / iPad" value={stats.ios.toLocaleString()}
+                    color="#007AFF" sub="mobile devices" onClick={() => drillToDevices({ platform: 'iOS' })} />
+                )}
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Tab bar */}
       <div className="flex gap-1 glass rounded-2xl p-1 w-fit">
@@ -1794,7 +1848,8 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
           key={kpiFilterKey}
           devices={devices}
           loading={loading}
-          onSelect={setPanelDevice}
+          onSelect={d => { setPanelTab('overview'); setPanelDevice(d) }}
+          onViewLogs={d => { setPanelTab('logs'); setPanelDevice(d) }}
           initialCompliance={kpiFilter.compliance ?? 'all'}
           initialPlatform={kpiFilter.platform ?? 'all'}
         />
@@ -1813,7 +1868,7 @@ export function IntuneDevicesPage({ viewerRole, userEmail, onBack, embedded }: P
         <>
           <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm cursor-pointer" onClick={() => setPanelDevice(null)} />
           <div className="fixed right-0 top-0 bottom-0 z-40 w-full max-w-[600px] shadow-2xl border-l border-white/20 overflow-hidden flex flex-col">
-            <DeviceDetailPanel device={panelDevice} onBack={() => setPanelDevice(null)} backLabel={embedded ? 'Managed Devices' : 'Intune Devices'} />
+            <DeviceDetailPanel device={panelDevice} onBack={() => setPanelDevice(null)} backLabel={embedded ? 'Managed Devices' : 'Intune Devices'} initialTab={panelTab} />
           </div>
         </>
       )}

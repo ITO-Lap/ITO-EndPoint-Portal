@@ -11,12 +11,12 @@ import {
 import { useAutomations, useAutomationExecutions } from '../../hooks/useAutomations'
 import { api } from '../../api'
 import type { AutomationRule, AutomationCategory, AutomationActionType, AutomationTriggerType, AutomationExecution } from '../../api'
-import { useToast } from '../ui/ToastProvider'
+import { useToast } from '../ui/toastHooks'
 import { usePagination } from '../../hooks/usePagination'
 import { Pagination } from '../ui/Pagination'
 import { SortableHeader } from '../ui/SortableHeader'
 import { sortRows, toggleSortDirection, type SortDirection } from '../../lib/tableSorting'
-import { useCopilotPageContext } from '../../context/CopilotContextProvider'
+import { useCopilotPageContext } from '../../context/copilotContext'
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ const CATEGORIES: { key: AutomationCategory | 'all'; label: string; icon: React.
   { key: 'all',        label: 'All',          icon: Layers,      color: 'text-slate-500'   },
   { key: 'compliance', label: 'Compliance',   icon: ShieldCheck, color: 'text-emerald-600' },
   { key: 'security',   label: 'Security',     icon: ShieldCheck, color: 'text-red-600'     },
-  { key: 'patching',   label: 'Patching',     icon: Package,     color: 'text-orange-600'  },
+  { key: 'patching',   label: 'Patching',     icon: Package,     color: 'text-indigo-600'  },
   { key: 'reporting',  label: 'Reporting',    icon: BarChart2,   color: 'text-violet-600'  },
   { key: 'drift',      label: 'Drift',        icon: Activity,    color: 'text-amber-600'   },
 ]
@@ -37,7 +37,7 @@ const CATEGORIES: { key: AutomationCategory | 'all'; label: string; icon: React.
 const CATEGORY_BADGE: Record<AutomationCategory, string> = {
   compliance: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   security:   'bg-red-100 text-red-700 border-red-200',
-  patching:   'bg-orange-100 text-orange-700 border-orange-200',
+  patching:   'bg-indigo-100 text-indigo-700 border-indigo-200',
   reporting:  'bg-violet-100 text-violet-700 border-violet-200',
   drift:      'bg-amber-100 text-amber-700 border-amber-200',
 }
@@ -77,7 +77,7 @@ const ACTION_COLORS: Record<AutomationActionType, string> = {
   execute_runbook:   'bg-emerald-100 text-emerald-700 border-emerald-200',
   execute_script:    'bg-slate-100 text-slate-700 border-slate-200',
   generate_report:   'bg-violet-100 text-violet-700 border-violet-200',
-  send_notification: 'bg-orange-100 text-orange-700 border-orange-200',
+  send_notification: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   teams_notify:      'bg-[#0078D4]/10 text-[#0078D4] border-[#0078D4]/20',
 }
 
@@ -130,7 +130,7 @@ function StatsBar({ stats }: {
   stats: { total: number; active: number; inactive: number; triggersToday: number; successRate: number }
 }) {
   const cards = [
-    { label: 'Total Rules',    value: stats.total,              sub: 'configured',      accent: '#F46C00', bg: 'bg-orange-50' },
+    { label: 'Total Rules',    value: stats.total,              sub: 'configured',      accent: '#4F46E5', bg: 'bg-indigo-50' },
     { label: 'Active',         value: stats.active,             sub: 'running now',     accent: '#10b981', bg: 'bg-emerald-50' },
     { label: 'Inactive',       value: stats.inactive,           sub: 'paused',          accent: '#94a3b8', bg: 'bg-slate-50' },
     { label: 'Triggered Today',value: stats.triggersToday,      sub: 'executions',      accent: '#8b5cf6', bg: 'bg-violet-50' },
@@ -169,11 +169,11 @@ function WorkflowPipeline() {
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
       <div
         className="h-[3px]"
-        style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 50%, #FB471F 100%)' }}
+        style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%)' }}
       />
       <div className="px-5 py-4">
         <div className="flex items-center gap-2 mb-3">
-          <GitBranch className="h-4 w-4 text-[#F46C00]" />
+          <GitBranch className="h-4 w-4 text-[#4F46E5]" />
           <p className="text-xs font-bold text-slate-900">Automation Pipeline</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -181,7 +181,7 @@ function WorkflowPipeline() {
           <ArrowRight className="h-3.5 w-3.5 text-slate-300 flex-shrink-0" />
           <PipelineStep icon={Filter}       label="Conditions" color="border-blue-200 bg-blue-50 text-blue-700" />
           <ArrowRight className="h-3.5 w-3.5 text-slate-300 flex-shrink-0" />
-          <PipelineStep icon={Zap}          label="Actions"    color="border-orange-200 bg-orange-50 text-orange-700" />
+          <PipelineStep icon={Zap}          label="Actions"    color="border-indigo-200 bg-indigo-50 text-indigo-700" />
           <ArrowRight className="h-3.5 w-3.5 text-slate-300 flex-shrink-0" />
           <PipelineStep icon={CheckCircle2} label="Log"        color="border-emerald-200 bg-emerald-50 text-emerald-700" />
         </div>
@@ -198,7 +198,7 @@ function WorkflowPipeline() {
             <p className="font-semibold text-slate-500 uppercase tracking-wide text-[0.55rem] mb-1.5">Action types</p>
             <div className="space-y-0.5 text-slate-600">
               {['Send in-app notification', 'Send Slack message', 'Create Jira ticket', 'Trigger runbook', 'Run remote script', 'Generate report'].map(a => (
-                <p key={a} className="flex items-center gap-1.5"><span className="h-1 w-1 rounded-full bg-[#F46C00]" />{a}</p>
+                <p key={a} className="flex items-center gap-1.5"><span className="h-1 w-1 rounded-full bg-[#4F46E5]" />{a}</p>
               ))}
             </div>
           </div>
@@ -217,7 +217,7 @@ function QuickStartTemplates({ onUseTemplate }: {
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
       <div
         className="h-[3px]"
-        style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 50%, #FB471F 100%)' }}
+        style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%)' }}
       />
       <div className="px-5 py-4">
         <p className="text-xs font-bold text-slate-900 mb-1">Quick-Start Templates</p>
@@ -269,7 +269,7 @@ function RuleCard({ rule, onToggle, onDelete, onTest, toggling, testing, deletin
     }`}>
       {/* Status stripe */}
       <div className={`h-[3px] ${rule.enabled ? '' : 'bg-slate-200'}`}
-        style={rule.enabled ? { background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' } : undefined}
+        style={rule.enabled ? { background: 'linear-gradient(90deg, #4F46E5 0%, #06B6D4 100%)' } : undefined}
       />
 
       <div className="px-5 py-4">
@@ -329,7 +329,7 @@ function RuleCard({ rule, onToggle, onDelete, onTest, toggling, testing, deletin
             onClick={onToggle}
             disabled={toggling}
             title={rule.enabled ? 'Disable rule' : 'Enable rule'}
-            className="flex-shrink-0 focus-visible:ring-2 focus-visible:ring-[#F46C00]/40 rounded-xl transition"
+            className="flex-shrink-0 focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40 rounded-xl transition"
           >
             {rule.enabled
               ? <ToggleRight className="h-8 w-8 text-emerald-500" />
@@ -499,7 +499,7 @@ function ExecutionHistoryTab({ onRefresh }: { onRefresh?: () => void }) {
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 50%, #FB471F 100%)' }} />
+        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%)' }} />
         {loading ? (
           <div className="px-5 py-10 text-center text-xs text-slate-400">Loading execution history…</div>
         ) : filtered.length === 0 ? (
@@ -777,7 +777,7 @@ function AiBuildPanel({ onBuilt, onClose }: {
 
   return (
     <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white shadow-sm overflow-hidden">
-      <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #a855f7 50%, #F46C00 100%)' }} />
+      <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #a855f7 50%, #4F46E5 100%)' }} />
       <div className="px-5 py-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -950,7 +950,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Zap className="h-4 w-4" style={{ color: '#F46C00' }} />
+                <Zap className="h-4 w-4" style={{ color: '#4F46E5' }} />
                 <p className="text-sm font-black text-white">New Automation Rule</p>
               </div>
               <p className="text-[0.65rem] text-slate-400">Trigger → Conditions → Actions workflow</p>
@@ -961,13 +961,13 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
           </div>
 
           {form.triggerType === 'scheduled' && (
-            <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-3">
-              <label className="block text-[0.65rem] font-bold text-orange-800 mb-1">Run schedule</label>
-              <input value={form.scheduleCron} onChange={e => setForm(f => ({ ...f, scheduleCron: e.target.value }))} placeholder="0 8 * * 1-5" className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none" />
-              <p className="mt-1 text-[0.58rem] text-orange-700">5-field cron in server time. Example: <code>0 8 * * 1-5</code> sends weekdays at 8:00.</p>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3">
+              <label className="block text-[0.65rem] font-bold text-indigo-800 mb-1">Run schedule</label>
+              <input value={form.scheduleCron} onChange={e => setForm(f => ({ ...f, scheduleCron: e.target.value }))} placeholder="0 8 * * 1-5" className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none" />
+              <p className="mt-1 text-[0.58rem] text-indigo-700">5-field cron in server time. Example: <code>0 8 * * 1-5</code> sends weekdays at 8:00.</p>
             </div>
           )}
-          <div className="mt-3 h-[2px] w-12 rounded-full" style={{ background: 'linear-gradient(90deg, #FFC600, #F46C00)' }} />
+          <div className="mt-3 h-[2px] w-12 rounded-full" style={{ background: 'linear-gradient(90deg, #22D3EE, #4F46E5)' }} />
         </div>
 
         <div className="overflow-y-auto max-h-[65vh] px-6 py-5 space-y-4">
@@ -991,7 +991,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. Auto-remediate encryption off"
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-900 outline-none transition"
-                onFocus={e => { e.currentTarget.style.borderColor = '#F46C00'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(244,108,0,0.12)' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(79,70,229,0.12)' }}
                 onBlur={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = '' }}
               />
             </div>
@@ -1003,7 +1003,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
                 rows={2}
                 placeholder="What does this rule do and why?"
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-900 outline-none resize-none"
-                onFocus={e => { e.currentTarget.style.borderColor = '#F46C00'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(244,108,0,0.12)' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(79,70,229,0.12)' }}
                 onBlur={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = '' }}
               />
             </div>
@@ -1026,7 +1026,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
                   checked={form.enabled}
                   onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))}
                   className="h-4 w-4 rounded border-slate-300"
-                  style={{ accentColor: '#F46C00' }}
+                  style={{ accentColor: '#4F46E5' }}
                 />
                 <span className="text-xs font-semibold text-slate-700">Enable immediately</span>
               </label>
@@ -1084,7 +1084,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
           {/* Actions */}
           <div>
             <label className="block text-[0.65rem] font-bold text-slate-600 mb-1.5">
-              <Zap className="inline h-3 w-3 mr-1 text-[#F46C00]" />Actions <span className="text-slate-400 font-normal">(select one or more)</span>
+              <Zap className="inline h-3 w-3 mr-1 text-[#4F46E5]" />Actions <span className="text-slate-400 font-normal">(select one or more)</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               {ACTION_OPTIONS.map(action => {
@@ -1124,7 +1124,7 @@ function CreateRuleModal({ onClose, onCreated, prefill }: {
             onClick={handleSave}
             disabled={saving}
             className="rounded-full px-5 py-2 text-xs font-bold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' }}
+            style={{ background: 'linear-gradient(90deg, #4F46E5 0%, #06B6D4 100%)' }}
           >
             {saving ? 'Creating…' : 'Create Rule'}
           </button>
@@ -1252,12 +1252,12 @@ export function AutomationPage() {
     <div className="space-y-5 w-full">
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 50%, #FB471F 100%)' }} />
+        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%)' }} />
         <div className="px-6 py-5 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-orange-50">
-                <Zap className="h-5 w-5 text-[#F46C00]" />
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50">
+                <Zap className="h-5 w-5 text-[#4F46E5]" />
               </div>
               <div>
                 <h1 className="text-base font-black text-slate-900 leading-tight">Automation Engine</h1>
@@ -1310,7 +1310,7 @@ export function AutomationPage() {
               type="button"
               onClick={openCreate}
               className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white shadow-sm transition"
-              style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' }}
+              style={{ background: 'linear-gradient(90deg, #4F46E5 0%, #06B6D4 100%)' }}
             >
               <Plus className="h-4 w-4" />New Rule
             </button>
@@ -1345,7 +1345,7 @@ export function AutomationPage() {
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <tab.icon className={`h-3.5 w-3.5 ${activeTab === tab.id ? 'text-[#F46C00]' : ''}`} />
+            <tab.icon className={`h-3.5 w-3.5 ${activeTab === tab.id ? 'text-[#4F46E5]' : ''}`} />
             {tab.label}
           </button>
         ))}
@@ -1370,7 +1370,7 @@ export function AutomationPage() {
                       ? 'text-white border-transparent'
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                   }`}
-                  style={isActive ? { background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' } : undefined}
+                  style={isActive ? { background: 'linear-gradient(90deg, #4F46E5 0%, #06B6D4 100%)' } : undefined}
                 >
                   <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-white' : cat.color}`} />
                   {cat.label}
@@ -1390,7 +1390,7 @@ export function AutomationPage() {
             <div className="space-y-3">
               {loading && (
                 <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
-                  <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[#F46C00] border-t-transparent mb-3" />
+                  <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[#4F46E5] border-t-transparent mb-3" />
                   <p className="text-xs text-slate-400">Loading automation rules…</p>
                 </div>
               )}
@@ -1403,9 +1403,9 @@ export function AutomationPage() {
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
                   <div
                     className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl"
-                    style={{ background: 'linear-gradient(135deg, #FFF7F0 0%, #FEE8D5 100%)', border: '1px solid #FCD6B0' }}
+                    style={{ background: 'linear-gradient(135deg, #F5F3FF 0%, #FEE8D5 100%)', border: '1px solid #FCD6B0' }}
                   >
-                    <Zap className="h-7 w-7 text-[#F46C00]" />
+                    <Zap className="h-7 w-7 text-[#4F46E5]" />
                   </div>
                   <p className="text-sm font-bold text-slate-700">No automation rules yet</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
@@ -1415,7 +1415,7 @@ export function AutomationPage() {
                     type="button"
                     onClick={openCreate}
                     className="mt-4 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-bold text-white"
-                    style={{ background: 'linear-gradient(90deg, #F46C00 0%, #FB471F 100%)' }}
+                    style={{ background: 'linear-gradient(90deg, #4F46E5 0%, #06B6D4 100%)' }}
                   >
                     <Plus className="h-4 w-4" />Create First Rule
                   </button>
@@ -1448,7 +1448,7 @@ export function AutomationPage() {
 
               {/* Action reference */}
               <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-                <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #FFC600 0%, #F46C00 50%, #FB471F 100%)' }} />
+                <div className="h-[3px]" style={{ background: 'linear-gradient(90deg, #22D3EE 0%, #4F46E5 50%, #06B6D4 100%)' }} />
                 <div className="px-5 py-4">
                   <p className="text-xs font-bold text-slate-900 mb-3">Action Reference</p>
                   <div className="space-y-2">

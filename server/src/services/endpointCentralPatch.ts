@@ -1,5 +1,6 @@
 import { getManageEngineConfig } from '../store/integrationStore.js'
 import { zohoFetch } from './manageEngine.js'
+import { dataFile, readJsonFile, writeJsonAtomic } from '../store/dataDir.js'
 
 // Endpoint Central Cloud Patch Manager (verified against the tenant: GET
 // /api/1.4/patch/allsystems). Lives on a different host than the MDM On-Demand
@@ -34,6 +35,8 @@ export interface PatchSystemStatus {
   lowPatchCount: number
   lastScanTime: string | null
   lastSuccessfulScanTime: string | null
+  /** allsystems `agent_last_contact_time` — when the Endpoint Central agent last reached the server. */
+  lastContactTime: string | null
   scanSucceeded: boolean
 }
 
@@ -55,9 +58,44 @@ interface RawSystem {
   low_patch_count?: number | string
   last_scan_time?: number
   last_successful_scan?: number
+  agent_last_contact_time?: number
 }
 
-let cache: { rows: PatchSystemStatus[]; expiresAt: number } | null = null
+// The last good patch-system list is kept on disk, so after a restart there is still something to show if
+// Endpoint Central cannot be reached (it is never served as fresh: expiresAt is 0, so the first read tries live).
+const PERSIST = process.env['NODE_ENV'] !== 'test' && !process.env['VITEST']
+const SYSTEMS_FILE = (): string => dataFile('cache/patch-systems.json')
+
+function loadPersistedSystems(): { rows: PatchSystemStatus[]; expiresAt: number; savedAt: number } | null {
+  if (!PERSIST) return null
+  try {
+    const saved = readJsonFile<{ savedAt?: number; rows?: PatchSystemStatus[] }>(SYSTEMS_FILE())
+    return saved && Array.isArray(saved.rows) && saved.rows.length && typeof saved.savedAt === 'number' ? { rows: saved.rows, expiresAt: 0, savedAt: saved.savedAt } : null
+  } catch { return null }
+}
+
+let cache: { rows: PatchSystemStatus[]; expiresAt: number; savedAt: number } | null = loadPersistedSystems()
+
+// Zoho rate-limits per OAuth client, and this client is shared with the MDM reads. A 429/5xx is retried with the
+// server's Retry-After (or exponential backoff) so one throttled call never loses a whole report; if every attempt
+// fails the getters below keep serving the last-known data (logged as stale) instead of dropping it.
+const sleepMs = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
+export async function patchFetch(cfg: Parameters<typeof zohoFetch>[0], url: string, attempts = 4, sleep = sleepMs): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await zohoFetch(cfg, url)
+    if ((res.status !== 429 && res.status < 500) || attempt >= attempts) return res
+    const ra = Number(res.headers.get('retry-after'))
+    const wait = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 1000 * 2 ** (attempt - 1) + Math.floor(Math.random() * 500)
+    await sleep(Math.min(wait, 20_000))
+  }
+}
+
+function serveStale<T>(what: string, last: { value: T; savedAt: number } | null, e: unknown): T {
+  if (!last) throw e
+  const mins = Math.round((Date.now() - last.savedAt) / 60_000)
+  console.warn(`[endpointCentralPatch] ${what} refresh failed (${e instanceof Error ? e.message : e}); serving last-known data from ${mins} min ago`)
+  return last.value
+}
 
 function getBaseUrl(): string {
   return (process.env.ENDPOINT_CENTRAL_BASE_URL ?? process.env.ENDPOINT_CENTRAL_PATCH_URL ?? DEFAULT_HOST).replace(/\/$/, '')
@@ -102,12 +140,19 @@ export function mapSystem(s: RawSystem): PatchSystemStatus {
     lowPatchCount: count(s.low_patch_count),
     lastScanTime: toIso(s.last_scan_time),
     lastSuccessfulScanTime: toIso(s.last_successful_scan),
+    lastContactTime: toIso(s.agent_last_contact_time),
     scanSucceeded: (s.last_successful_scan ?? 0) > 0,
   }
 }
 
 export async function getPatchSystems(force = false): Promise<PatchSystemStatus[]> {
   if (!force && cache && Date.now() < cache.expiresAt) return cache.rows
+  try { return await fetchPatchSystems() } catch (e) {
+    return serveStale('patch systems', cache && { value: cache.rows, savedAt: cache.savedAt }, e)
+  }
+}
+
+async function fetchPatchSystems(): Promise<PatchSystemStatus[]> {
   const cfg = getManageEngineConfig()
   if (!cfg) throw new Error('ManageEngine is not configured')
 
@@ -115,7 +160,7 @@ export async function getPatchSystems(force = false): Promise<PatchSystemStatus[
   const rows: PatchSystemStatus[] = []
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await zohoFetch(cfg, `${host}/api/1.4/patch/allsystems?pagelimit=${PAGE_LIMIT}&page=${page}`)
+    const res = await patchFetch(cfg, `${host}/api/1.4/patch/allsystems?pagelimit=${PAGE_LIMIT}&page=${page}`)
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`Endpoint Central Patch API ${res.status}: ${body.slice(0, 200)}`)
@@ -126,7 +171,12 @@ export async function getPatchSystems(force = false): Promise<PatchSystemStatus[
     if (batch.length < PAGE_LIMIT || rows.length >= (json.message_response?.total ?? Infinity)) break
   }
 
-  cache = { rows, expiresAt: Date.now() + CACHE_TTL_MS }
+  // An empty list is not a good snapshot: never let an outage-shaped answer replace the last real one on disk.
+  cache = { rows, expiresAt: Date.now() + CACHE_TTL_MS, savedAt: Date.now() }
+  if (PERSIST && rows.length) {
+    try { writeJsonAtomic(SYSTEMS_FILE(), { savedAt: cache.savedAt, rows }, false) }
+    catch (e) { console.warn('[patch] could not save the patch-system list:', e instanceof Error ? e.message : e) }
+  }
   return rows
 }
 
@@ -285,7 +335,7 @@ export async function getMissingPatches(
   const patches: MissingPatch[] = []
 
   for (let page = 1; page <= DETAIL_MAX_PAGES; page++) {
-    const res = await zohoFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${buildMissingPatchQuery(detailResourceId, view, page)}`)
+    const res = await patchFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${buildMissingPatchQuery(detailResourceId, view, page)}`)
     if (res.status === 401 || res.status === 403) {
       throw new PatchApiError('scope_required', `Patch API rejected the token (${res.status})`)
     }
@@ -314,8 +364,8 @@ export async function getMissingPatches(
 // matching patches, keyed by `resource_id` = PatchSystemStatus.detailResourceId). Lets the Security
 // Posture page show WHICH critical patches each device is missing without a request per device.
 
-let fleetCriticalCache: { map: Map<string, MissingPatch[]>; expiresAt: number } | null = null
-let fleetOsCache: { map: Map<string, MissingPatch[]>; expiresAt: number } | null = null
+let fleetCriticalCache: { map: Map<string, MissingPatch[]>; expiresAt: number; savedAt: number } | null = null
+let fleetOsCache: { map: Map<string, MissingPatch[]>; expiresAt: number; savedAt: number } | null = null
 
 export function clearFleetCriticalCache(): void { fleetCriticalCache = null; fleetOsCache = null }
 
@@ -330,7 +380,7 @@ async function fetchFleetMissingPatches(severity: PatchSeverity | undefined, kee
   for (let page = 1; page <= FLEET_MAX_PAGES; page++) {
     const q = new URLSearchParams({ patch_status: 'Missing', pageLimit: String(DETAIL_PAGE_LIMIT), page: String(page) })
     if (severity) q.set('severity', severity)
-    const res = await zohoFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${q}`)
+    const res = await patchFetch(cfg, `${base}/dcapi/threats/systemreport/patches?${q}`)
     if (res.status === 401 || res.status === 403) throw new PatchApiError('scope_required', `Patch API rejected the token (${res.status})`)
     const text = await res.text().catch(() => '')
     let json: RawDetailResponse & { errorCode?: string; errorMsg?: string }
@@ -348,15 +398,48 @@ async function fetchFleetMissingPatches(severity: PatchSeverity | undefined, kee
 
 export async function getFleetCriticalPatches(force = false): Promise<Map<string, MissingPatch[]>> {
   if (!force && fleetCriticalCache && Date.now() < fleetCriticalCache.expiresAt) return fleetCriticalCache.map
-  const map = await fetchFleetMissingPatches('Critical', p => p.severity === 'Critical')
-  fleetCriticalCache = { map, expiresAt: Date.now() + CACHE_TTL_MS }
-  return map
+  try {
+    const map = await fetchFleetMissingPatches('Critical', p => p.severity === 'Critical')
+    fleetCriticalCache = { map, expiresAt: Date.now() + CACHE_TTL_MS, savedAt: Date.now() }
+    return map
+  } catch (e) { return serveStale('critical patch names', fleetCriticalCache && { value: fleetCriticalCache.map, savedAt: fleetCriticalCache.savedAt }, e) }
 }
 
 /** Fleet-wide missing OS patches of every severity (security, non-security, feature/upgrade); third-party apps excluded. */
 export async function getFleetMissingOsPatches(force = false): Promise<Map<string, MissingPatch[]>> {
   if (!force && fleetOsCache && Date.now() < fleetOsCache.expiresAt) return fleetOsCache.map
-  const map = await fetchFleetMissingPatches(undefined, p => p.category === 'OS update')
-  fleetOsCache = { map, expiresAt: Date.now() + CACHE_TTL_MS }
-  return map
+  try {
+    const map = await fetchFleetMissingPatches(undefined, p => p.category === 'OS update')
+    fleetOsCache = { map, expiresAt: Date.now() + CACHE_TTL_MS, savedAt: Date.now() }
+    return map
+  } catch (e) { return serveStale('missing OS patches', fleetOsCache && { value: fleetOsCache.map, savedAt: fleetOsCache.savedAt }, e) }
+}
+
+export interface PatchRefreshResult {
+  /** Systems in the patch-system list. */
+  systems: number
+  /** Devices with at least one missing critical patch (0 when the detail is unavailable). */
+  devicesMissingCritical: number
+  /** False when the token cannot read missing-patch detail (scope not granted). */
+  criticalAvailable: boolean
+  criticalNote?: string
+}
+
+/**
+ * Re-reads the patch data the dashboards depend on (the patch-system list, then the fleet's missing critical
+ * patches) and throws on failure. Unlike getPatchSystems(), it never answers from the last-known copy, so the
+ * scheduled sync can tell a real refresh from a fallback; readers keep serving the last-known data meanwhile.
+ */
+export async function refreshPatchData(): Promise<PatchRefreshResult> {
+  const systems = await fetchPatchSystems()
+  try {
+    const map = await fetchFleetMissingPatches('Critical', p => p.severity === 'Critical')
+    fleetCriticalCache = { map, expiresAt: Date.now() + CACHE_TTL_MS, savedAt: Date.now() }
+    return { systems: systems.length, devicesMissingCritical: map.size, criticalAvailable: true }
+  } catch (e) {
+    if (e instanceof PatchApiError && e.kind === 'scope_required') {
+      return { systems: systems.length, devicesMissingCritical: 0, criticalAvailable: false, criticalNote: e.message }
+    }
+    throw e
+  }
 }

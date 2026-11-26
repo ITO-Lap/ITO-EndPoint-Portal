@@ -4,6 +4,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'net'
 import authRouter from '../auth.js'
 import { requireSessionExceptAuth } from '../../middleware/requireSession.js'
+import type { Json } from '../../test/json.js'
 
 let server: http.Server
 let base = ''
@@ -24,7 +25,7 @@ afterEach(() => vi.unstubAllEnvs())
 
 const call = async (method: string, path: string, opts: { headers?: Record<string, string>; body?: unknown } = {}) => {
   const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...opts.headers }, ...(opts.body ? { body: JSON.stringify(opts.body) } : {}) })
-  return { status: res.status, json: await res.json() as Record<string, any> }
+  return { status: res.status, json: await res.json() as Record<string, Json> }
 }
 const signIn = async () => (await call('POST', '/api/auth/session', { body: { email: 'avinash.verma@zinnia.com' } })).json['data'].token as string
 
@@ -75,5 +76,32 @@ describe('sign-in endpoints', () => {
   it('/me returns the user for a valid token and 401 otherwise', async () => {
     expect((await call('GET', '/api/auth/me', { headers: { Authorization: `Bearer ${await signIn()}` } })).json['data'].email).toBe('avinash.verma@zinnia.com')
     expect((await call('GET', '/api/auth/me')).status).toBe(401)
+  })
+})
+
+describe('auto sign-out over HTTP', () => {
+  it('signs a person out once they have been idle past the setting, and activity keeps them in', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const token = await signIn()
+      const auth = { Authorization: `Bearer ${token}` }
+      vi.setSystemTime(Date.now() + 59 * 60_000)
+      expect((await call('GET', '/api/whoami', { headers: auth })).status).toBe(200) // polling does not count as activity
+      expect((await call('POST', '/api/auth/activity', { headers: auth })).status).toBe(200) // real activity resets the clock
+      vi.setSystemTime(Date.now() + 59 * 60_000)
+      expect((await call('GET', '/api/whoami', { headers: auth })).status).toBe(200)
+      vi.setSystemTime(Date.now() + 61 * 60_000)
+      const r = await call('GET', '/api/whoami', { headers: auth })
+      expect(r).toMatchObject({ status: 401, json: { code: 'IDLE_TIMEOUT' } })
+    } finally { vi.useRealTimers() }
+  })
+
+  it('only a Global Admin can change the time, and only to 15, 30, 45 or 60', async () => {
+    const auth = { Authorization: `Bearer ${await signIn()}` }
+    expect((await call('PUT', '/api/auth/session-settings', { headers: auth, body: { idleTimeoutMin: 20 } })).status).toBe(400)
+    expect((await call('PUT', '/api/auth/session-settings', { headers: auth, body: { idleTimeoutMin: 30 } })).status).toBe(200)
+    expect((await call('GET', '/api/auth/session-settings', { headers: auth })).json['data']).toMatchObject({ idleTimeoutMin: 30, options: [15, 30, 45, 60], maxSessionHours: 9 })
+    expect((await call('PUT', '/api/auth/session-settings', { headers: auth, body: { idleTimeoutMin: 15 } })).status).toBe(200)
+    expect((await call('PUT', '/api/auth/session-settings', { body: { idleTimeoutMin: 15 } })).status).toBe(401)
   })
 })

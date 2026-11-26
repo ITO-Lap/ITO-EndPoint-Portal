@@ -31,7 +31,7 @@ export async function sendTeamsMessage(payload: TeamsMessagePayload): Promise<{ 
     '@type': 'MessageCard',
     '@context': 'http://schema.org/extensions',
     summary: payload.summary,
-    themeColor: payload.themeColor ?? 'F46C00',
+    themeColor: payload.themeColor ?? '4F46E5',
     title: payload.title,
     ...(payload.text ? { text: payload.text } : {}),
     ...(payload.sections?.length ? {

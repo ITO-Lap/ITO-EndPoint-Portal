@@ -4,7 +4,7 @@
 // client-supplied header.
 
 import type { Request, Response, NextFunction } from 'express'
-import { authEnforced, verifySession, type SessionClaims } from '../services/session.js'
+import { authEnforced, forgetSession, isIdleExpired, verifySession, type SessionClaims } from '../services/session.js'
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -24,6 +24,11 @@ export function requireSession(req: Request, res: Response, next: NextFunction):
   const claims = token ? verifySession(token) : null
   if (!claims) {
     res.status(401).json({ success: false, error: 'Authentication required. Please sign in.' })
+    return
+  }
+  if (isIdleExpired(token!)) {
+    forgetSession(token!)
+    res.status(401).json({ success: false, error: 'You were signed out after a period of inactivity. Please sign in again.', code: 'IDLE_TIMEOUT' })
     return
   }
   req.authUser = claims

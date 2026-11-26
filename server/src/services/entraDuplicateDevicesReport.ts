@@ -47,7 +47,7 @@ export function buildDuplicateMessage(report: DuplicateDeviceReport, date: strin
     { type: 'section', fields },
     { type: 'section', text: { type: 'mrkdwn', text: `*Recommended action*\n${action}` } },
     ...(notes ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Data quality*\n${notes}` } }] : []),
-    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Matched on Device ID, serial number (via Intune) or device name · ITO Endpoint' }] },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Matched on Device ID, serial number (via Intune) or device name · EndPoint+' }] },
   ]
   return { text: `Duplicate Entra device objects ${date}: ${s.groups} groups, ${s.cleanupCandidates} cleanup candidates`, blocks }
 }
@@ -66,7 +66,7 @@ const COLUMNS: Column[] = [
 export async function buildDuplicateDevicesWorkbook(report: DuplicateDeviceReport, now = new Date()): Promise<Buffer> {
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'ITO Endpoint'
+  wb.creator = 'EndPoint+'
   wb.created = now
   const date = now.toISOString().slice(0, 10)
   const s = summarize(report)

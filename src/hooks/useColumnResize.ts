@@ -25,7 +25,7 @@ export function useColumnResize<K extends string>(
           return parsed as Record<K, number>
         }
       }
-    } catch {}
+    } catch { /* unreadable stored widths — use defaults */ }
     return getDefaults()
   })
 
@@ -33,8 +33,10 @@ export function useColumnResize<K extends string>(
   // Use a ref so the effect closure doesn't go stale when cols/storageKey change
   const colsRef = useRef(cols)
   const keyRef  = useRef(storageKey)
-  colsRef.current = cols
-  keyRef.current  = storageKey
+  useEffect(() => {
+    colsRef.current = cols
+    keyRef.current  = storageKey
+  })
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -44,7 +46,7 @@ export function useColumnResize<K extends string>(
       setWidths(prev => {
         const next = { ...prev, [col]: Math.max(min, w0 + e.clientX - x0) } as Record<K, number>
         if (keyRef.current) {
-          try { localStorage.setItem(`col-widths:${keyRef.current}`, JSON.stringify(next)) } catch {}
+          try { localStorage.setItem(`col-widths:${keyRef.current}`, JSON.stringify(next)) } catch { /* storage unavailable — widths just won't persist */ }
         }
         return next
       })

@@ -1,6 +1,6 @@
-# ITO Endpoint AI Copilot
+# EndPoint+
 
-Internal web portal for Zinnia IT Operations: one place to see and act on Windows and macOS endpoints across **Microsoft Intune / Entra** and **ManageEngine Endpoint Central**, with application-version compliance, patch operations, stale-device reporting, scheduled Slack reports, automation rules and an AI Copilot.
+Internal web portal for Verma IT Operations: one place to see and act on Windows and macOS endpoints across **Microsoft Intune / Entra** and **ManageEngine Endpoint Central**, with application-version compliance, patch operations, stale-device reporting, scheduled Slack reports, automation rules and an AI Copilot.
 
 - **Stack:** React 19 · Vite · TypeScript · Tailwind 4 (client) · Express 5 · TypeScript (server) · optional PostgreSQL · IIS reverse proxy + Windows Service in production.
 - **Docs status:** the numbered documents below were written from the code (labels *Verified / Inferred / Not verified*). Start with the overview, and read [15](docs/15-known-gaps-and-verification-checklist.md) before relying on anything marked "Not verified".

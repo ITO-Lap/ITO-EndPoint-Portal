@@ -1,4 +1,4 @@
-# ITO Endpoint — Roles & Permissions Reference
+# EndPoint+ — Roles & Permissions Reference
 
 > **Version:** 1.0 | **Last updated:** May 2026 | **Audience:** IT Operations, IT Admins, Helpdesk
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-ITO Endpoint supports three distinct roles, each scoped to a specific level of access. Role assignment is managed exclusively by Global Administrators in **Settings → Roles & Permissions**.
+EndPoint+ supports three distinct roles, each scoped to a specific level of access. Role assignment is managed exclusively by Global Administrators in **Settings → Roles & Permissions**.
 
 | Role | Who it's for | Access level |
 |---|---|---|
@@ -225,3 +225,7 @@ Helpdesk therefore has read-only access to this module — the same tier that ha
 *For questions about this documentation, contact: it-support@zinnia.com*
 
 > **Device logs** (`devices.logs`): pulling and exporting a device's log from Managed Devices is open to Global Admin, IT Admin and Helpdesk by default; it is a toggle for custom roles. See [07-features/DEVICE-LOGS.md](07-features/DEVICE-LOGS.md).
+
+> **Ocean knowledge** (`ocean.docs.manage`): reading administrator-only documentation through Ocean and managing the knowledge base (Settings → Ocean Knowledge) is limited to Global Admin and IT Admin by default; it is a toggle for custom roles. Chatting with Ocean uses `copilot.access` / `copilot.read`. See [07-features/OCEAN.md](07-features/OCEAN.md).
+
+- `sync.manage`: run a data sync now and change sync schedules (Global Admin and IT Admin by default). See [17-database-sync-architecture.md](17-database-sync-architecture.md).

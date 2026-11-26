@@ -4,6 +4,8 @@ import { getEntraData, getEntraUserDetails, isEntraConfigured } from '../service
 import type { EntraSignIn, EntraUser } from '../services/entra.js'
 import { getIntuneUserSummaries, isIntuneConfigured } from '../services/intune.js'
 import { fetchAllDevices } from './devices.js'
+import { deriveUserSummaries } from '../services/userSummaries.js'
+import { storeFirstEnabled } from '../services/sync/backend.js'
 
 const router = Router()
 
@@ -76,12 +78,10 @@ router.get('/', asyncHandler(async (_req, res) => {
   }
 
   const now = new Date().toISOString()
-  let users: unknown[] = []
+  let users: unknown[]
 
   if (intuneOk) {
     // ── Primary: derive user list from Intune managed devices ─────────────
-    const intuneUsers = await getIntuneUserSummaries()
-
     // Optional Entra enrichment: MFA status, sign-in history, department
     let mfaByUpn       = new Map<string, boolean>()
     let signInsByUpn   = new Map<string, EntraSignIn[]>()
@@ -94,6 +94,12 @@ router.get('/', asyncHandler(async (_req, res) => {
       signInsByUpn   = maps.signInsByUpn
       entraUserByUpn = maps.entraUserByUpn
     }
+
+    // Users come from the stored device list (no second Graph download of the whole fleet); Entra supplies display names.
+    // Without the stored-data path (tests, or it is switched off) the original Graph read is used.
+    const intuneUsers = storeFirstEnabled()
+      ? deriveUserSummaries((await fetchAllDevices()).devices, new Map([...entraUserByUpn].map(([upn, u]) => [upn, u.displayName])))
+      : await getIntuneUserSummaries()
 
     users = intuneUsers.map(u => {
       const { firstName, lastName } = splitName(u.displayName)

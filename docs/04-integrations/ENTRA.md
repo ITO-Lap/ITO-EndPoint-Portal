@@ -22,7 +22,7 @@
 ## App Registration Setup
 
 1. Go to **Azure Portal → App registrations → New registration**
-2. Name: `ITO Endpoint` (or similar)
+2. Name: `EndPoint+` (or similar)
 3. Supported account types: **Accounts in this organizational directory only**
 4. No redirect URI needed (client credentials flow)
 

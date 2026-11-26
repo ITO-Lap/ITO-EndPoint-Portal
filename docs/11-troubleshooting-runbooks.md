@@ -157,3 +157,7 @@ Zoho throttles token requests and reports it as HTTP 400 ("You have made too man
 ## Intune shows "Error" but credentials are fine
 
 Each source gets 60 s per device fetch (`SOURCE_FETCH_TIMEOUT_MS` in `server/src/routes/devices.ts`); under load (several heavy jobs at once) a ~5,000-device pull can exceed a shorter limit and the badge keeps the last error until the next successful refresh. Refresh the dashboard; Graph 429 responses clear on their own.
+
+## Ocean says "I could not find a verified answer" or only shows excerpts
+
+Ocean answers only from indexed, enabled documentation. Check Settings → Ocean Knowledge: the document must be **Indexed** and **Use as source** on; administrator-only documents are hidden from standard roles; re-index after a documentation change; set `GEMINI_API_KEY` for written answers (without it Ocean shows excerpts). Full guide: [07-features/OCEAN.md](07-features/OCEAN.md#troubleshooting).

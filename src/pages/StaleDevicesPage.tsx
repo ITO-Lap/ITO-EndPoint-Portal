@@ -11,7 +11,7 @@ import { Pagination } from '../components/ui/Pagination'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { toggleSortDirection, type SortDirection } from '../lib/tableSorting'
 import { hasPermission } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/permissionsHooks'
 
 const PAGE_SIZE = 25
 const POLL_MS = 4000
@@ -227,13 +227,13 @@ export function StaleDevicesPage({ onBack, viewerRole = 'IT Admin', userEmail }:
   return (
     <div className="flex w-full flex-col gap-5 page-enter">
       <div className="glass rounded-2xl overflow-hidden">
-        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg,#FF6B35,#F46C00,#FFB800)' }} />
+        <div className="h-[3px]" style={{ background: 'linear-gradient(90deg,#FF6B35,#4F46E5,#22D3EE)' }} />
         <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button type="button" onClick={onBack} className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-sm font-medium text-slate-600 water-glow">
               <ArrowLeft className="h-4 w-4" />Back
             </button>
-            <div className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'linear-gradient(135deg,#FF6B35,#F46C00)' }}><MonitorOff className="h-5 w-5 text-white" /></div>
+            <div className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: 'linear-gradient(135deg,#FF6B35,#4F46E5)' }}><MonitorOff className="h-5 w-5 text-white" /></div>
             <div>
               <h1 className="text-lg font-black text-slate-800">Stale Devices</h1>
               <p className="text-[0.68rem] text-slate-400">Devices with no verified management check-in for more than 21 days.</p>
@@ -247,7 +247,7 @@ export function StaleDevicesPage({ onBack, viewerRole = 'IT Admin', userEmail }:
               </select>
             </label>
             <button type="button" onClick={refresh} disabled={syncing} className="flex items-center gap-1.5 rounded-full border border-slate-200 glass px-3 py-1.5 text-xs font-semibold text-slate-500 water-glow disabled:opacity-50">
-              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin text-[#F46C00]' : ''}`} />{syncing ? 'Refreshing…' : 'Refresh data'}
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin text-[#4F46E5]' : ''}`} />{syncing ? 'Refreshing…' : 'Refresh data'}
             </button>
           </div>
         </div>

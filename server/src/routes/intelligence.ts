@@ -2,10 +2,11 @@
 // All Graph API calls are cached 5 min to avoid hammering Microsoft's API.
 
 import { Router } from 'express'
+import { requireAnyCapability, requireCapability } from '../middleware/requireRole.js'
 import OpenAI from 'openai'
 import { credentialsFromEnv, getManagedDevices, getCompliancePolicies, getConfigurationProfiles, getMobileApps } from '../services/graphApi.js'
 import type { GraphMobileApp } from '../services/graphApi.js'
-import { batchComputeRiskScores } from '../services/riskScoring.js'
+import { batchComputeRiskScores, fleetRiskSummary } from '../services/riskScoring.js'
 import { detectConflicts, conflictSummary } from '../services/policyConflict.js'
 import { createComplianceReport, createInventoryReport } from '../services/complianceInventoryReport.js'
 import type { ExportFormat } from '../services/reportExporter.js'
@@ -54,7 +55,7 @@ function isInMonthUTC(dateStr: string | null | undefined, bucket: MonthBucket): 
 }
 
 // ─── GET /api/intelligence/devices ───────────────────────────────────────────
-router.get('/devices', async (_req, res, next) => {
+router.get('/devices', requireCapability('pages.Policy Conflicts'), async (_req, res, next) => {
   try {
     const cached = getCached<unknown[]>('intel:devices')
     if (cached) return res.json({ success: true, data: cached, count: cached.length, cached: true })
@@ -69,7 +70,7 @@ router.get('/devices', async (_req, res, next) => {
 })
 
 // ─── GET /api/intelligence/policies ──────────────────────────────────────────
-router.get('/policies', async (_req, res, next) => {
+router.get('/policies', requireCapability('pages.Policy Conflicts'), async (_req, res, next) => {
   try {
     const cached = getCached<unknown>('intel:policies')
     if (cached) return res.json({ success: true, ...cached as object, cached: true })
@@ -92,12 +93,13 @@ router.get('/policies', async (_req, res, next) => {
 })
 
 // ─── GET /api/intelligence/risk-scores ───────────────────────────────────────
-router.get('/risk-scores', async (req, res, next) => {
+router.get('/risk-scores', requireCapability('pages.Risk Scoring'), async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10), 200)
     const useAi = req.query.ai !== 'false'
 
-    const cached = getCached<unknown>(`intel:risk:${limit}`)
+    const cacheKey = `intel:risk:${limit}:${useAi}` // the AI choice changes the answer, so it is part of the key
+    const cached = getCached<unknown>(cacheKey)
     if (cached) return res.json({ success: true, ...cached as object, cached: true })
 
     const creds   = credentialsFromEnv()
@@ -105,16 +107,11 @@ router.get('/risk-scores', async (req, res, next) => {
     const openai  = getOpenAI()
     const scores  = await batchComputeRiskScores(devices, openai, { limit, useAi: useAi && !!openai })
 
-    const summary = {
-      critical: scores.filter(s => s.riskLevel === 'critical').length,
-      high:     scores.filter(s => s.riskLevel === 'high').length,
-      medium:   scores.filter(s => s.riskLevel === 'medium').length,
-      low:      scores.filter(s => s.riskLevel === 'low').length,
-      avgScore: scores.length > 0 ? Math.round(scores.reduce((a, s) => a + s.overallScore, 0) / scores.length) : 0,
-    }
+    // Fleet-wide counts (the list below is only the N riskiest devices).
+    const summary = fleetRiskSummary(devices)
 
     const result = { data: scores, summary, count: scores.length }
-    setCached(`intel:risk:${limit}`, result)
+    setCached(cacheKey, result)
     res.json({ success: true, ...result })
   } catch (err) {
     next(err)
@@ -122,7 +119,7 @@ router.get('/risk-scores', async (req, res, next) => {
 })
 
 // ─── POST /api/intelligence/summary ──────────────────────────────────────────
-router.post('/summary', async (req, res, next) => {
+router.post('/summary', requireAnyCapability('pages.Risk Scoring', 'pages.Policy Conflicts', 'pages.Reports & Analytics'), async (req, res, next) => {
   try {
     const openai = getOpenAI()
     if (!openai) {
@@ -171,7 +168,7 @@ Write a 3–4 sentence executive summary that is direct, specific, and includes 
 
 // ─── POST /api/intelligence/explain ──────────────────────────────────────────
 // Ask AI to explain a specific device issue in plain English
-router.post('/explain', async (req, res, next) => {
+router.post('/explain', requireAnyCapability('pages.Risk Scoring', 'pages.Policy Conflicts', 'pages.Reports & Analytics'), async (req, res, next) => {
   try {
     const openai = getOpenAI()
     if (!openai) {
@@ -215,7 +212,7 @@ const EXPORT_CONTENT_TYPES: Record<string, string> = {
   pptx:  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 }
 
-router.post('/export', async (req, res, next) => {
+router.post('/export', requireAnyCapability('pages.Risk Scoring', 'pages.Policy Conflicts', 'pages.Reports & Analytics'), async (req, res, next) => {
   try {
     const { format = 'csv', reportType = 'compliance' } = req.body as {
       format?: string

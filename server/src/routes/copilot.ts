@@ -28,11 +28,34 @@ import { randomUUID } from 'crypto'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { identifyAuditActor, requireCapability } from '../middleware/requireRole.js'
 import { isDbAvailable, query } from '../db/index.js'
-import { runCopilotChat, type CopilotMessage, type CopilotRequestContext } from '../services/copilotEngine.js'
-import { getToolByName, scrubSecrets, type CopilotCitation } from '../services/copilotTools.js'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
+import { runCopilotChat, type AnswerMode, type CopilotChatResult, type CopilotMessage, type CopilotRequestContext } from '../services/copilotEngine.js'
+import { getToolByName, scrubSecrets, toolsAllowedForRole, type CopilotCitation } from '../services/copilotTools.js'
+import { getGeminiConfig } from '../store/integrationStore.js'
+import { permissionsForRole } from '../services/roleResolution.js'
+import { inspectRequest, sanitizeAnswer } from '../services/ocean/guard.js'
+import { bump, getSettings, listDocuments, recordEvent, recordGap } from '../services/ocean/knowledgeStore.js'
+import { webProvider, webSearch, type WebOutcome } from '../services/ocean/webSearch.js'
+import { docCitation, docsOnlyAnswer, looksLikeDocQuestion, looksLikeLiveDataQuestion, noDocsAnswer, retrieveDocs, webCitations, type Retrieval } from '../services/ocean/retrieval.js'
 
 const router = Router()
 router.use(identifyAuditActor)
+
+// Per-user chat limit (the shared API limiter is per IP and far too generous for a metered AI call).
+const MAX_MESSAGE_CHARS = 2000
+const chatPerMinute = (): number => { const n = Number(process.env['OCEAN_CHAT_RATE_LIMIT_PER_MIN']); return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 20 }
+const chatLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: () => chatPerMinute(),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: req => req.header('x-user-email') || ipKeyGenerator(req.ip ?? ''),
+  handler: (req, res) => {
+    bump('rateLimited')
+    recordEvent({ type: 'rate_limited', actor: req.header('x-user-email') ?? 'unknown', role: req.header('x-user-role') ?? 'unknown', detail: 'chat limit reached' })
+    res.status(429).json({ success: false, error: 'You are sending messages too quickly. Please wait a moment and try again.' })
+  },
+})
 
 // ─── In-memory pending-action store (server-lifetime, DB-optional) ──────────
 
@@ -155,7 +178,7 @@ function sanitizePageContext(raw: unknown): CopilotRequestContext | undefined {
 
 // ─── POST /chat ───────────────────────────────────────────────────────────
 
-router.post('/chat', requireCapability('copilot.read'), asyncHandler(async (req, res) => {
+router.post('/chat', chatLimiter, requireCapability('copilot.read'), asyncHandler(async (req, res) => {
   const { conversationId: requestedId, message, context } = req.body as {
     conversationId?: string; message?: string; context?: CopilotRequestContext
   }
@@ -163,21 +186,79 @@ router.post('/chat', requireCapability('copilot.read'), asyncHandler(async (req,
     res.status(400).json({ success: false, error: 'message is required' })
     return
   }
+  if (message.length > MAX_MESSAGE_CHARS) {
+    res.status(400).json({ success: false, error: `Please keep your message under ${MAX_MESSAGE_CHARS} characters.` })
+    return
+  }
 
+  const started = Date.now()
   const actor = actorOf(req)
   const conversationId = await ensureConversation(requestedId, actor.email, message)
   const history = await loadHistory(conversationId)
+  bump('queries')
 
   const sanitizedContext = sanitizePageContext(context)
-  const chatResult = await runCopilotChat({
-    history,
-    userMessage: message,
-    ctx: { actorEmail: actor.email, actorRole: actor.role },
-    ...(sanitizedContext ? { pageContext: sanitizedContext } : {}),
-  })
+  const hasRecordContext = !!(sanitizedContext && (sanitizedContext.deviceId || sanitizedContext.userId || sanitizedContext.reportId || sanitizedContext.automationRunId || sanitizedContext.findingId))
+
+  // Which documentation this caller may read: administrator-only documents need the ocean.docs.manage permission.
+  const perms = await permissionsForRole(actor.role)
+  const includeAdminDocs = perms['ocean.docs.manage'] === true
+
+  let chatResult: CopilotChatResult
+  let retrieval: Retrieval | null = null
+  let webOutcome: WebOutcome | null = null
+  const verdict = inspectRequest(message)
+  try {
+    if (verdict.blocked) {
+      bump('blockedRequests')
+      recordEvent({ type: 'blocked_request', actor: actor.email, role: actor.role, detail: verdict.reason })
+      chatResult = { available: true, mode: 'general', message: { role: 'assistant', content: verdict.message }, toolCallTrace: [] }
+    } else {
+      retrieval = await retrieveDocs(message, { includeAdmin: includeAdminDocs, ...(sanitizedContext?.page ? { page: sanitizedContext.page } : {}) })
+      const liveIntent = toolsAllowedForRole(actor.role).length > 0 && looksLikeLiveDataQuestion(message, hasRecordContext)
+      const geminiReady = !!getGeminiConfig()?.apiKey
+      // Nothing documented + a how-this-tool-works question => the fixed "no verified answer" reply, without calling the model.
+      if (!retrieval.hits.length && looksLikeDocQuestion(message) && !liveIntent) {
+        bump('noDocumentation')
+        recordGap(message, sanitizedContext?.page ?? null)
+        // Optional, administrator-enabled web fallback: a minimal keyword query, results clearly labelled as external.
+        let web: WebOutcome | null = null
+        if (getSettings().webFallback && webProvider().ready) {
+          web = await webSearch(message)
+          bump('webFallbacks')
+          recordEvent({ type: 'web_search', actor: actor.email, role: actor.role, detail: sanitizeAnswer(`${web.label}: ${web.results.length} result(s)${web.error ? ` (${web.error})` : ''} for "${web.query}"`) })
+        }
+        webOutcome = web
+        const webCites = webCitations(web)
+        chatResult = { available: true, mode: 'general', message: { role: 'assistant', content: noDocsAnswer({ adminOnlyMatch: retrieval.adminOnlyMatch, page: sanitizedContext?.page, notIndexed: retrieval.indexedChunks === 0, web }), ...(webCites.length ? { citations: webCites } : {}) }, toolCallTrace: [] }
+      } else if (!geminiReady && retrieval.hits.length) {
+        bump('documentationAnswers')
+        chatResult = { available: true, mode: 'documentation', message: { role: 'assistant', content: docsOnlyAnswer(retrieval.hits), citations: retrieval.hits.slice(0, 3).map((h, i) => docCitation(h, `D${i + 1}`)) }, toolCallTrace: [] }
+      } else {
+        chatResult = await runCopilotChat({
+          history, userMessage: message, ctx: { actorEmail: actor.email, actorRole: actor.role },
+          ...(sanitizedContext ? { pageContext: sanitizedContext } : {}),
+          docs: { hits: retrieval.hits, adminOnlyMatch: retrieval.adminOnlyMatch },
+        })
+        if (chatResult.mode === 'documentation' || chatResult.mode === 'mixed') bump('documentationAnswers')
+      }
+    }
+  } catch (err) {
+    bump('errors')
+    const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+    recordEvent({ type: 'error', actor: actor.email, role: actor.role, detail: sanitizeAnswer(err instanceof Error ? err.message : String(err)).slice(0, 160) })
+    res.status(timedOut ? 504 : 502).json({ success: false, error: timedOut ? 'Ocean took too long to respond. Please try again in a moment.' : 'Ocean could not complete that request. Please try again, or contact an administrator if it keeps happening.' })
+    return
+  }
+
+  const docsStatus = retrieval
+    ? (retrieval.hits.length ? 'found' : retrieval.adminOnlyMatch ? 'admin-only' : retrieval.indexedChunks === 0 ? 'not-indexed' : 'none')
+    : 'not-searched'
+  recordEvent({ type: 'query', actor: actor.email, role: actor.role, detail: sanitizeAnswer(`mode=${chatResult.mode ?? 'n/a'} docs=${docsStatus}/${retrieval?.hits.length ?? 0} ${Date.now() - started}ms q="${message.replace(/\s+/g, ' ').slice(0, 100)}"`) })
+  void insertAuditLog('OCEAN_QUERY', 'ocean_conversation', conversationId, actor.email).catch(() => undefined)
 
   if (!chatResult.available) {
-    // Nothing to persist — Copilot itself is unavailable, no OpenAI call was made.
+    // Nothing to persist — Ocean's AI model is unavailable, no AI call was made.
     res.json({ conversationId, message: chatResult.message, available: false })
     return
   }
@@ -208,11 +289,15 @@ router.post('/chat', requireCapability('copilot.read'), asyncHandler(async (req,
     pendingActionOut = toPendingActionOut(entry)
   }
 
+  const mode: AnswerMode = chatResult.mode ?? 'general'
   res.json({
     conversationId,
     message: chatResult.message,
     ...(pendingActionOut ? { pendingAction: pendingActionOut } : {}),
     available: true,
+    mode,
+    docs: { status: docsStatus, retrieval: retrieval?.mode ?? null, count: retrieval?.hits.length ?? 0, indexedDocuments: listDocuments().filter(d => d.enabled && d.status === 'indexed').length },
+    ...(webOutcome ? { web: { provider: (webOutcome as WebOutcome).label, count: (webOutcome as WebOutcome).results.length, ...((webOutcome as WebOutcome).error ? { error: (webOutcome as WebOutcome).error } : {}) } } : {}),
   })
 }))
 

@@ -20,9 +20,13 @@ export function useIntegrationStatus() {
   }, [])
 
   useEffect(() => {
-    fetchStatus()
+    let cancelled = false
+    api.fetchIntegrationStatus()
+      .then(data => { if (!cancelled) setStatus(data) })
+      .catch(() => { /* server offline — keep stale */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
     const id = setInterval(fetchStatus, POLL_INTERVAL)
-    return () => clearInterval(id)
+    return () => { cancelled = true; clearInterval(id) }
   }, [fetchStatus])
 
   return { status, loading, refresh: fetchStatus }

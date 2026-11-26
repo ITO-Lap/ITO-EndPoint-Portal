@@ -17,7 +17,7 @@ interface ActionCenterCardData {
 const TONE_STYLES: Record<ActionCenterCardData['tone'], { bg: string; border: string; icon: string; value: string }> = {
   red:    { bg: 'bg-red-50',    border: 'border-red-100',    icon: 'bg-red-100 text-red-600',       value: 'text-red-700' },
   amber:  { bg: 'bg-amber-50',  border: 'border-amber-100',  icon: 'bg-amber-100 text-amber-600',   value: 'text-amber-700' },
-  orange: { bg: 'bg-orange-50', border: 'border-orange-100', icon: 'bg-orange-100 text-orange-600', value: 'text-orange-700' },
+  orange: { bg: 'bg-indigo-50', border: 'border-indigo-100', icon: 'bg-indigo-100 text-indigo-600', value: 'text-indigo-700' },
   blue:   { bg: 'bg-sky-50',    border: 'border-sky-100',    icon: 'bg-sky-100 text-sky-600',       value: 'text-sky-700' },
 }
 

@@ -14,7 +14,7 @@ Enables AI-powered device compliance analysis and freeform IT assistant chat. Us
 ## OpenAI API key setup
 
 1. Go to **platform.openai.com → API Keys → Create new secret key**
-2. Name it (e.g., `ITO Endpoint Copilot`)
+2. Name it (e.g., `EndPoint+`)
 3. Copy the key — it is not shown again
 4. Ensure your account has GPT-4o-mini access (available on all paid tiers)
 

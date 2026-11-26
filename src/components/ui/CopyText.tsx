@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
-import { useToast } from './ToastProvider'
+import { useToast } from './toastHooks'
 
 interface CopyTextProps {
   /** Text placed on the clipboard. Nothing is rendered when empty or a placeholder. */

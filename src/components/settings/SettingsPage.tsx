@@ -12,14 +12,20 @@ import {
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
-import { useToast } from '../ui/ToastProvider'
+import { useToast } from '../ui/toastHooks'
 import { api } from '../../api'
 import type { IntegrationStatusItem } from '../../api'
 import { useIntegrationStatus } from '../../hooks/useIntegrationStatus'
-import { useNavVisibility } from '../../context/NavVisibilityContext'
+import { useNavVisibility } from '../../context/navVisibilityHooks'
 import { navItems, NAV_GROUP_ORDER } from '../../data/dashboardData'
 import { canAccess, hasPermission } from '../../lib/permissions'
-import { usePermissions } from '../../context/PermissionsContext'
+import { OceanKnowledgeSection } from './OceanKnowledgeSection'
+import { QuietHoursModal, type QuietHoursConfig } from './QuietHoursModal'
+import { usePermissions } from '../../context/permissionsHooks'
+import { syncApi, type SyncModuleName } from '../../api/sync'
+import { savedNote, useSavedSettings } from '../../hooks/useSavedSettings'
+import { useSyncStatus } from '../../hooks/useSyncStatus'
+import { DEFAULT_IDLE_TIMEOUT_MIN, IDLE_TIMEOUT_CHOICES, fetchIdleTimeout, saveIdleTimeout } from '../../api/session'
 import { rolesApi, setRolesActor } from '../../api/roles'
 import type { CustomRole, PermissionGroup, PermissionMap, UserRoleAssignment } from '../../api/roles'
 import type { UserToolRole } from '../../types'
@@ -31,8 +37,10 @@ const NAV = [
   { key: 'navigation',    label: 'Navigation',         icon: LayoutDashboard },
   { key: 'integrations',  label: 'Integrations',       icon: Plug,        badge: '7' },
   { key: 'roles',         label: 'Roles & Permissions',icon: Users           },
+  { key: 'ocean',         label: 'Ocean Knowledge',    icon: BookOpen        },
   { key: 'compliance',    label: 'Compliance',          icon: ShieldCheck     },
   { key: 'automation',    label: 'Automation',          icon: Zap             },
+  { key: 'datasync',      label: 'Data Sync',           icon: RefreshCw       },
   { key: 'security',      label: 'Security',            icon: Lock            },
   { key: 'notifications', label: 'Notifications',       icon: Bell            },
   { key: 'data',          label: 'Data & Privacy',      icon: Database        },
@@ -43,8 +51,8 @@ type SectionKey = typeof NAV[number]['key']
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
-function SectionWrap({ title, description, children }: {
-  title: string; description: string; children: React.ReactNode
+function SectionWrap({ title, description, preview, notice, children }: {
+  title: string; description: string; preview?: string; notice?: string; children: React.ReactNode
 }) {
   return (
     <div className="space-y-4">
@@ -52,6 +60,18 @@ function SectionWrap({ title, description, children }: {
         <h2 className="text-base font-bold text-slate-900">{title}</h2>
         <p className="text-xs text-slate-500 mt-0.5">{description}</p>
       </div>
+      {notice && (
+        <div role="note" className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+          <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-sky-600" />
+          <p className="text-xs text-sky-900">{notice}</p>
+        </div>
+      )}
+      {preview && (
+        <div role="note" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+          <p className="text-xs text-amber-800"><strong>Preview.</strong> {preview}</p>
+        </div>
+      )}
       {children}
     </div>
   )
@@ -102,7 +122,7 @@ function Input({ value, onChange, placeholder, disabled, type = 'text', classNam
       placeholder={placeholder}
       disabled={disabled}
       onChange={e => onChange(e.target.value)}
-      className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     />
   )
 }
@@ -116,7 +136,7 @@ function Select({ value, onChange, options, disabled }: {
       value={value}
       disabled={disabled}
       onChange={e => onChange(e.target.value)}
-      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/40 transition disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
     >
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -137,7 +157,7 @@ function Toggle({ enabled, onChange, label, description }: {
         role="switch"
         aria-checked={enabled}
         onClick={() => onChange(!enabled)}
-        className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 ${enabled ? 'bg-orange-600' : 'bg-slate-200'}`}
+        className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-indigo-300 ${enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
       >
         <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
       </button>
@@ -155,7 +175,7 @@ function RadioGroup({ options, value, onChange }: {
           key={o}
           type="button"
           onClick={() => onChange(o)}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
             value === o
               ? 'is-selected'
               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
@@ -168,9 +188,10 @@ function RadioGroup({ options, value, onChange }: {
   )
 }
 
-function SaveRow({ onSave, saving }: { onSave: () => void; saving: boolean }) {
+function SaveRow({ onSave, saving, note }: { onSave: () => void; saving: boolean; note?: string | undefined }) {
   return (
-    <div className="flex justify-end pt-1">
+    <div className="flex items-center justify-end gap-3 pt-1">
+      {note && <span className="text-[0.65rem] text-slate-500">{note}</span>}
       <Button onClick={onSave} disabled={saving} className="min-w-[110px] gap-1.5">
         {saving && (
           <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -187,10 +208,8 @@ function SaveRow({ onSave, saving }: { onSave: () => void; saving: boolean }) {
 // ─── Section: General ─────────────────────────────────────────────────────────
 
 function GeneralSection() {
-  const { notify } = useToast()
-  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    orgName: 'Zinnia Technologies',
+    orgName: 'Verma Technologies',
     domain: 'zinnia.com',
     supportEmail: 'it-support@zinnia.com',
     timezone: 'America/Los_Angeles',
@@ -203,15 +222,13 @@ function GeneralSection() {
 
   const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }))
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 800))
-    setSaving(false)
-    notify('success', 'Saved', 'General settings updated')
-  }
+  const { save, saving, meta } = useSavedSettings('general', v => {
+    setForm(f => ({ ...f, ...(v as Partial<typeof f>) }))
+  })
+  const handleSave = () => void save(form)
 
   return (
-    <SectionWrap title="General" description="Organization identity, locale, and display preferences">
+    <SectionWrap title="General" description="Organization identity, locale, and display preferences" notice="Saved to the server and kept across restarts. These options are recorded for your team, but the portal does not enforce them yet: Auto sign-out (Security) and the Data Sync schedules are the settings that take effect today.">
       <Card title="Organization">
         <FieldRow label="Organization Name" hint="Displayed in reports and email footers">
           <Input value={form.orgName} onChange={set('orgName')} placeholder="Acme Corp" />
@@ -269,7 +286,7 @@ function GeneralSection() {
         </FieldRow>
       </Card>
 
-      <SaveRow saving={saving} onSave={handleSave} />
+      <SaveRow saving={saving} onSave={handleSave} note={savedNote(meta)} />
     </SectionWrap>
   )
 }
@@ -342,10 +359,10 @@ const INTEG_DEFS: IntegDef[] = [
     id: 'intune',
     name: 'Microsoft Intune',
     icon: Server,
-    iconBg: 'bg-orange-100',
-    iconColor: 'text-orange-600',
+    iconBg: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
     category: 'MDM',
-    categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
+    categoryColor: 'text-indigo-700 bg-indigo-50 border-indigo-200',
     description: 'Windows & mobile device management via Microsoft Endpoint Manager',
     docsHint: 'Requires an Azure App Registration with DeviceManagementApps.Read.All permission. Found in Azure Portal → App registrations → Certificates & secrets.',
     defaultInterval: 'realtime',
@@ -392,10 +409,10 @@ const INTEG_DEFS: IntegDef[] = [
     id: 'manageengine',
     name: 'ManageEngine',
     icon: Settings,
-    iconBg: 'bg-orange-100',
-    iconColor: 'text-orange-600',
+    iconBg: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
     category: 'MDM',
-    categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
+    categoryColor: 'text-indigo-700 bg-indigo-50 border-indigo-200',
     description: 'ManageEngine MDM On-Demand (Endpoint Central Cloud) — cross-platform (Windows & macOS) device inventory, policies, apps',
     docsHint: 'Zoho API Console → Self Client → generate a refresh token with MDMOnDemand.MDMInventory.READ scope.',
     defaultInterval: 'realtime',
@@ -418,10 +435,10 @@ const INTEG_DEFS: IntegDef[] = [
     id: 'jira',
     name: 'Jira',
     icon: Hash,
-    iconBg: 'bg-orange-100',
-    iconColor: 'text-orange-600',
+    iconBg: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
     category: 'ITSM',
-    categoryColor: 'text-orange-700 bg-orange-50 border-orange-200',
+    categoryColor: 'text-indigo-700 bg-indigo-50 border-indigo-200',
     description: 'Auto-create and link Jira tickets from device runbooks and compliance failures',
     docsHint: 'Jira Cloud → Profile → Manage Account → Security → API Tokens. Use your Atlassian login email as the Jira Email. Server URL format: https://yourorg.atlassian.net',
     defaultInterval: 'realtime',
@@ -511,6 +528,25 @@ const INTEG_DEFS: IntegDef[] = [
     defaults: { apiKey: '', model: 'gemini-2.5-flash', enableGoogleSearch: 'true' },
   },
   {
+    id: 'postgres',
+    name: 'PostgreSQL (optional)',
+    icon: Database,
+    iconBg: 'bg-sky-100',
+    iconColor: 'text-sky-600',
+    category: 'Database',
+    categoryColor: 'text-sky-700 bg-sky-50 border-sky-200',
+    description: 'Optional persistent database for synced devices, sync history and schedules. Without it the tool stores the same data in local files and works fully; connect PostgreSQL when it is ready.',
+    docsHint: 'Use a connection string like postgresql://user:password@host:5432/dbname. The connection is tested before it is saved. It takes effect after the server restarts; existing data in local files is carried over. API credentials are never stored in the database.',
+    defaultInterval: 'realtime',
+    defaultDevices: 'N/A',
+    defaultLastSync: 'On demand',
+    fields: [
+      { key: 'connectionString', label: 'Connection string', hint: 'postgresql://user:password@host:5432/dbname', placeholder: 'postgresql://user:password@host:5432/ito_endpoint', secret: true },
+      { key: 'ssl',              label: 'TLS',               hint: 'auto (TLS in production), require, or disable',      placeholder: 'auto',                                              secret: false },
+    ],
+    defaults: { connectionString: '', ssl: 'auto' },
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     icon: Cpu,
@@ -536,13 +572,15 @@ const INTEG_DEFS: IntegDef[] = [
   },
 ]
 
+// These products do not have a server connector yet. Keep the catalog honest:
+// never collect credentials or claim a connection until an implementation exists.
 const CATALOG_ITEMS = [
   { id: 'jamf',        name: 'Jamf Pro',           icon: Cloud,       iconBg: 'bg-slate-100',   iconColor: 'text-slate-700',  category: 'MDM',  desc: 'Enterprise Apple lifecycle & compliance management' },
-  { id: 'sccm',        name: 'Microsoft SCCM',     icon: Server,      iconBg: 'bg-orange-100',     iconColor: 'text-orange-600',    category: 'MDM',  desc: 'Windows Config Manager & WSUS patch management' },
+  { id: 'sccm',        name: 'Microsoft SCCM',     icon: Server,      iconBg: 'bg-indigo-100',  iconColor: 'text-indigo-600', category: 'MDM',  desc: 'Windows Config Manager & WSUS patch management' },
   { id: 'crowdstrike', name: 'CrowdStrike Falcon', icon: ShieldCheck, iconBg: 'bg-red-100',     iconColor: 'text-red-600',    category: 'EDR',  desc: 'Endpoint detection, response & threat hunting' },
-  { id: 'sentinelone', name: 'SentinelOne',        icon: ShieldAlert, iconBg: 'bg-lime-100',  iconColor: 'text-lime-600', category: 'EDR',  desc: 'AI-powered EPP, EDR & identity threat detection' },
-  { id: 'qualys',      name: 'Qualys VMDR',        icon: AlertTriangle,iconBg:'bg-orange-100',  iconColor: 'text-orange-600', category: 'Vuln', desc: 'Cloud vulnerability management & patch compliance' },
-  { id: 'servicenow',  name: 'ServiceNow',         icon: FileText,    iconBg: 'bg-teal-100',    iconColor: 'text-teal-700',   category: 'ITSM', desc: 'Auto-create incidents on compliance failures' },
+  { id: 'sentinelone', name: 'SentinelOne',        icon: ShieldAlert, iconBg: 'bg-lime-100',    iconColor: 'text-lime-600',   category: 'EDR',  desc: 'AI-powered EPP, EDR & identity threat detection' },
+  { id: 'qualys',      name: 'Qualys VMDR',        icon: AlertTriangle, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', category: 'Vuln', desc: 'Cloud vulnerability management & patch compliance' },
+  { id: 'servicenow',  name: 'ServiceNow',         icon: FileText,    iconBg: 'bg-teal-100',     iconColor: 'text-teal-700',   category: 'ITSM', desc: 'Auto-create incidents on compliance failures' },
 ]
 
 function maskValue(v: string): string {
@@ -586,42 +624,17 @@ function cardSubtitle(def: IntegDef, state: CardState): string {
 
 // ── Add Integration Modal ─────────────────────────────────────────────────────
 
-function AddIntegrationModal({ open, onClose, onConnect }: {
+function AddIntegrationModal({ open, onClose }: {
   open: boolean
   onClose: () => void
-  onConnect: (name: string) => void
 }) {
-  const { notify } = useToast()
-  const [selected, setSelected] = useState<string | null>(null)
-  const [setupKey, setSetupKey] = useState('')
-  const [setupUrl, setSetupUrl] = useState('')
-  const [connecting, setConnecting] = useState(false)
-
-  useEffect(() => {
-    if (!open) { setSelected(null); setSetupKey(''); setSetupUrl(''); setConnecting(false) }
-  }, [open])
-
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
-  const handleConnect = async () => {
-    if (!setupKey.trim()) return
-    setConnecting(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setConnecting(false)
-    const item = CATALOG_ITEMS.find(c => c.id === selected)
-    if (item) {
-      notify('success', 'Integration Connected', `${item.name} is now connected`)
-      onConnect(item.name)
-    }
-    onClose()
-  }
-
   if (!open) return null
-  const selectedItem = CATALOG_ITEMS.find(c => c.id === selected)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -635,7 +648,7 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
             <div className="rounded-xl bg-white/10 p-2"><Plus className="h-4 w-4 text-white" /></div>
             <div>
               <h2 className="text-sm font-bold text-white">Add Integration</h2>
-              <p className="text-[0.65rem] text-slate-300">Connect a new data source to ITO Endpoint</p>
+              <p className="text-[0.65rem] text-slate-300">Connect a new data source to EndPoint+</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-300 hover:bg-white/10 transition">
@@ -646,92 +659,30 @@ function AddIntegrationModal({ open, onClose, onConnect }: {
         <div className="p-6 overflow-y-auto flex-1">
           {!selected ? (
             <>
-              <p className="text-xs font-semibold text-slate-500 mb-3">Available Integrations</p>
+              <p className="text-xs font-semibold text-slate-500 mb-1">Integration roadmap</p>
+              <p className="text-[0.68rem] text-slate-500 mb-3">These connectors are planned. They cannot accept credentials or connect until their server integrations are available.</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {CATALOG_ITEMS.map(item => {
                   const Icon = item.icon
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      type="button"
-                      onClick={() => setSelected(item.id)}
-                      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left hover:border-orange-300 hover:bg-orange-50/40 transition focus-visible:ring-2 focus-visible:ring-orange-300 group"
+                      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left opacity-75"
                     >
                       <div className={`grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl ${item.iconBg}`}>
                         <Icon className={`h-4 w-4 ${item.iconColor}`} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 group-hover:text-orange-700 transition leading-tight">{item.name}</p>
+                        <p className="text-xs font-semibold text-slate-900 leading-tight">{item.name}</p>
                         <span className="inline-block rounded-full bg-slate-200 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-600 mt-1">{item.category}</span>
                         <p className="text-[0.65rem] text-slate-500 mt-1 leading-snug">{item.desc}</p>
+                        <span className="mt-2 inline-block rounded-full bg-amber-100 px-1.5 py-0.5 text-[0.55rem] font-bold text-amber-800">Coming soon</span>
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>
             </>
-          ) : selectedItem ? (
-            <div className="space-y-4">
-              <button type="button" onClick={() => setSelected(null)}
-                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-orange-600 transition">
-                <ChevronRight className="h-3 w-3 rotate-180" />Back to catalog
-              </button>
-
-              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                {(() => { const Icon = selectedItem.icon; return <div className={`grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl ${selectedItem.iconBg}`}><Icon className={`h-5 w-5 ${selectedItem.iconColor}`} /></div> })()}
-                <div>
-                  <p className="text-sm font-bold text-slate-900">{selectedItem.name}</p>
-                  <span className="inline-block rounded-full bg-slate-200 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-600">{selectedItem.category}</span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[0.68rem] font-semibold text-slate-700 mb-1">API Key / Token *</label>
-                  <input
-                    type="password"
-                    value={setupKey}
-                    onChange={e => setSetupKey(e.target.value)}
-                    placeholder="Paste your API key or token here"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[0.68rem] font-semibold text-slate-700 mb-1">Base URL / Endpoint <span className="font-normal text-slate-400">(optional)</span></label>
-                  <input
-                    type="text"
-                    value={setupUrl}
-                    onChange={e => setSetupUrl(e.target.value)}
-                    placeholder="https://yourorg.example.com"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
-                  />
-                </div>
-                <div className="flex items-start gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2.5">
-                  <Info className="h-3.5 w-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-[0.65rem] text-orange-700 leading-relaxed">
-                    Additional settings (scopes, tenant IDs, custom fields) will be available in the Configure panel after connecting.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setSelected(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConnect}
-                  disabled={!setupKey.trim() || connecting}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition"
-                >
-                  {connecting
-                    ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                    : <Link2 className="h-3 w-3" />}
-                  {connecting ? 'Connecting…' : 'Connect Integration'}
-                </button>
-              </div>
-            </div>
           ) : null}
         </div>
       </div>
@@ -756,22 +707,31 @@ type SlackHealth = {
 function SlackHealthPanel() {
   const { notify } = useToast()
   const [health, setHealth] = useState<SlackHealth | null>(null)
+  const [now, setNow] = useState(() => Date.now()) // refreshed with each health read, so render stays pure
   const [reconnecting, setReconnecting] = useState(false)
 
   const fetchHealth = useCallback(async () => {
     try {
       const data = await api.slackHealth()
       setHealth(data)
+      setNow(Date.now())
     } catch {
       // silently ignore — panel will just stay stale
     }
   }, [])
 
   useEffect(() => {
-    fetchHealth()
-    const t = setInterval(fetchHealth, 30_000)
-    return () => clearInterval(t)
-  }, [fetchHealth])
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const data = await api.slackHealth()
+        if (!cancelled) { setHealth(data); setNow(Date.now()) }
+      } catch { /* silently ignore: the panel just stays stale */ }
+    }
+    void poll()
+    const t = setInterval(() => void poll(), 30_000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [])
 
   const handleReconnect = async () => {
     setReconnecting(true)
@@ -794,7 +754,7 @@ function SlackHealthPanel() {
 
   const timeAgo = (ts: number | null) => {
     if (!ts) return 'Never'
-    const s = Math.floor((Date.now() - ts) / 1000)
+    const s = Math.floor((now - ts) / 1000)
     if (s < 60) return `${s}s ago`
     if (s < 3600) return `${Math.floor(s / 60)}m ago`
     return `${Math.floor(s / 3600)}h ago`
@@ -871,7 +831,7 @@ function SlackHealthPanel() {
               type="button"
               onClick={handleReconnect}
               disabled={reconnecting}
-              className="inline-flex items-center gap-1.5 h-7 rounded-full bg-[#F46C00] px-3 text-[0.68rem] font-bold text-white transition hover:bg-[#e06200] disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 h-7 rounded-full bg-[#4F46E5] px-3 text-[0.68rem] font-bold text-white transition hover:bg-[#e06200] disabled:opacity-60"
             >
               {reconnecting ? (
                 <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -946,13 +906,28 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
     const secretField = def.fields.find(f => f.secret)
     const slackCredential = fields['webhookUrl'] || fields['botToken']
     const secretVal = def.id === 'slack' ? slackCredential : (secretField ? (fields[secretField.key] ?? '') : '')
-    const isPlaceholder = !secretVal || secretVal.includes('replace') || secretVal.includes('placeholder') || secretVal.length < 10
+    // Confluence reuses the Jira email and token, so every field is optional there; it only needs something to save.
+    const confluenceEmpty = def.id === 'confluence' && Object.values(fields).every(v => !v.trim())
+    const isPlaceholder = def.id === 'confluence'
+      ? confluenceEmpty
+      : !secretVal || secretVal.includes('replace') || secretVal.includes('placeholder') || secretVal.length < 10
     if (isPlaceholder) {
       notify('error', 'Push Blocked', `Enter a real ${secretField?.label ?? 'API key'} before pushing — placeholder values would overwrite active credentials`)
       return
     }
 
     onUpdate(s => ({ ...s, pushing: true }))
+    if (def.id === 'postgres') {
+      try {
+        const r = await syncApi.pushPostgres(fields['connectionString'] ?? '', fields['ssl'] ?? 'auto')
+        onUpdate(s => ({ ...s, pushing: false, pushed: true, pushedAt: new Date().toLocaleTimeString() }))
+        notify('success', 'PostgreSQL saved', `Connection works${r.serverVersion ? ` (PostgreSQL ${r.serverVersion})` : ''}. Restart the server to start using it.`)
+      } catch (e) {
+        onUpdate(s => ({ ...s, pushing: false }))
+        notify('error', 'Not saved', e instanceof Error ? e.message : 'Could not connect to PostgreSQL')
+      }
+      return
+    }
     try {
       await api.pushCredentials(def.id, fields)
       onUpdate(s => ({ ...s, pushing: false, pushed: true, pushedAt: new Date().toLocaleTimeString() }))
@@ -991,12 +966,18 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
 
   const handleDisconnect = () => {
     onUpdate(s => ({ ...s, connected: false, expanded: false, disconnectConfirm: false }))
+    if (def.id === 'postgres') {
+      void syncApi.disconnectPostgres()
+        .then(() => notify('success', 'PostgreSQL disconnected', 'The saved connection was removed. Restart the server to go back to local files.'))
+        .catch(() => notify('error', 'Not disconnected', 'Could not remove the saved connection'))
+      return
+    }
     notify('success', 'Disconnected', `${def.name} has been disconnected`)
   }
 
   return (
     <div className={`rounded-[18px] border bg-white shadow-sm shadow-slate-900/5 overflow-hidden transition-all ${
-      isConnected ? 'border-slate-200' : 'border-dashed border-orange-200'
+      isConnected ? 'border-slate-200' : 'border-dashed border-indigo-200'
     }`}>
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
@@ -1033,17 +1014,17 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
               type="button"
               onClick={handleSync}
               disabled={state.syncing}
-              className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold text-slate-700 disabled:opacity-60 transition ${state.syncing ? 'border-orange-300 bg-orange-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+              className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold text-slate-700 disabled:opacity-60 transition ${state.syncing ? 'border-indigo-300 bg-indigo-50 animate-pulse' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
             >
-              <RefreshCw className={`h-3 w-3 ${state.syncing ? 'animate-spin text-orange-500' : ''}`} />
+              <RefreshCw className={`h-3 w-3 ${state.syncing ? 'animate-spin text-indigo-500' : ''}`} />
               {state.syncing ? 'Syncing…' : 'Sync Now'}
             </button>
           )}
           <button
             type="button"
             onClick={() => onUpdate(s => ({ ...s, expanded: !s.expanded, disconnectConfirm: false }))}
-            className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
-              state.expanded ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            className={`inline-flex items-center gap-1.5 h-8 rounded-lg border px-3 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+              state.expanded ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
             }`}
           >
             <ChevronDown className={`h-3 w-3 transition-transform ${state.expanded ? 'rotate-180' : ''}`} />
@@ -1055,6 +1036,13 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
       {/* ── Stats bar ────────────────────────────────────────────────────── */}
       <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-2.5">
         <div className="flex flex-wrap gap-6 items-center">
+          {def.id === 'postgres' ? (
+            <div>
+              <p className="text-[0.58rem] text-slate-400 uppercase tracking-wide">Storage in use</p>
+              <p className="text-xs font-bold text-slate-900 mt-0.5">{liveStatus?.storage === 'postgres' ? 'PostgreSQL' : 'Local files'}</p>
+              {liveStatus?.note && <p className="mt-0.5 max-w-md text-[0.65rem] text-slate-500">{liveStatus.note}</p>}
+            </div>
+          ) : (<>
           <div>
             <p className="text-[0.58rem] text-slate-400 uppercase tracking-wide">Devices Synced</p>
             <p className="text-xs font-bold text-slate-900 mt-0.5">
@@ -1069,11 +1057,12 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
             <select
               value={state.interval}
               onChange={e => onUpdate(s => ({ ...s, interval: e.target.value }))}
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[0.68rem] font-medium text-slate-800 focus:border-orange-400 focus:outline-none transition appearance-none cursor-pointer"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[0.68rem] font-medium text-slate-800 focus:border-indigo-400 focus:outline-none transition appearance-none cursor-pointer"
             >
               {SYNC_INTERVALS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          </>)}
           <div>
             <p className="text-[0.58rem] text-slate-400 uppercase tracking-wide">API Status</p>
             {liveStatus?.connectionType === 'incoming_webhook' ? (
@@ -1100,7 +1089,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
             <div className="ml-auto">
               {state.testStatus === 'testing' && (
                 <span className="inline-flex items-center gap-1.5 text-[0.68rem] text-slate-500">
-                  <svg className="h-3 w-3 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  <svg className="h-3 w-3 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                   Testing…
                 </span>
               )}
@@ -1131,7 +1120,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
             <Info className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-[0.72rem] text-slate-700 leading-relaxed">{def.description}</p>
-              <p className="text-[0.65rem] text-orange-600 mt-1">{def.docsHint}</p>
+              <p className="text-[0.65rem] text-indigo-600 mt-1">{def.docsHint}</p>
             </div>
           </div>
 
@@ -1164,13 +1153,13 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                             onChange={e => setField(field.key, f => ({ ...f, draft: e.target.value }))}
                             placeholder={field.placeholder}
                             autoFocus
-                            className="flex-1 min-w-0 rounded-lg border border-orange-300 bg-orange-50/30 px-3 py-1.5 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition"
+                            className="flex-1 min-w-0 rounded-lg border border-indigo-300 bg-indigo-50/30 px-3 py-1.5 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/40 transition"
                           />
                           <button
                             type="button"
                             onClick={() => handleSaveField(field.key)}
                             disabled={!fs.draft.trim() || fs.saving}
-                            className="flex-shrink-0 inline-flex items-center gap-1 h-7 rounded-lg bg-orange-600 px-2.5 text-[0.68rem] font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition"
+                            className="flex-shrink-0 inline-flex items-center gap-1 h-7 rounded-lg bg-indigo-600 px-2.5 text-[0.68rem] font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition"
                           >
                             {fs.saving
                               ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -1215,7 +1204,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                             <button
                               type="button"
                               onClick={() => setField(field.key, f => ({ ...f, editing: true, draft: f.value }))}
-                              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50 transition"
+                              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition"
                               title="Edit value"
                             >
                               <Edit2 className="h-3 w-3" />
@@ -1247,7 +1236,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                     ) : (
                       <div>
                         <p className="text-[0.72rem] font-semibold text-slate-700">Push credentials to backend</p>
-                        <p className="text-[0.65rem] text-slate-400 mt-0.5">Sends the saved credentials to the running server so real device data can be fetched. Credentials are stored in memory only and reset on server restart.</p>
+                        <p className="text-[0.65rem] text-slate-400 mt-0.5">{def.id === 'postgres' ? 'Tests the connection and, only if it works, saves it on the server (owner-only file). It takes effect after the server restarts.' : 'Sends the saved credentials to the running server so real device data can be fetched. Credentials are stored in memory only and reset on server restart.'}</p>
                       </div>
                     )}
                   </div>
@@ -1281,7 +1270,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                   )}
                   {state.testStatus === 'testing' && (
                     <div className="flex items-center gap-2">
-                      <svg className="h-3.5 w-3.5 animate-spin text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      <svg className="h-3.5 w-3.5 animate-spin text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       <p className="text-[0.72rem] text-slate-600 font-medium">Testing connection to {cardSubtitle(def, state)}…</p>
                     </div>
                   )}
@@ -1308,7 +1297,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                   type="button"
                   onClick={handleTest}
                   disabled={state.testStatus === 'testing'}
-                  className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 rounded-lg bg-orange-600 px-3 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-60 transition focus-visible:ring-2 focus-visible:ring-orange-300"
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 transition focus-visible:ring-2 focus-visible:ring-indigo-300"
                 >
                   <Wifi className="h-3 w-3" />
                   {state.testStatus === 'testing' ? 'Testing…' : state.testStatus === 'ok' ? 'Re-test' : 'Test Connection'}
@@ -1326,7 +1315,7 @@ function IntegrationCard({ def, state, onUpdate, liveStatus }: {
                   <div>
                     <p className="text-xs font-semibold text-slate-800">Disconnect {def.name}</p>
                     <p className="text-[0.65rem] text-slate-500 mt-0.5">
-                      Removes this integration. Previously synced device data is retained but no new syncs will run.
+                      {def.id === 'postgres' ? 'Removes the saved connection. After the next restart the tool goes back to local files; nothing is deleted from the database.' : 'Removes this integration. Previously synced device data is retained but no new syncs will run.'}
                     </p>
                   </div>
                   <button
@@ -1384,21 +1373,20 @@ function IntegrationsSection() {
     setCardStates(prev => ({ ...prev, [id]: updater(prev[id]) }))
   }, [])
 
-  // Keep local connected state in sync with server reality
-  useEffect(() => {
-    if (integrationStatus.length === 0) return
-    setCardStates(prev => {
-      const next = { ...prev }
+  // Keep local connected state in sync with server reality whenever the server status changes (adjusted while rendering).
+  const [seenStatus, setSeenStatus] = useState(integrationStatus)
+  if (integrationStatus !== seenStatus) {
+    setSeenStatus(integrationStatus)
+    if (integrationStatus.length > 0) {
+      const next = { ...cardStates }
       for (const s of integrationStatus) {
         if (!next[s.id]) continue
         const serverConnected = s.configured && s.healthy !== false
-        if (next[s.id].connected !== serverConnected) {
-          next[s.id] = { ...next[s.id], connected: serverConnected }
-        }
+        if (next[s.id].connected !== serverConnected) next[s.id] = { ...next[s.id], connected: serverConnected }
       }
-      return next
-    })
-  }, [integrationStatus])
+      setCardStates(next)
+    }
+  }
 
   const connectedCount = integrationStatus.length > 0
     ? integrationStatus.filter(s => s.configured && s.healthy !== false).length
@@ -1436,9 +1424,9 @@ function IntegrationsSection() {
           <button
             type="button"
             onClick={refreshStatus}
-            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition text-[0.65rem] ${statusLoading ? 'border-orange-300 bg-orange-50 text-orange-500 animate-pulse' : 'border-transparent text-slate-400 hover:text-orange-600'}`}
+            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition text-[0.65rem] ${statusLoading ? 'border-indigo-300 bg-indigo-50 text-indigo-500 animate-pulse' : 'border-transparent text-slate-400 hover:text-indigo-600'}`}
           >
-            <RefreshCw className={`h-2.5 w-2.5 ${statusLoading ? 'animate-spin text-orange-500' : ''}`} />Refresh
+            <RefreshCw className={`h-2.5 w-2.5 ${statusLoading ? 'animate-spin text-indigo-500' : ''}`} />Refresh
           </button>
         </div>
       </div>
@@ -1459,20 +1447,19 @@ function IntegrationsSection() {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="w-full rounded-[18px] border-2 border-dashed border-slate-200 bg-white py-5 flex flex-col items-center gap-2 text-slate-500 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50/30 transition focus-visible:ring-2 focus-visible:ring-orange-300"
+          className="w-full rounded-[18px] border-2 border-dashed border-slate-200 bg-white py-5 flex flex-col items-center gap-2 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/30 transition focus-visible:ring-2 focus-visible:ring-indigo-300"
         >
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 group-hover:bg-orange-100 transition">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 group-hover:bg-indigo-100 transition">
             <Plus className="h-4 w-4" />
           </div>
           <p className="text-xs font-semibold">Add Integration</p>
-          <p className="text-[0.65rem]">Connect Jamf, CrowdStrike, ServiceNow and 3 more</p>
+          <p className="text-[0.65rem]">View planned connectors and their availability</p>
         </button>
       </div>
 
       <AddIntegrationModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onConnect={name => notify('success', 'Integration Active', `${name} is now syncing`)}
       />
     </SectionWrap>
   )
@@ -1481,8 +1468,6 @@ function IntegrationsSection() {
 // ─── Section: Compliance ──────────────────────────────────────────────────────
 
 function ComplianceSection() {
-  const { notify } = useToast()
-  const [saving, setSaving] = useState(false)
   const [grace, setGrace] = useState(24)
   const [checkFreq, setCheckFreq] = useState('30')
   const [autoEscalate, setAutoEscalate] = useState(true)
@@ -1490,24 +1475,27 @@ function ComplianceSection() {
   const [riskWeights, setRiskWeights] = useState({ encryption: 40, osVersion: 25, appCompliance: 20, checkIn: 15 })
   const [strictMode, setStrictMode] = useState(false)
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 900))
-    setSaving(false)
-    notify('success', 'Saved', 'Compliance settings updated')
-  }
+  const { save, saving, meta } = useSavedSettings('compliance', v => {
+    if (typeof v['grace'] === 'number') setGrace(v['grace'])
+    if (typeof v['checkFreq'] === 'string') setCheckFreq(v['checkFreq'])
+    if (typeof v['autoEscalate'] === 'boolean') setAutoEscalate(v['autoEscalate'])
+    if (typeof v['escalateAfter'] === 'string') setEscalateAfter(v['escalateAfter'])
+    if (v['riskWeights'] && typeof v['riskWeights'] === 'object') setRiskWeights(w => ({ ...w, ...(v['riskWeights'] as typeof w) }))
+    if (typeof v['strictMode'] === 'boolean') setStrictMode(v['strictMode'])
+  })
+  const handleSave = () => void save({ grace, checkFreq, autoEscalate, escalateAfter, riskWeights, strictMode })
 
   const weightKeys = [
-    { key: 'encryption',    label: 'Encryption',        color: 'bg-orange-500' },
+    { key: 'encryption',    label: 'Encryption',        color: 'bg-indigo-500' },
     { key: 'osVersion',     label: 'OS Version',         color: 'bg-lime-500' },
-    { key: 'appCompliance', label: 'App Compliance',     color: 'bg-orange-400' },
+    { key: 'appCompliance', label: 'App Compliance',     color: 'bg-indigo-400' },
     { key: 'checkIn',       label: 'Device Check-in',    color: 'bg-emerald-500' },
   ] as { key: keyof typeof riskWeights; label: string; color: string }[]
 
   const totalWeight = Object.values(riskWeights).reduce((a, b) => a + b, 0)
 
   return (
-    <SectionWrap title="Compliance" description="Thresholds, check intervals, and risk scoring configuration">
+    <SectionWrap title="Compliance" description="Thresholds, check intervals, and risk scoring configuration" notice="Saved to the server and kept across restarts. These options are recorded for your team, but the portal does not enforce them yet: Auto sign-out (Security) and the Data Sync schedules are the settings that take effect today.">
       <Card title="Check Schedule">
         <FieldRow label="Check Frequency" hint="How often devices are evaluated for compliance">
           <Select value={checkFreq} onChange={setCheckFreq} options={[
@@ -1525,11 +1513,11 @@ function ComplianceSection() {
             <input
               type="range" min={0} max={72} step={1} value={grace}
               onChange={e => setGrace(Number(e.target.value))}
-              className="w-full accent-orange-600"
+              className="w-full accent-indigo-600"
             />
             <div className="flex justify-between text-[0.62rem] text-slate-400">
               <span>0 h (immediate)</span>
-              <span className="font-semibold text-orange-700">{grace} hours</span>
+              <span className="font-semibold text-indigo-700">{grace} hours</span>
               <span>72 h</span>
             </div>
           </div>
@@ -1573,7 +1561,7 @@ function ComplianceSection() {
               <input
                 type="range" min={0} max={100} step={5} value={riskWeights[key]}
                 onChange={e => setRiskWeights(w => ({ ...w, [key]: Number(e.target.value) }))}
-                className="w-full accent-orange-600"
+                className="w-full accent-indigo-600"
               />
             </div>
           ))}
@@ -1588,7 +1576,7 @@ function ComplianceSection() {
         </div>
       </Card>
 
-      <SaveRow saving={saving} onSave={handleSave} />
+      <SaveRow saving={saving} onSave={handleSave} note={savedNote(meta)} />
     </SectionWrap>
   )
 }
@@ -1596,8 +1584,6 @@ function ComplianceSection() {
 // ─── Section: Automation ──────────────────────────────────────────────────────
 
 function AutomationSection() {
-  const { notify } = useToast()
-  const [saving, setSaving] = useState(false)
   const [autoRemediate, setAutoRemediate] = useState(false)
   const [notifyBefore, setNotifyBefore] = useState(true)
   const [notifyMinutes, setNotifyMinutes] = useState('15')
@@ -1606,20 +1592,24 @@ function AutomationSection() {
   const [dryRunFirst, setDryRunFirst] = useState(true)
   const [triggerHours, setTriggerHours] = useState('4')
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 900))
-    setSaving(false)
-    notify('success', 'Saved', 'Automation settings updated')
-  }
+  const { save, saving, meta } = useSavedSettings('automation', v => {
+    if (typeof v['autoRemediate'] === 'boolean') setAutoRemediate(v['autoRemediate'])
+    if (typeof v['notifyBefore'] === 'boolean') setNotifyBefore(v['notifyBefore'])
+    if (typeof v['notifyMinutes'] === 'string') setNotifyMinutes(v['notifyMinutes'])
+    if (typeof v['maxPerDay'] === 'string') setMaxPerDay(v['maxPerDay'])
+    if (typeof v['logRetention'] === 'string') setLogRetention(v['logRetention'])
+    if (typeof v['dryRunFirst'] === 'boolean') setDryRunFirst(v['dryRunFirst'])
+    if (typeof v['triggerHours'] === 'string') setTriggerHours(v['triggerHours'])
+  })
+  const handleSave = () => void save({ autoRemediate, notifyBefore, notifyMinutes, maxPerDay, logRetention, dryRunFirst, triggerHours })
 
   return (
-    <SectionWrap title="Automation" description="Configure auto-remediation triggers, limits, and logging">
+    <SectionWrap title="Automation" description="Configure auto-remediation triggers, limits, and logging" notice="Saved to the server and kept across restarts. These options are recorded for your team, but the portal does not enforce them yet: Auto sign-out (Security) and the Data Sync schedules are the settings that take effect today.">
       <Card title="Auto-Remediation">
-        <div className={`rounded-xl border px-4 py-3.5 flex items-start justify-between gap-4 mb-2 ${autoRemediate ? 'border-orange-200 bg-orange-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className={`rounded-xl border px-4 py-3.5 flex items-start justify-between gap-4 mb-2 ${autoRemediate ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'}`}>
           <div className="flex items-start gap-3 min-w-0">
-            <div className={`mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl ${autoRemediate ? 'bg-orange-100' : 'bg-amber-100'}`}>
-              <Zap className={`h-4 w-4 ${autoRemediate ? 'text-orange-600' : 'text-amber-600'}`} />
+            <div className={`mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl ${autoRemediate ? 'bg-indigo-100' : 'bg-amber-100'}`}>
+              <Zap className={`h-4 w-4 ${autoRemediate ? 'text-indigo-600' : 'text-amber-600'}`} />
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-900">Auto-Remediation {autoRemediate ? 'Enabled' : 'Disabled'}</p>
@@ -1632,7 +1622,7 @@ function AutomationSection() {
           </div>
           <button type="button" role="switch" aria-checked={autoRemediate}
             onClick={() => setAutoRemediate(v => !v)}
-            className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-orange-300 mt-0.5 ${autoRemediate ? 'bg-orange-600' : 'bg-slate-300'}`}
+            className={`relative flex-shrink-0 h-5 w-9 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-indigo-300 mt-0.5 ${autoRemediate ? 'bg-indigo-600' : 'bg-slate-300'}`}
           >
             <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autoRemediate ? 'translate-x-4' : 'translate-x-0'}`} />
           </button>
@@ -1700,17 +1690,120 @@ function AutomationSection() {
         </FieldRow>
       </Card>
 
-      <SaveRow saving={saving} onSave={handleSave} />
+      <SaveRow saving={saving} onSave={handleSave} note={savedNote(meta)} />
     </SectionWrap>
   )
 }
 
 // ─── Section: Security ────────────────────────────────────────────────────────
 
-function SecuritySection() {
+function AutoSignOutRow({ canEdit }: { canEdit: boolean }) {
   const { notify } = useToast()
-  const [saving, setSaving] = useState(false)
-  const [sessionTimeout, setSessionTimeout] = useState('60')
+  const [minutes, setMinutes] = useState(String(DEFAULT_IDLE_TIMEOUT_MIN))
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { void fetchIdleTimeout().then(m => setMinutes(String(m))) }, [])
+
+  const change = async (value: string) => {
+    const previous = minutes
+    setMinutes(value); setBusy(true)
+    try {
+      await saveIdleTimeout(Number(value))
+      notify('success', 'Auto sign-out updated', `People are signed out after ${value} minutes of inactivity.`)
+    } catch (e) {
+      setMinutes(previous)
+      notify('error', 'Not saved', e instanceof Error ? e.message : 'Could not save the auto sign-out time.')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      <FieldRow label="Auto sign-out" hint={canEdit ? 'Sign people out after this much inactivity (default 60 minutes)' : 'Set by a Global Admin'}>
+        <Select value={minutes} onChange={v => void change(v)} disabled={!canEdit || busy}
+          options={IDLE_TIMEOUT_CHOICES.map(m => ({ value: String(m), label: `${m} minutes${m === DEFAULT_IDLE_TIMEOUT_MIN ? ' (default)' : ''}` }))} />
+      </FieldRow>
+      <div className="mt-3 flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+        <Info className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+        <p className="text-[0.65rem] text-slate-600">
+          Applies to everyone and takes effect immediately. Regardless of this setting, everyone must sign in again at least every 9 hours, and again after the server restarts.
+        </p>
+      </div>
+    </>
+  )
+}
+
+// Choices per module, inside what the server accepts (see INTERVAL_LIMITS in services/sync/syncEngine.ts).
+const SYNC_MODULE_INTERVALS: Record<string, number[]> = {
+  devices:      [15, 30, 45, 60, 120, 240, 480, 720, 1440],
+  applications: [60, 120, 240, 360, 480, 720, 1440],
+  patches:      [60, 120, 240, 360, 480, 720, 1440],
+  findings:     [15, 30, 45, 60, 120, 240, 480, 720, 1440],
+}
+const SYNC_MODULE_INFO: Record<string, { title: string; description: string }> = {
+  devices:      { title: 'Device, security and check-in data', description: 'Recommended: every 30 to 60 minutes. A failed sync keeps the last good data and retries after 10 minutes.' },
+  applications: { title: 'Application inventory', description: 'Recommended: every 6 to 12 hours. The scan reads each device slowly to respect Endpoint Central\'s rate limit, so a full pass can take a long time.' },
+  patches:      { title: 'Patch data', description: 'Recommended: daily. Refreshes the patch-system list and the fleet\'s missing critical patches where the API allows it.' },
+  findings:     { title: 'Security findings history', description: 'Recommended: hourly. Records when each failing Security Posture check was first seen and when it was resolved. A check that could not be assessed is never marked resolved.' },
+}
+const intervalLabel = (m: number): string => (m < 60 ? `${m} minutes` : m === 60 ? '1 hour' : m % 60 === 0 ? `${m / 60} hours` : `${m} minutes`)
+
+function DataSyncSection({ canManage }: { canManage: boolean }) {
+  const { notify } = useToast()
+  const { data, error, refresh } = useSyncStatus()
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const save = async (source: string, module: string, patch: { enabled?: boolean; intervalMinutes?: number }) => {
+    setBusy(`${source}-${module}`)
+    try { await syncApi.setSchedule(source, patch, module as SyncModuleName); notify('success', 'Sync schedule saved', 'Applies from the next check.'); refresh() }
+    catch (e) { notify('error', 'Not saved', e instanceof Error ? e.message : 'Could not save the schedule.') }
+    finally { setBusy(null) }
+  }
+
+  return (
+    <SectionWrap title="Data Sync" description="How often Intune and Endpoint Central data is refreshed in the background. The dashboard always shows stored data first, so nobody waits for the APIs.">
+      {error && !data && <p className="text-xs text-red-600">Could not load the sync settings.</p>}
+      {data && (
+        <div className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+          <Database className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+          <p className="text-[0.65rem] text-slate-700">
+            Stored in <strong>{data.storage === 'postgres' ? 'PostgreSQL' : 'local files'}</strong>.
+            {data.storage === 'file' && ' Everything works the same without a database. To use PostgreSQL later, add it in Integrations → PostgreSQL.'}
+            {data.restartRequired && ' A PostgreSQL change is saved and applies after the server restarts.'}
+          </p>
+        </div>
+      )}
+      {data && Object.keys(SYNC_MODULE_INFO).map(module => {
+        const rows = data.sources.filter(s => s.module === module)
+        if (rows.length === 0) return null
+        const info = SYNC_MODULE_INFO[module]!
+        return (
+          <Card key={module} title={info.title} description={info.description}>
+            {rows.map((s, i) => (
+              <div key={`${s.source}-${s.module}`}>
+                {i > 0 && <Divider />}
+                <Toggle enabled={s.enabled} onChange={v => void save(s.source, s.module, { enabled: v })} label={s.displayName}
+                  description={s.configured ? `Last successful sync: ${s.lastSuccessAt ? new Date(s.lastSuccessAt).toLocaleString() : 'none yet'}` : 'Not connected. Add credentials in Integrations first.'} />
+                <div className="mt-3">
+                  <FieldRow label="Sync every" hint={canManage ? 'How often this is refreshed' : 'Set by an administrator'}>
+                    <Select value={String(s.intervalMinutes)} onChange={v => void save(s.source, s.module, { intervalMinutes: Number(v) })} disabled={!canManage || busy === `${s.source}-${s.module}`}
+                      options={[...new Set([...(SYNC_MODULE_INTERVALS[module] ?? []), s.intervalMinutes])].sort((a, b) => a - b).map(m => ({ value: String(m), label: intervalLabel(m) }))} />
+                  </FieldRow>
+                </div>
+              </div>
+            ))}
+          </Card>
+        )
+      })}
+      <div className="flex items-start gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+        <Info className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+        <p className="text-[0.65rem] text-slate-600">Application inventory and patch data keep their own cached copies, so screens that use them still show the last good data if a refresh fails. Slack schedules are saved the moment you change them.</p>
+      </div>
+    </SectionWrap>
+  )
+}
+
+function SecuritySection({ canEditSession }: { canEditSession: boolean }) {
+  const { notify } = useToast()
   const [mfaRequired, setMfaRequired] = useState(true)
   const [loginAttempts, setLoginAttempts] = useState('5')
   const [auditRetention, setAuditRetention] = useState('365')
@@ -1718,26 +1811,20 @@ function SecuritySection() {
   const [ipEnabled, setIpEnabled] = useState(false)
   const [ssoEnabled, setSsoEnabled] = useState(true)
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 900))
-    setSaving(false)
-    notify('success', 'Saved', 'Security settings updated')
-  }
+  const { save, saving, meta } = useSavedSettings('security', v => {
+    if (typeof v['mfaRequired'] === 'boolean') setMfaRequired(v['mfaRequired'])
+    if (typeof v['loginAttempts'] === 'string') setLoginAttempts(v['loginAttempts'])
+    if (typeof v['auditRetention'] === 'string') setAuditRetention(v['auditRetention'])
+    if (typeof v['ipAllowlist'] === 'string') setIpAllowlist(v['ipAllowlist'])
+    if (typeof v['ipEnabled'] === 'boolean') setIpEnabled(v['ipEnabled'])
+    if (typeof v['ssoEnabled'] === 'boolean') setSsoEnabled(v['ssoEnabled'])
+  })
+  const handleSave = () => void save({ mfaRequired, loginAttempts, auditRetention, ipAllowlist, ipEnabled, ssoEnabled })
 
   return (
-    <SectionWrap title="Security" description="Session management, access controls, and audit configuration">
+    <SectionWrap title="Security" description="Session management, access controls, and audit configuration" notice="Auto sign-out below is live and applies immediately. The other options are saved to the server and kept across restarts, but the portal does not enforce them yet.">
       <Card title="Session Management">
-        <FieldRow label="Session timeout" hint="Auto-logout after this period of inactivity">
-          <Select value={sessionTimeout} onChange={setSessionTimeout} options={[
-            { value: '15',   label: '15 minutes' },
-            { value: '30',   label: '30 minutes' },
-            { value: '60',   label: '1 hour' },
-            { value: '240',  label: '4 hours' },
-            { value: '480',  label: '8 hours' },
-            { value: '0',    label: 'Never (not recommended)' },
-          ]} />
-        </FieldRow>
+        <AutoSignOutRow canEdit={canEditSession} />
         <Divider />
         <FieldRow label="Failed login lockout" hint="Lock account after N failed attempts">
           <Select value={loginAttempts} onChange={setLoginAttempts} options={[
@@ -1784,7 +1871,7 @@ function SecuritySection() {
                 value={ipAllowlist}
                 onChange={e => setIpAllowlist(e.target.value)}
                 rows={4}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300/40 transition resize-none"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/40 transition resize-none"
               />
             </FieldRow>
             <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
@@ -1818,7 +1905,7 @@ function SecuritySection() {
         </div>
       </Card>
 
-      <SaveRow saving={saving} onSave={handleSave} />
+      <SaveRow saving={saving} onSave={handleSave} note={savedNote(meta)} />
     </SectionWrap>
   )
 }
@@ -1827,8 +1914,7 @@ function SecuritySection() {
 
 function NotificationsSection() {
   const { notify } = useToast()
-  const [saving, setSaving] = useState(false)
-  const [senderName, setSenderName] = useState('ITO Endpoint Alerts')
+  const [senderName, setSenderName] = useState('EndPoint+ Alerts')
   const [replyTo, setReplyTo] = useState('no-reply@zinnia.com')
   const [slackWebhook, setSlackWebhook] = useState('')
   const [slackEnabled, setSlackEnabled] = useState(false)
@@ -1837,6 +1923,14 @@ function NotificationsSection() {
   const [pagerEnabled, setPagerEnabled] = useState(false)
   const [pagerKey, setPagerKey] = useState('')
   const [testingSlack, setTestingSlack] = useState(false)
+  const [quietHoursOpen, setQuietHoursOpen] = useState(false)
+  const [quietHours, setQuietHours] = useState<QuietHoursConfig>({
+    enabled: false,
+    startHour: 18,
+    endHour: 8,
+    activeDays: [0, 1, 2, 3, 4],
+    criticalOverride: true,
+  })
 
   const handleTestSlack = async () => {
     setTestingSlack(true)
@@ -1850,15 +1944,25 @@ function NotificationsSection() {
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 900))
-    setSaving(false)
-    notify('success', 'Saved', 'Notification settings updated')
-  }
+  const { save, saving, meta } = useSavedSettings('notifications', v => {
+    if (typeof v['senderName'] === 'string') setSenderName(v['senderName'])
+    if (typeof v['replyTo'] === 'string') setReplyTo(v['replyTo'])
+    if (typeof v['slackEnabled'] === 'boolean') setSlackEnabled(v['slackEnabled'])
+    if (typeof v['digestEnabled'] === 'boolean') setDigestEnabled(v['digestEnabled'])
+    if (typeof v['digestFreq'] === 'string') setDigestFreq(v['digestFreq'])
+    if (typeof v['pagerEnabled'] === 'boolean') setPagerEnabled(v['pagerEnabled'])
+    const savedQuietHours = v['quietHours']
+    if (savedQuietHours && typeof savedQuietHours === 'object') {
+      const q = savedQuietHours as Partial<QuietHoursConfig>
+      if (typeof q.enabled === 'boolean' && typeof q.startHour === 'number' && typeof q.endHour === 'number' && Array.isArray(q.activeDays) && typeof q.criticalOverride === 'boolean') {
+        setQuietHours({ enabled: q.enabled, startHour: q.startHour, endHour: q.endHour, activeDays: q.activeDays.filter((day): day is number => typeof day === 'number'), criticalOverride: q.criticalOverride })
+      }
+    }
+  })
+  const handleSave = () => void save({ senderName, replyTo, slackEnabled, digestEnabled, digestFreq, pagerEnabled, quietHours })
 
   return (
-    <SectionWrap title="Notifications" description="Global delivery settings, email templates, and third-party channels">
+    <SectionWrap title="Notifications" description="Global delivery settings, email templates, and third-party channels" notice="Saved to the server and kept across restarts, but not enforced yet. Slack and PagerDuty credentials are never saved here: connect Slack in Integrations. The Slack connection test below is live.">
       <Card title="Email Delivery">
         <FieldRow label="Sender name" hint="Shown as the 'From' name in notification emails">
           <Input value={senderName} onChange={setSenderName} />
@@ -1888,6 +1992,17 @@ function NotificationsSection() {
         )}
       </Card>
 
+      <Card title="Quiet Hours" description="Define when non-critical notifications should be suppressed once delivery enforcement is enabled.">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-slate-600">
+            {quietHours.enabled
+              ? `Configured for ${quietHours.activeDays.length} day${quietHours.activeDays.length === 1 ? '' : 's'}, ${String(quietHours.startHour).padStart(2, '0')}:00–${String(quietHours.endHour).padStart(2, '0')}:00.`
+              : 'Disabled — non-critical notifications are not scheduled for suppression.'}
+          </div>
+          <Button variant="outline" onClick={() => setQuietHoursOpen(true)}>Configure quiet hours</Button>
+        </div>
+      </Card>
+
       <Card title="Slack" description="Send alerts to a Slack channel via incoming webhook">
         <Toggle enabled={slackEnabled} onChange={setSlackEnabled}
           label="Enable Slack notifications"
@@ -1896,7 +2011,7 @@ function NotificationsSection() {
         {slackEnabled && (
           <>
             <Divider />
-            <FieldRow label="Webhook URL" hint="Found in your Slack app's Incoming Webhooks section">
+            <FieldRow label="Webhook URL" hint="Not saved here: credentials belong in Integrations → Slack. Found in your Slack app's Incoming Webhooks section">
               <div className="flex gap-2">
                 <Input value={slackWebhook} onChange={setSlackWebhook} placeholder="https://hooks.slack.com/services/…" className="font-mono text-[0.65rem]" />
                 <button
@@ -1924,14 +2039,20 @@ function NotificationsSection() {
         {pagerEnabled && (
           <>
             <Divider />
-            <FieldRow label="Integration key" hint="32-character key from your PagerDuty service">
+            <FieldRow label="Integration key" hint="Not saved here (a key is a credential). 32-character key from your PagerDuty service">
               <Input value={pagerKey} onChange={setPagerKey} placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" className="font-mono" />
             </FieldRow>
           </>
         )}
       </Card>
 
-      <SaveRow saving={saving} onSave={handleSave} />
+      <SaveRow saving={saving} onSave={handleSave} note={savedNote(meta)} />
+      <QuietHoursModal
+        open={quietHoursOpen}
+        onClose={() => setQuietHoursOpen(false)}
+        config={quietHours}
+        onSave={setQuietHours}
+      />
     </SectionWrap>
   )
 }
@@ -1940,7 +2061,6 @@ function NotificationsSection() {
 
 function DataSection() {
   const { notify } = useToast()
-  const [saving, setSaving] = useState(false)
   const [deviceRetention, setDeviceRetention] = useState('365')
   const [activityRetention, setActivityRetention] = useState('90')
   const [piiMasking, setPiiMasking] = useState(false)
@@ -1949,20 +2069,22 @@ function DataSection() {
 
   const handleExport = async () => {
     setExporting(true)
-    await new Promise(r => setTimeout(r, 1500))
+    await new Promise(r => setTimeout(r, 300))
     setExporting(false)
-    notify('success', 'Export Ready', 'Your data export has been emailed to avinash.verma@zinnia.com')
+    // Not connected to anything yet: say so instead of reporting an email that was never sent.
+    notify('info', 'Not available yet', 'No export was created or emailed. Data export is not connected yet.')
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 900))
-    setSaving(false)
-    notify('success', 'Saved', 'Data & privacy settings updated')
-  }
+  const { save, saving, meta } = useSavedSettings('data', v => {
+    if (typeof v['deviceRetention'] === 'string') setDeviceRetention(v['deviceRetention'])
+    if (typeof v['activityRetention'] === 'string') setActivityRetention(v['activityRetention'])
+    if (typeof v['piiMasking'] === 'boolean') setPiiMasking(v['piiMasking'])
+    if (typeof v['gdprMode'] === 'boolean') setGdprMode(v['gdprMode'])
+  })
+  const handleSave = () => void save({ deviceRetention, activityRetention, piiMasking, gdprMode })
 
   return (
-    <SectionWrap title="Data & Privacy" description="Data retention, PII handling, and compliance export controls">
+    <SectionWrap title="Data & Privacy" description="Data retention, PII handling, and compliance export controls" notice="Saved to the server and kept across restarts. These options are recorded for your team, but the portal does not enforce them yet: Auto sign-out (Security) and the Data Sync schedules are the settings that take effect today.">
       <Card title="Retention Policies">
         <FieldRow label="Device record retention" hint="How long historical device data is stored">
           <Select value={deviceRetention} onChange={setDeviceRetention} options={[
@@ -2036,7 +2158,7 @@ function DataSection() {
         </div>
       </Card>
 
-      <SaveRow saving={saving} onSave={handleSave} />
+      <SaveRow saving={saving} onSave={handleSave} note={savedNote(meta)} />
     </SectionWrap>
   )
 }
@@ -2054,21 +2176,22 @@ function DangerSection() {
   const handleReset = async () => {
     if (confirmText !== CONFIRM_PHRASE) return
     setResetting(true)
-    await new Promise(r => setTimeout(r, 1500))
+    // Not connected to anything yet: say so instead of reporting a reset that did not happen.
+    await new Promise(r => setTimeout(r, 300))
     setResetting(false)
     setConfirmText('')
-    notify('success', 'Settings Reset', 'All settings restored to factory defaults')
+    notify('info', 'Not available yet', 'Nothing was reset. Settings reset is not connected to the server yet.')
   }
 
   const handlePurge = async () => {
     setPurging(true)
-    await new Promise(r => setTimeout(r, 1200))
+    await new Promise(r => setTimeout(r, 300))
     setPurging(false)
-    notify('success', 'Activity Purged', 'Activity log has been cleared')
+    notify('info', 'Not available yet', 'Nothing was deleted. Purging the activity log is not connected to the server yet.')
   }
 
   return (
-    <SectionWrap title="Danger Zone" description="Irreversible actions — proceed with extreme caution">
+    <SectionWrap title="Danger Zone" description="Irreversible actions — proceed with extreme caution" preview="These actions are not connected yet. Pressing them changes nothing; no data is deleted and no settings are reset.">
 
       {/* Warning banner */}
       <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
@@ -2171,14 +2294,14 @@ function DangerSection() {
 
       {/* Support link */}
       <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3">
-        <LifeBuoy className="h-4 w-4 text-orange-500 flex-shrink-0" />
+        <LifeBuoy className="h-4 w-4 text-indigo-500 flex-shrink-0" />
         <p className="text-[0.68rem] text-slate-600">
           Need help?{' '}
           <a
             href="https://github.com/anthropics/claude-code/issues"
             target="_blank"
             rel="noreferrer"
-            className="text-orange-600 font-semibold hover:underline focus-visible:ring-1 focus-visible:ring-orange-300 rounded"
+            className="text-indigo-600 font-semibold hover:underline focus-visible:ring-1 focus-visible:ring-indigo-300 rounded"
           >
             Open a support ticket →
           </a>
@@ -2192,7 +2315,7 @@ function DangerSection() {
 
 const ROLE_BADGE_FALLBACK = 'bg-sky-100 text-sky-700 border-sky-200'
 const BUILTIN_BADGE: Record<string, string> = {
-  'Global Admin': 'bg-orange-100 text-orange-700 border-orange-200',
+  'Global Admin': 'bg-indigo-100 text-indigo-700 border-indigo-200',
   'IT Admin':     'bg-lime-100 text-lime-700 border-lime-200',
   'Helpdesk':     'bg-slate-100 text-slate-700 border-slate-200',
 }
@@ -2210,11 +2333,12 @@ function RoleEditorModal({ open, role, groups, onClose, onSave }: {
   const [saving, setSaving] = useState(false)
   const isGlobalAdmin = role?.name === 'Global Admin'
 
-  useEffect(() => {
-    if (!open) return
-    setName(role?.name ?? '')
-    setPerms(role?.permissions ?? {})
-  }, [open, role])
+  // Load the role into the form whenever the editor opens or a different role is chosen (adjusted while rendering).
+  const [seen, setSeen] = useState({ open, role })
+  if (seen.open !== open || seen.role !== role) {
+    setSeen({ open, role })
+    if (open) { setName(role?.name ?? ''); setPerms(role?.permissions ?? {}) }
+  }
 
   const toggle = (key: string) => setPerms(prev => ({ ...prev, [key]: !prev[key] }))
 
@@ -2241,7 +2365,7 @@ function RoleEditorModal({ open, role, groups, onClose, onSave }: {
         </div>
 
         {isGlobalAdmin && (
-          <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-[0.72rem] text-orange-700">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-[0.72rem] text-indigo-700">
             Global Admin always has every permission, regardless of what's checked below — this can't be reduced, so nobody can lock every admin out.
           </div>
         )}
@@ -2259,7 +2383,7 @@ function RoleEditorModal({ open, role, groups, onClose, onSave }: {
                       checked={isGlobalAdmin ? true : !!perms[k.key]}
                       disabled={isGlobalAdmin}
                       onChange={() => toggle(k.key)}
-                      className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400 disabled:opacity-50"
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-500 focus:ring-indigo-400 disabled:opacity-50"
                     />
                   </label>
                 ))}
@@ -2301,7 +2425,15 @@ function RolesSection({ viewerRole, userEmail }: { viewerRole: UserToolRole; use
       .finally(() => setLoading(false))
   }, [notify])
 
-  useEffect(() => { if (canManage) load() }, [canManage, load])
+  useEffect(() => {
+    if (!canManage) return
+    let cancelled = false
+    Promise.all([rolesApi.listRoles(), rolesApi.permissionKeys(), rolesApi.listAssignments()])
+      .then(([r, g, a]) => { if (!cancelled) { setRoles(r.data); setGroups(g.data); setAssignments(a.data) } })
+      .catch(e => { if (!cancelled) notify('error', 'Failed to load roles', e instanceof Error ? e.message : 'Unknown error') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [canManage, notify])
 
   const openCreate = () => { setEditingRole(null); setEditorOpen(true) }
   const openEdit = (role: CustomRole) => { setEditingRole(role); setEditorOpen(true) }
@@ -2356,7 +2488,7 @@ function RolesSection({ viewerRole, userEmail }: { viewerRole: UserToolRole; use
 
   if (!canManage) {
     return (
-      <SectionWrap title="Roles & Permissions" description="Custom roles govern what each team member can see and do in ITO Endpoint">
+      <SectionWrap title="Roles & Permissions" description="Custom roles govern what each team member can see and do in EndPoint+">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex gap-3">
           <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700">You don't have permission to manage roles. Ask a Global Admin to grant "Manage custom roles & user assignments".</p>
@@ -2474,9 +2606,9 @@ function ToggleSwitch({ checked, onChange, disabled }: {
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 ${
+      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 ${
         disabled ? 'cursor-not-allowed opacity-40' : ''
-      } ${checked ? 'bg-[#F46C00]' : 'bg-slate-200'}`}
+      } ${checked ? 'bg-[#4F46E5]' : 'bg-slate-200'}`}
     >
       <span
         className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
@@ -2587,9 +2719,9 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
                     <div className="flex items-center gap-3 min-w-0">
                       {/* Icon */}
                       <div className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl ${
-                        roleBlocked ? 'bg-slate-100' : isOn ? 'bg-orange-50 border border-orange-100' : 'bg-slate-100'
+                        roleBlocked ? 'bg-slate-100' : isOn ? 'bg-indigo-50 border border-indigo-100' : 'bg-slate-100'
                       }`}>
-                        <Icon className={`h-4 w-4 ${roleBlocked ? 'text-slate-300' : isOn ? 'text-[#F46C00]' : 'text-slate-400'}`} />
+                        <Icon className={`h-4 w-4 ${roleBlocked ? 'text-slate-300' : isOn ? 'text-[#4F46E5]' : 'text-slate-400'}`} />
                       </div>
 
                       {/* Label + tags */}
@@ -2664,15 +2796,19 @@ function NavigationSection({ viewerRole }: { viewerRole: UserToolRole }) {
 
 export function SettingsPage({ viewerRole = 'Global Admin', userEmail }: { viewerRole?: UserToolRole; userEmail?: string }) {
   const [active, setActive] = useState<SectionKey>('general')
+  const permissions = usePermissions()
+  const canManageOcean = hasPermission(viewerRole, permissions, 'ocean.docs.manage')
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     general:       <GeneralSection />,
     navigation:    <NavigationSection viewerRole={viewerRole} />,
     integrations:  <IntegrationsSection />,
     roles:         <RolesSection viewerRole={viewerRole} userEmail={userEmail} />,
+    ocean:         <OceanKnowledgeSection canManage={canManageOcean} />,
     compliance:    <ComplianceSection />,
     automation:    <AutomationSection />,
-    security:      <SecuritySection />,
+    datasync:      <DataSyncSection canManage={hasPermission(viewerRole, permissions, 'sync.manage')} />,
+    security:      <SecuritySection canEditSession={viewerRole === 'Global Admin'} />,
     notifications: <NotificationsSection />,
     data:          <DataSection />,
     danger:        <DangerSection />,
@@ -2688,7 +2824,7 @@ export function SettingsPage({ viewerRole = 'Global Admin', userEmail }: { viewe
             Settings
           </p>
           <nav className="space-y-0.5" aria-label="Settings navigation">
-            {NAV.map(item => {
+            {NAV.filter(item => item.key !== 'ocean' || canManageOcean).map(item => {
               const Icon = item.icon
               const isActive = active === item.key
               const isDanger = 'danger' in item && item.danger
@@ -2700,17 +2836,17 @@ export function SettingsPage({ viewerRole = 'Global Admin', userEmail }: { viewe
                   onClick={() => setActive(item.key)}
                   aria-current={isActive ? 'page' : undefined}
                   data-selected-skip={isDanger ? '' : undefined}
-                  className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                  className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                     isActive
                       ? isDanger
                         ? 'bg-red-50 text-red-600 border border-red-200'
-                        : 'bg-orange-50 text-orange-700 border border-orange-200'
+                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                       : isDanger
                         ? 'text-red-400 hover:bg-red-50 hover:text-red-600 border border-transparent'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                   }`}
                 >
-                  <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? (isDanger ? 'text-red-500' : 'text-orange-600') : isDanger ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                  <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? (isDanger ? 'text-red-500' : 'text-indigo-600') : isDanger ? 'text-red-400' : 'text-slate-400 group-hover:text-slate-600'}`} />
                   <span className="flex-1 text-xs font-medium">{item.label}</span>
                   {'badge' in item && item.badge && !isActive && (
                     <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.55rem] font-bold text-slate-500">

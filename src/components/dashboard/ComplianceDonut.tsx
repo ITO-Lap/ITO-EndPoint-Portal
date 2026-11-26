@@ -47,15 +47,15 @@ export function ComplianceDonut({ segments, onSegmentClick, selectedLabel }: Com
                 type="button"
                 onClick={() => onSegmentClick?.(segment.label)}
                 aria-pressed={isSelected}
-                className={`flex items-start gap-2.5 min-w-0 w-full text-left rounded-lg px-2 py-1 -mx-2 transition focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                className={`flex items-start gap-2.5 min-w-0 w-full text-left rounded-lg px-2 py-1 -mx-2 transition focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                   isSelected
-                    ? 'bg-orange-50 ring-1 ring-orange-200'
+                    ? 'bg-indigo-50 ring-1 ring-indigo-200'
                     : 'hover:bg-slate-50'
                 } ${onSegmentClick ? 'cursor-pointer' : 'cursor-default'}`}
               >
                 <span className="mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: segment.color }} />
                 <div className="min-w-0">
-                  <p className={`text-xs font-semibold leading-tight ${isSelected ? 'text-orange-700' : 'text-slate-900'}`}>{segment.label}</p>
+                  <p className={`text-xs font-semibold leading-tight ${isSelected ? 'text-indigo-700' : 'text-slate-900'}`}>{segment.label}</p>
                   <p className="text-[0.65rem] text-slate-500 mt-0.5">
                     {segment.value.toLocaleString()} <span className="text-slate-400">·</span> {segment.percent}
                   </p>

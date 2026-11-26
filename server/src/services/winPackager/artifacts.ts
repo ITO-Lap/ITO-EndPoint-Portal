@@ -150,8 +150,6 @@ ${status}
 | Publisher | ${c.publisher} |
 | Setup file | ${c.setupFile} |
 | Install behavior | ${c.installBehavior} |
-| Minimum OS | ${c.minimumOs} |
-| Restart behavior | ${c.restartBehavior} |
 | Source SHA-256 | ${job.source.sha256} |
 | Signature | ${job.analysis?.signature.status ?? 'unknown'}${job.analysis?.signature.signer ? ` (${job.analysis.signature.signer})` : ''} |
 
@@ -162,7 +160,7 @@ ${status}
 ## Detection
 \`${c.detection.type}\`${c.detection.value ? ` — ${c.detection.value}` : ''}${c.detection.minVersion ? ` (minimum ${c.detection.minVersion})` : ''}
 
-${c.dependencies ? `## Dependencies\n${c.dependencies}\n\n` : ''}${c.supersedenceNotes ? `## Supersedence\n${c.supersedenceNotes}\n\n` : ''}${c.assignmentNotes ? `## Assignment notes\n${c.assignmentNotes}\n\n` : ''}Deploy to a pilot group first. This package is never published automatically.
+Test on a pilot device before any wider use.
 `
 }
 

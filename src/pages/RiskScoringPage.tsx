@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useCopilotPageContext } from '../context/CopilotContextProvider'
+import { useCopilotPageContext } from '../context/copilotContext'
 import { Brain, RefreshCw, XCircle, ChevronDown, ChevronRight, AlertTriangle, Shield, Ticket, BookOpen, Loader2 } from 'lucide-react'
 import { intelApi } from '../api/intelligence'
 import type { RiskScore } from '../api/intelligence'
@@ -67,7 +67,18 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    intelApi.riskScores(50)
+      .then(res => {
+        if (cancelled) return
+        if (res.success) { setData(res.data); setSummary(res.summary) }
+        else setError('Failed to compute risk scores — ensure Intune is configured.')
+      })
+      .catch(() => { if (!cancelled) setError('Network error computing risk scores.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   // Page-context awareness for the Endpoint Operations Copilot — let it know
   // which device the user has expanded, so "why is this mismatched?" resolves
@@ -81,7 +92,7 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
   }, [expanded, setCopilotPageContext])
 
   const toggle = (id: string) =>
-    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
   const filtered = filter === 'all' ? data : data.filter(d => d.riskLevel === filter)
   const { page, setPage, totalPages, paginated } = usePagination(filtered, PAGE_SIZE)
@@ -234,7 +245,7 @@ export function RiskScoringPage({ onBack }: { onBack: () => void }) {
                               type="button"
                               onClick={() => openJiraModal(score)}
                               disabled={jiraLoadingId === score.deviceId}
-                              className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 transition disabled:opacity-50"
+                              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
                             >
                               {jiraLoadingId === score.deviceId
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />

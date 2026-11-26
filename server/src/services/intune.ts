@@ -73,7 +73,7 @@ interface GraphDevice {
   deviceCategoryDisplayName: string | null
 }
 
-function fmtBytes(bytes: number | null | undefined, suffix: string): string | undefined {
+function fmtBytes(bytes: number | null | undefined): string | undefined {
   if (!bytes) return undefined
   const gb = bytes / 1_073_741_824
   return gb >= 1 ? `${gb.toFixed(0)} GB` : `${(bytes / 1_048_576).toFixed(0)} MB`
@@ -109,9 +109,9 @@ function mapGraphDevice(d: GraphDevice): Device {
     d.operatingSystem === 'Android' ? 'Android' :
     d.operatingSystem === 'iOS'     ? 'iOS'     : 'Windows'
 
-  const totalStorage = fmtBytes(d.totalStorageSpaceInBytes, 'GB')
-  const freeStorage  = fmtBytes(d.freeStorageSpaceInBytes,  'GB')
-  const totalMemory  = fmtBytes(d.physicalMemoryInBytes,    'GB')
+  const totalStorage = fmtBytes(d.totalStorageSpaceInBytes)
+  const freeStorage  = fmtBytes(d.freeStorageSpaceInBytes)
+  const totalMemory  = fmtBytes(d.physicalMemoryInBytes)
   const architecture = mapArch(d.processorArchitecture)
 
   return {
@@ -254,13 +254,11 @@ export async function diagnoseIntune(): Promise<{
   const config = getIntuneConfig()
   if (!config) return { configured: false, tokenOk: false, tokenError: 'Not configured', graphStatus: null, graphOk: false, graphError: null, deviceCount: 0 }
 
-  let token: string | null = null
-  let tokenError: string | null = null
+  let token: string
   try {
     token = await getAccessToken(config)
   } catch (e) {
-    tokenError = (e as Error).message
-    return { configured: true, tokenOk: false, tokenError, graphStatus: null, graphOk: false, graphError: null, deviceCount: 0 }
+    return { configured: true, tokenOk: false, tokenError: (e as Error).message, graphStatus: null, graphOk: false, graphError: null, deviceCount: 0 }
   }
 
   try {
@@ -296,15 +294,31 @@ interface GraphDetectedApp {
 
 // Live device-inventory scan results (registry/Add-Remove-Programs equivalent) —
 // beta-only endpoint; v1.0 doesn't expose this navigation property for this tenant.
+// Graph throttles detectedApps hard when a whole fleet is scanned. One shared "pause until" time makes every
+// concurrent caller back off together after a 429, instead of each one hammering the endpoint and failing.
+let detectedAppsPausedUntil = 0
+const DETECTED_APPS_ATTEMPTS = 5
+
 export async function getIntuneDeviceApps(deviceId: string, cfg?: RuntimeIntuneConfig): Promise<AppStatus[]> {
   const config = cfg ?? getIntuneConfig()
   if (!config) throw new Error('Intune credentials not configured')
   const token = await getAccessToken(config)
 
-  const res = await fetch(
-    `https://graph.microsoft.com/beta/deviceManagement/managedDevices/${deviceId}/detectedApps`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
+  let res: Response | undefined
+  for (let attempt = 0; attempt < DETECTED_APPS_ATTEMPTS; attempt++) {
+    const wait = detectedAppsPausedUntil - Date.now()
+    if (wait > 0) await waitForRetry(wait)
+    res = await fetch(
+      `https://graph.microsoft.com/beta/deviceManagement/managedDevices/${deviceId}/detectedApps`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    const transient = res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504
+    if (!transient || attempt === DETECTED_APPS_ATTEMPTS - 1) break
+    const delay = Math.max(retryDelayMs(res, attempt), 1_000) + Math.floor(Math.random() * 500)
+    if (res.status === 429) detectedAppsPausedUntil = Math.max(detectedAppsPausedUntil, Date.now() + delay)
+    else await waitForRetry(delay)
+  }
+  if (!res) throw new Error('Microsoft Graph request failed without a response')
   if (!res.ok) {
     if (res.status === 404) return []
     const body = await res.text().catch(() => '')
@@ -467,7 +481,6 @@ interface GraphDetectedAppHost { id: string; deviceName?: string; lastSyncDateTi
 const MAC_APP_TYPE = /^#microsoft\.graph\.macOS/i
 const WINDOWS_APP_TYPE = /^#microsoft\.graph\.(win32|windows|officeSuiteApp|microsoftStoreForBusinessApp|winGet)/i
 const SELF_SERVICE_INTENTS = new Set(['available', 'availableWithoutEnrollment'])
-const GRAPH_CONCURRENCY = 6
 const SELF_SERVICE_TTL_MS = 6 * 60 * 60 * 1000
 
 export interface IntuneSelfServiceResult {

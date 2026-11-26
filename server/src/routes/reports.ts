@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireAnyCapability } from '../middleware/requireRole.js'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { fetchAllDevices } from './devices.js'
@@ -13,6 +14,8 @@ import {
 import '../reporting/definitions.js'
 
 const router = Router()
+// Reports are shared by these pages; the server enforces what the UI already hides.
+router.use(requireAnyCapability('pages.Reports & Analytics', 'pages.Managed Devices', 'pages.Mac Fleet Reports'))
 
 const runSchema = z.object({
   limit:   z.coerce.number().int().min(1).max(5000).optional().default(500),

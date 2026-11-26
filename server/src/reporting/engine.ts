@@ -111,13 +111,19 @@ export function listReportMeta(): ReportMeta[] {
 
 interface CacheEntry { result: ReportResult; expiresAt: number }
 const cache = new Map<string, CacheEntry>()
+const MAX_CACHE_ENTRIES = 200
+
+// A cached result is only valid for the exact request that produced it: another page, sort order or filter
+// is a different answer. Key = report id + the parameters (keys sorted, so order never matters).
+const cacheKey = (reportId: string, params: ReportParams): string => {
+  const o = params as Record<string, unknown>
+  const body = Object.keys(o).filter(k => o[k] !== undefined).sort().map(k => `${k}=${JSON.stringify(o[k])}`).join('&')
+  return `${reportId}?${body}`
+}
 
 export function invalidateReportCache(reportId?: string): void {
-  if (reportId) {
-    cache.delete(reportId)
-  } else {
-    cache.clear()
-  }
+  if (!reportId) { cache.clear(); return }
+  for (const key of cache.keys()) if (key.startsWith(`${reportId}?`)) cache.delete(key)
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────
@@ -128,7 +134,8 @@ export function runReport(
   params: ReportParams = {},
 ): ReportResult {
   // Cache check
-  const cached = cache.get(def.id)
+  const key = cacheKey(def.id, params)
+  const cached = cache.get(key)
   if (cached && Date.now() < cached.expiresAt) {
     return { ...cached.result, cached: true }
   }
@@ -167,7 +174,11 @@ export function runReport(
     cached:      false,
   }
 
-  cache.set(def.id, { result, expiresAt: Date.now() + def.cacheTtlSec * 1000 })
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    for (const [k, v] of cache) if (Date.now() >= v.expiresAt) cache.delete(k)
+    if (cache.size >= MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value as string) // oldest first
+  }
+  cache.set(key, { result, expiresAt: Date.now() + def.cacheTtlSec * 1000 })
   return result
 }
 

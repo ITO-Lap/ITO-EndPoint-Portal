@@ -246,7 +246,7 @@ export async function createWindowsUpdateReport(force = false): Promise<{ conten
   const overview = buildWindowsUpdateOverview(systems, rows, excludedOther, now, trend, [featureCheck])
   const content = await exportToExcel(rows.map(r => ({ ...r })), columns, {
     title: 'Windows Update Report', subtitle: 'Windows client devices missing Feature or Security updates, reported by Endpoint Central Patch Manager',
-    generatedAt: now.toISOString(), generatedBy: 'ITO Endpoint', recordCount: rows.length, ...(overview.dataChecks ? { dataChecks: overview.dataChecks } : {}),
+    generatedAt: now.toISOString(), generatedBy: 'EndPoint+', recordCount: rows.length, ...(overview.dataChecks ? { dataChecks: overview.dataChecks } : {}),
   })
   return { content, filename: `windows-updates-${now.toISOString().slice(0, 10)}.xlsx`, devices: new Set(rows.map(r => r.device)).size, rows: rows.length, overview }
 }

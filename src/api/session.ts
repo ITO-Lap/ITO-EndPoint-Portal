@@ -7,7 +7,7 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const SESSION_KEY = 'ito.session'
 
-export interface SessionUser { email: string; displayName: string; role: string; permissions: Record<string, boolean> }
+export interface SessionUser { email: string; displayName: string; role: string; permissions: Record<string, boolean>; idleTimeoutMin?: number }
 interface StoredSession { token: string; user: SessionUser }
 
 export function getSession(): StoredSession | null {
@@ -133,4 +133,41 @@ export async function fetchCurrentUser(): Promise<SessionUser | null> {
   } catch {
     return getSession()?.user ?? null // server unreachable: keep the session, calls will report errors
   }
+}
+
+export const DEFAULT_IDLE_TIMEOUT_MIN = 60
+export const IDLE_TIMEOUT_CHOICES = [15, 30, 45, 60] as const
+
+/** When the stored session ends no matter what (the token's own expiry, 9 hours after sign-in), in ms since epoch. */
+export function sessionExpiryMs(token: string | undefined = getSession()?.token): number | null {
+  try {
+    const part = token?.split('.')[1]
+    if (!part) return null
+    const exp = (JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number }).exp
+    return typeof exp === 'number' ? exp * 1000 : null
+  } catch { return null }
+}
+
+/** Tells the server the person is active (background polling does not count). Failures are ignored. */
+export async function reportActivity(): Promise<number | null> {
+  try {
+    const { data } = await readEnvelope<{ idleTimeoutMin: number }>(await fetch(`${BASE_URL}/api/auth/activity`, { method: 'POST' }))
+    return data?.idleTimeoutMin ?? null
+  } catch { return null } // offline: the next report retries
+}
+
+export async function saveIdleTimeout(minutes: number): Promise<number> {
+  const res = await fetch(`${BASE_URL}/api/auth/session-settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idleTimeoutMin: minutes }),
+  })
+  const { data, error } = await readEnvelope<{ idleTimeoutMin: number }>(res)
+  if (!res.ok || !data) throw new Error(error ?? 'Could not save the auto sign-out time.')
+  return data.idleTimeoutMin
+}
+
+export async function fetchIdleTimeout(): Promise<number> {
+  try {
+    const { data } = await readEnvelope<{ idleTimeoutMin: number }>(await fetch(`${BASE_URL}/api/auth/session-settings`))
+    return data?.idleTimeoutMin ?? DEFAULT_IDLE_TIMEOUT_MIN
+  } catch { return DEFAULT_IDLE_TIMEOUT_MIN }
 }

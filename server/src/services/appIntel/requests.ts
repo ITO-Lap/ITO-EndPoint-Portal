@@ -104,7 +104,7 @@ export function buildRequestContent(app: AssessedApp, cve: AppCve, actor: string
     ...(notes?.summary ? ['', 'Release notes excerpt:', clean(notes.summary, 600)] : []),
     '',
     `Priority: ${priority} — ${basis}.`,
-    `Raised from ITO Endpoint → App Inventory by ${clean(actor, 80)}; inventory as of ${syncedAt ?? 'unknown'}. Nothing has been packaged, published or deployed.`,
+    `Raised from EndPoint+ → App Inventory by ${clean(actor, 80)}; inventory as of ${syncedAt ?? 'unknown'}. Nothing has been packaged, published or deployed.`,
   ]
   const slack = [
     `:package: *Version mismatch — ${slackEscape(name)} (${platform})*`,
@@ -112,7 +112,7 @@ export function buildRequestContent(app: AssessedApp, cve: AppCve, actor: string
     `Estimated impacted devices: *${app.affectedDevices}* of ${app.totalDevices}${pct != null ? ` (${pct}%)` : ''} · Owner: ${slackEscape(lc?.owner.name ? clean(lc.owner.name, 60) : 'not recorded')} · Ring: ${slackEscape(lc?.ring.ring ?? 'not identified')}`,
     `CVEs: ${slackEscape(cveLine(cve))}`,
     `Next step: ${slackEscape(clean(app.action, 160))}`,
-    `_Sent by ${slackEscape(clean(actor, 80))} from ITO Endpoint · Priority ${priority}_`,
+    `_Sent by ${slackEscape(clean(actor, 80))} from EndPoint+ · Priority ${priority}_`,
   ].join('\n')
   return { title: `[App update] ${name} (${platform}) → ${latest}`.slice(0, 250), priority, priorityBasis: basis, body: lines.join('\n'), slackText: slack }
 }

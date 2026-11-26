@@ -65,7 +65,7 @@ function CellValue({ colKey, value, deviceName, onPatchClick }: { colKey: string
     const colors: Record<string, string> = {
       Critical: 'bg-red-50 text-red-700 border-red-200',
       High:     'bg-amber-50 text-amber-700 border-amber-200',
-      Medium:   'bg-orange-50 text-orange-700 border-orange-200',
+      Medium:   'bg-indigo-50 text-indigo-700 border-indigo-200',
       Low:      'bg-emerald-50 text-emerald-700 border-emerald-200',
     }
     return (
@@ -128,7 +128,7 @@ function CellValue({ colKey, value, deviceName, onPatchClick }: { colKey: string
     if (!onPatchClick) return <span className={pill}>{value}</span>
     return (
       <button type="button" onClick={onPatchClick} aria-label={`View missing patches for ${deviceName ?? 'device'}`}
-        className={`${pill} cursor-pointer transition hover:shadow-sm hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400`}>
+        className={`${pill} cursor-pointer transition hover:shadow-sm hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400`}>
         {value}
       </button>
     )
@@ -309,10 +309,10 @@ export function KpiModal({
           <span><strong className="text-slate-500">Generated:</strong> {generatedAt}</span>
           <span><strong className="text-slate-500">Records:</strong> {kpiDevices.length.toLocaleString()} devices</span>
           {isPatchFilterKpi(kpiId) && !filterCleared && (
-            <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-orange-700">
+            <span className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-indigo-700">
               <strong>Active filter:</strong> {config.title}
               <button type="button" onClick={() => { setFilterCleared(true); setPage(1) }}
-                className="font-bold underline hover:text-orange-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
+                className="font-bold underline hover:text-indigo-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
                 Clear filter
               </button>
             </span>

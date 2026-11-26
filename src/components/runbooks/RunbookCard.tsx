@@ -32,7 +32,7 @@ export function RunbookCard({ data, aiLoading, onViewRunbook, onCopySteps }: Run
           <button
             type="button"
             onClick={onViewRunbook}
-            className="text-left text-xs font-semibold text-orange-600 hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-orange-300 rounded leading-snug transition"
+            className="text-left text-xs font-semibold text-indigo-600 hover:text-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-300 rounded leading-snug transition"
           >
             {data.runbookName}
           </button>

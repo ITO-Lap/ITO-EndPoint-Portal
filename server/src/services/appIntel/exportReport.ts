@@ -89,7 +89,7 @@ export async function buildAppExport(
 
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'ITO Endpoint'; wb.created = new Date(meta.generatedAt)
+  wb.creator = 'EndPoint+'; wb.created = new Date(meta.generatedAt)
   const ws = wb.addWorksheet(inv ? 'Applications' : 'Devices')
   ws.columns = columns.map(c => ({ header: c.label, key: c.key, width: c.width }))
   ws.getRow(1).font = { bold: true }

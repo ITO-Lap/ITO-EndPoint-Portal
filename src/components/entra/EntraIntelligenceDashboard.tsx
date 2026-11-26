@@ -55,7 +55,7 @@ function PlatformDistribution({ devices }: { devices: EntraDevice[] }) {
   const total = devices.length || 1
   const counts: Record<string, { count: number; color: string }> = {
     Windows:    { count: 0, color: '#3B82F6' },
-    macOS:      { count: 0, color: '#F59E0B' },
+    macOS:      { count: 0, color: '#818CF8' },
     'iOS/iPadOS':{ count: 0, color: '#8B5CF6' },
     Android:    { count: 0, color: '#10B981' },
     Linux:      { count: 0, color: '#64748B' },
@@ -151,6 +151,35 @@ function StaleDevicesTable({ devices }: { devices: EntraDevice[] }) {
   )
 }
 
+interface EntraLoadResult {
+  configured?: boolean
+  devices?: EntraDevice[]
+  error?: string
+  updated?: Date
+}
+
+async function loadEntraData(): Promise<EntraLoadResult> {
+  const r: EntraLoadResult = {}
+  try {
+    const overview = await api.fetchEntraOverview()
+    r.configured = overview.configured
+
+    if (overview.configured) {
+      // Devices — still needed for the Platform Distribution and Stale Devices widgets
+      const rawDevices = await api.fetchEntraDevices({ limit: 100 })
+      r.devices = rawDevices as unknown as EntraDevice[]
+    } else {
+      r.devices = []
+    }
+
+    r.updated = new Date()
+  } catch (e) {
+    r.error = e instanceof Error ? e.message : 'Failed to load Entra data'
+    r.devices = []
+  }
+  return r
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export function EntraIntelligenceDashboard() {
@@ -162,31 +191,25 @@ export function EntraIntelligenceDashboard() {
   const [lastUpdated,  setLastUpdated]  = useState<Date | null>(null)
   const [refreshing,   setRefreshing]   = useState(false)
 
-  const fetchAll = useCallback(async () => {
-    setError(null)
-    try {
-      const overview = await api.fetchEntraOverview()
-      setConfigured(overview.configured)
-
-      if (overview.configured) {
-        // Devices — still needed for the Platform Distribution and Stale Devices widgets
-        const rawDevices = await api.fetchEntraDevices({ limit: 100 })
-        setDevices(rawDevices as unknown as EntraDevice[])
-      } else {
-        setDevices([])
-      }
-
-      setLastUpdated(new Date())
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load Entra data'
-      setError(msg)
-      setDevices([])
-    } finally {
-      setLoading(false)
-    }
+  const applyResult = useCallback((r: EntraLoadResult) => {
+    if (r.configured !== undefined) setConfigured(r.configured)
+    if (r.devices) setDevices(r.devices)
+    if (r.error !== undefined) setError(r.error)
+    if (r.updated) setLastUpdated(r.updated)
+    setLoading(false)
   }, [])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  const fetchAll = useCallback(async () => {
+    setError(null)
+    applyResult(await loadEntraData())
+  }, [applyResult])
+
+  // error is already null on first mount, so the initial load skips the reset.
+  useEffect(() => {
+    let cancelled = false
+    loadEntraData().then(r => { if (!cancelled) applyResult(r) })
+    return () => { cancelled = true }
+  }, [applyResult])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -325,7 +348,7 @@ export function EntraIntelligenceDashboard() {
         )}
 
         <div className="text-center text-[0.62rem] text-slate-600 pt-2 border-t border-slate-800">
-          ITO Endpoint · Microsoft Entra Integration · {isLive ? 'Live Microsoft Graph data' : 'Not configured'}
+          EndPoint+ · Microsoft Entra Integration · {isLive ? 'Live Microsoft Graph data' : 'Not configured'}
         </div>
       </div>
     </div>

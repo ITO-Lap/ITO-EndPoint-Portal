@@ -6,22 +6,25 @@ import {
   sendCopilotMessage, confirmCopilotAction, rejectCopilotAction,
   listCopilotConversations, getCopilotConversation, CopilotForbiddenError,
 } from '../../api/copilot'
-import type { CopilotCitation, CopilotConversationSummary, CopilotPendingAction } from '../../api/copilot'
+import type { AnswerMode, CopilotCitation, CopilotConversationSummary, CopilotPendingAction, DocsStatus } from '../../api/copilot'
 import { CopilotMessageBubble } from './CopilotMessageBubble'
 import { CopilotPendingActionCard } from './CopilotPendingActionCard'
 import type { PendingActionStatus } from './CopilotPendingActionCard'
 import { CopilotConversationList } from './CopilotConversationList'
+import { OceanDocViewer } from './OceanDocViewer'
 import { useLocalStorage } from '../../hooks/useLocalStorage'
-import { useCopilotContextValue } from '../../context/CopilotContextProvider'
+import { useCopilotContextValue } from '../../context/copilotContext'
 import type { UserToolRole } from '../../types'
 import { hasPermission } from '../../lib/permissions'
-import { usePermissions } from '../../context/PermissionsContext'
+import { usePermissions } from '../../context/permissionsHooks'
 
 interface DisplayMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   citations?: CopilotCitation[]
+  mode?: AnswerMode | undefined
+  docsStatus?: DocsStatus | undefined
 }
 
 interface Props {
@@ -59,6 +62,30 @@ function clampSize(size: PanelSize): PanelSize {
 
 interface QuickAction { label: string; message: string }
 
+// Pages whose figures come from a report or a connected source, where "N/A" and "how is this generated" are natural questions.
+const DATA_PAGES = new Set([
+  'Managed Devices', 'Stale Devices', 'ManageEngine App Inventory', 'App Guardian', 'Mac Fleet Reports', 'Entra Intelligence', 'Security Posture',
+  'Policy Conflicts', 'Risk Scoring', 'Role Activity Audit', 'Patch Operations', 'Windows Updates', 'Reports & Analytics', 'Scheduled Reports',
+])
+
+/** Documentation prompts for the page the user is on (Ocean also uses the page as retrieval context). */
+function pagePrompts(page: string | undefined): QuickAction[] {
+  if (!page) return []
+  if (page === 'Dashboard') return [{ label: 'Explain this dashboard', message: 'Explain the Dashboard page and what each section shows.' }]
+  const out: QuickAction[] = [{ label: `Explain ${page}`, message: `What does the ${page} page do and how do I use it?` }]
+  if (DATA_PAGES.has(page)) {
+    out.push(
+      { label: 'Why is this status N/A?', message: `Why can a status show N/A or unknown on the ${page} page, and which data source provides it?` },
+      { label: 'How is this report generated?', message: `How is the data or report on the ${page} page generated, and which sources does it use?` },
+    )
+  }
+  out.push(
+    { label: 'Show required permissions', message: `What permissions or roles are required to use the ${page} page, and what API permissions does it need?` },
+    { label: 'Troubleshoot this issue', message: `How do I troubleshoot problems on the ${page} page?` },
+  )
+  return out
+}
+
 function buildQuickActions(context: ReturnType<typeof useCopilotContextValue>['context']): QuickAction[] {
   const actions: QuickAction[] = []
 
@@ -91,14 +118,19 @@ function buildQuickActions(context: ReturnType<typeof useCopilotContextValue>['c
     actions.push({ label: 'Explain this finding', message: `Explain policy conflict finding ${context.findingId}.` })
   }
 
-  if (actions.length === 0) {
-    actions.push(
+  // Record-specific prompts first (at most three), then documentation prompts for the current page.
+  const recordActions = actions.slice(0, 3)
+  const docActions = pagePrompts(context.page)
+  const combined = [...recordActions, ...docActions]
+
+  if (combined.length === 0) {
+    combined.push(
       { label: 'What can you help with?', message: 'What can you help with?' },
       { label: "Summarize today's risk findings", message: "Summarize today's risk findings." },
     )
   }
 
-  return actions.slice(0, 5)
+  return combined.slice(0, 6)
 }
 
 export function CopilotPanel({ viewerRole, userEmail }: Props) {
@@ -124,6 +156,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
   const [unavailable, setUnavailable]         = useState(false)
   const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null)
 
+  const [sourceCitation, setSourceCitation]   = useState<CopilotCitation | null>(null)
   const [pendingAction, setPendingAction]       = useState<CopilotPendingAction | null>(null)
   const [pendingStatus, setPendingStatus]       = useState<PendingActionStatus>('pending')
   const [pendingResultMessage, setPendingResultMessage] = useState<string | undefined>(undefined)
@@ -243,7 +276,7 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
         setUnavailable(true)
         setUnavailableMessage(res.message.content)
       } else {
-        setMessages(prev => [...prev, { id: nextLocalId(), role: 'assistant', content: res.message.content, citations: res.message.citations }])
+        setMessages(prev => [...prev, { id: nextLocalId(), role: 'assistant', content: res.message.content, citations: res.message.citations, mode: res.mode, docsStatus: res.docs?.status }])
         if (res.pendingAction) {
           setPendingAction(res.pendingAction)
           setPendingStatus('pending')
@@ -414,15 +447,15 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
                 {messages.length === 0 && !unavailable && !sendError && (
                   <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
                     <Waves className="h-7 w-7 text-sky-400" />
-                    <p className="text-sm font-semibold text-slate-500">Ask about device compliance, users, or policies</p>
-                    <p className="max-w-[15rem] text-xs text-slate-400">
-                      Ocean can look up real Intune, Entra, and ManageEngine data, and — with your confirmation — create Jira tickets, trigger automation tests, or send a Teams alert.
+                    <p className="text-sm font-semibold text-slate-500">Ask how this tool works, or about your devices</p>
+                    <p className="max-w-[16rem] text-xs text-slate-400">
+                      Ocean answers questions about modules, setup, access and troubleshooting from the project documentation (with sources), and can look up live Intune, Entra, and ManageEngine data you are allowed to see. With your confirmation it can also create Jira tickets, trigger automation tests, or send a Teams alert.
                     </p>
                   </div>
                 )}
 
                 {messages.map(m => (
-                  <CopilotMessageBubble key={m.id} role={m.role} content={m.content} citations={m.citations} />
+                  <CopilotMessageBubble key={m.id} role={m.role} content={m.content} citations={m.citations} mode={m.mode} docsStatus={m.docsStatus} onViewSource={setSourceCitation} />
                 ))}
 
                 {pendingAction && (
@@ -520,6 +553,9 @@ export function CopilotPanel({ viewerRole, userEmail }: Props) {
           )}
         </div>
       )}
+
+      {/* Source documentation behind a cited answer (above the panel) */}
+      <OceanDocViewer citation={sourceCitation} onClose={() => setSourceCitation(null)} />
     </>
   )
 }

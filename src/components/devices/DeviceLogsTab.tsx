@@ -28,7 +28,17 @@ export function DeviceLogsTab({ d }: { d: ApiDevice }) {
     setLoading(true); setError(null)
     deviceLogsApi.get(d.id).then(setLog).catch(e => setError(e instanceof Error ? e.message : 'Could not load the device log')).finally(() => setLoading(false))
   }, [d.id])
-  useEffect(() => { load(); return () => clearTimeout(timer.current) }, [load])
+  // Reload state is flagged during render when the device changes; the fetch itself runs in the effect.
+  const [prevId, setPrevId] = useState(d.id)
+  if (prevId !== d.id) { setPrevId(d.id); setLoading(true); setError(null) }
+  useEffect(() => {
+    let cancelled = false
+    deviceLogsApi.get(d.id)
+      .then(l => { if (!cancelled) setLog(l) })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the device log') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true; clearTimeout(timer.current) }
+  }, [d.id])
 
   // Polls Intune every 15 s until the collection finishes; held in a ref so it can reschedule itself.
   const pollRef = useRef<(requestId: string) => void>(() => undefined)
@@ -66,7 +76,7 @@ export function DeviceLogsTab({ d }: { d: ApiDevice }) {
         <h3 className="text-sm font-semibold text-slate-800">Device log · {log?.entries.length ?? 0} entries</h3>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Pull again</button>
-          <button type="button" onClick={() => doExport('excel')} disabled={!!exporting} className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-60">{exporting === 'excel' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />} Export Excel</button>
+          <button type="button" onClick={() => doExport('excel')} disabled={!!exporting} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600 disabled:opacity-60">{exporting === 'excel' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />} Export Excel</button>
           <button type="button" onClick={() => doExport('csv')} disabled={!!exporting} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{exporting === 'csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Export CSV</button>
         </div>
       </div>
@@ -80,8 +90,8 @@ export function DeviceLogsTab({ d }: { d: ApiDevice }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <button type="button" onClick={() => setCat('all')} className={`rounded-full border px-3 py-1 font-semibold ${cat === 'all' ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-600'}`}>All ({log?.entries.length ?? 0})</button>
-        {CATEGORIES.filter(c => counts.get(c)).map(c => <button key={c} type="button" onClick={() => setCat(cat === c ? 'all' : c)} className={`rounded-full border px-3 py-1 font-semibold ${cat === c ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-600'}`}>{c} ({counts.get(c)})</button>)}
+        <button type="button" onClick={() => setCat('all')} className={`rounded-full border px-3 py-1 font-semibold ${cat === 'all' ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600'}`}>All ({log?.entries.length ?? 0})</button>
+        {CATEGORIES.filter(c => counts.get(c)).map(c => <button key={c} type="button" onClick={() => setCat(cat === c ? 'all' : c)} className={`rounded-full border px-3 py-1 font-semibold ${cat === c ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600'}`}>{c} ({counts.get(c)})</button>)}
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search log" className="ml-auto rounded-lg border border-slate-200 px-2.5 py-1" />
       </div>
 
@@ -105,13 +115,13 @@ export function DeviceLogsTab({ d }: { d: ApiDevice }) {
       {shown.length > 500 && <p className="text-xs text-slate-500">Showing the first 500 of {shown.length}; the export contains all {log?.entries.length} entries.</p>}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><Stethoscope className="h-4 w-4 text-orange-500" /> Collect diagnostic logs from the device</h4>
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><Stethoscope className="h-4 w-4 text-indigo-500" /> Collect diagnostic logs from the device</h4>
         {canDiagnose ? <>
           <p className="mt-1 text-xs text-slate-500">Asks Intune to gather the device's own diagnostic logs (event logs, MDM and update logs). The device must be online. This runs an action on the device and needs the Graph permission DeviceManagementManagedDevices.PrivilegedOperations.All.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="button" onClick={startDiagnostics} disabled={diagBusy || (!!diag && !DONE.has(diag.status.toLowerCase()))} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{diagBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Stethoscope className="h-3.5 w-3.5" />} Collect diagnostics</button>
             {diag && <span className="text-xs text-slate-600">Status: <b>{diag.status}</b>{diag.requestedAt ? ` · requested ${fmt(diag.requestedAt)}` : ''}{!DONE.has(diag.status.toLowerCase()) && ' · checking every 15 s'}</span>}
-            {diag?.downloadUrl && <a href={diag.downloadUrl} className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:underline"><Download className="h-3.5 w-3.5" /> Download diagnostics (zip)</a>}
+            {diag?.downloadUrl && <a href={diag.downloadUrl} className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:underline"><Download className="h-3.5 w-3.5" /> Download diagnostics (zip)</a>}
           </div>
           {diagErr && <p className="mt-2 text-xs text-red-600">{diagErr}</p>}
         </> : <p className="mt-1 text-xs text-slate-500">{d.platform === 'macOS' ? 'On-device log collection is not exposed by the ManageEngine API used here, so macOS devices show the activity history above.' : 'Available for Windows devices managed by Intune only.'}</p>}

@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ShieldCheck, ShieldAlert, ShieldX, RefreshCw, X, Laptop2, Apple, Clock, Download } from 'lucide-react'
 import { api } from '../../api'
-import type { EndpointProtectionCoverageResult, PlatformCoverage, MissingAgentDevice, CoverageHealth } from '../../api'
+import type { EndpointProtectionCoverageResult, EndpointProtectionScanning, PlatformCoverage, MissingAgentDevice, CoverageHealth } from '../../api'
 import { SortableHeader } from '../ui/SortableHeader'
 import { sortRows, toggleSortDirection, type SortDirection } from '../../lib/tableSorting'
 
 const HEALTH_META: Record<CoverageHealth, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
   Healthy:  { label: 'Healthy',  color: '#10B981', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: <ShieldCheck className="h-4 w-4" /> },
-  Warning:  { label: 'Warning',  color: '#F59E0B', bg: 'bg-amber-50',   border: 'border-amber-200',   icon: <ShieldAlert className="h-4 w-4" /> },
+  Warning:  { label: 'Warning',  color: '#818CF8', bg: 'bg-amber-50',   border: 'border-amber-200',   icon: <ShieldAlert className="h-4 w-4" /> },
   Critical: { label: 'Critical', color: '#EF4444', bg: 'bg-red-50',     border: 'border-red-200',     icon: <ShieldX className="h-4 w-4" /> },
 }
 
@@ -46,6 +46,7 @@ function downloadCsv(filename: string, rows: MissingAgentDevice[]) {
 
 function MissingDevicesModal({ platform, agent, onClose }: { platform: 'Windows' | 'macOS'; agent: 'zscaler' | 'crowdstrike'; onClose: () => void }) {
   const [devices, setDevices] = useState<MissingAgentDevice[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const agentLabel = agent === 'zscaler' ? 'Zscaler' : 'CrowdStrike Falcon'
@@ -64,7 +65,7 @@ function MissingDevicesModal({ platform, agent, onClose }: { platform: 'Windows'
   }
 
   useEffect(() => {
-    api.fetchDevicesMissingAgent(platform, agent).then(setDevices).catch(() => setDevices([]))
+    api.fetchDevicesMissingAgent(platform, agent).then(setDevices).catch((e: unknown) => setLoadError(e instanceof Error && e.message ? e.message : 'Could not load this list.'))
   }, [platform, agent])
 
   return (
@@ -86,7 +87,9 @@ function MissingDevicesModal({ platform, agent, onClose }: { platform: 'Windows'
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {devices === null ? (
+          {loadError ? (
+            <div role="alert" className="p-8 text-center text-sm text-amber-700">{loadError}</div>
+          ) : devices === null ? (
             <div className="p-8 text-center text-sm text-slate-400">Loading…</div>
           ) : devices.length === 0 ? (
             <div className="p-8 text-center">
@@ -170,21 +173,33 @@ function PlatformCard({ coverage, icon, accent }: { coverage: PlatformCoverage; 
 
 export function EndpointProtectionCoverage() {
   const [data, setData] = useState<EndpointProtectionCoverageResult | null>(null)
+  const [scanning, setScanning] = useState<EndpointProtectionScanning | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(false)
 
-  const load = useCallback(() => {
-    setLoading(true)
-    setError(false)
-    api.fetchEndpointProtectionCoverage().then(setData).catch(() => setError(true)).finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => { load() }, [load])
+  const [retry, setRetry] = useState(0)
+  // The first scan of a large fleet takes minutes: show its progress and poll until it lands. A stale result is shown
+  // straight away and replaced when the background refresh finishes.
+  useEffect(() => {
+    let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = () => {
+      api.fetchEndpointProtectionCoverage().then(res => {
+        if (!live) return
+        setError(false)
+        if ('scanning' in res) { setScanning(res); timer = setTimeout(tick, 4000); return }
+        setScanning(null); setData(res); setLoading(false)
+        if (res.stale) timer = setTimeout(tick, 6000)
+      }).catch(() => { if (live) { setError(true); setLoading(false) } })
+    }
+    tick()
+    return () => { live = false; if (timer) clearTimeout(timer) }
+  }, [retry])
 
   const refresh = () => {
     setRefreshing(true)
-    api.refreshEndpointProtectionCoverage().then(setData).catch(() => setError(true)).finally(() => setRefreshing(false))
+    api.refreshEndpointProtectionCoverage().then(res => { setError(false); setData(res) }).catch(() => setError(true)).finally(() => setRefreshing(false))
   }
 
   return (
@@ -197,7 +212,7 @@ export function EndpointProtectionCoverage() {
           </div>
           <p className="text-[0.65rem] text-slate-400 flex items-center gap-1 mt-0.5">
             <Clock className="h-3 w-3" />
-            {data ? `Scanned ${new Date(data.scanTime).toLocaleString()} · ${(data.scanDurationMs / 1000).toFixed(1)}s` : 'Scanning physical Windows and macOS devices…'}
+            {data ? `${data.stale ? 'Last scan' : 'Scanned'} ${new Date(data.scanTime).toLocaleString()} · ${(data.scanDurationMs / 1000).toFixed(1)}s${data.stale ? ' · refreshing in the background…' : ''}` : 'Scanning physical Windows and macOS devices…'}
           </p>
         </div>
         <button type="button" onClick={refresh}
@@ -206,11 +221,20 @@ export function EndpointProtectionCoverage() {
         </button>
       </div>
 
-      {error ? (
-        <p className="text-sm text-slate-400 text-center py-6">Could not load endpoint protection coverage.</p>
-      ) : loading || !data ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[0, 1].map(i => <div key={i} className="h-40 rounded-2xl bg-slate-50 animate-pulse" />)}
+      {error && !data ? (
+        <div role="alert" className="py-6 text-center">
+          <p className="text-sm text-slate-500">Could not load endpoint protection coverage.</p>
+          <button type="button" onClick={() => { setLoading(true); setRetry(n => n + 1) }} className="mt-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Try again</button>
+        </div>
+      ) : !data ? (
+        <div className="rounded-2xl bg-slate-50 px-4 py-6" role="status">
+          {scanning?.progress && scanning.progress.total > 0 ? (
+            <>
+              <p className="text-sm font-semibold text-slate-700">Scanning {scanning.progress.done.toLocaleString()} of {scanning.progress.total.toLocaleString()} devices ({Math.round((scanning.progress.done / scanning.progress.total) * 100)}%)</p>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-[#6366F1] transition-all" style={{ width: `${(scanning.progress.done / scanning.progress.total) * 100}%` }} /></div>
+            </>
+          ) : <p className="text-sm font-semibold text-slate-700">{loading ? 'Loading coverage…' : 'Starting the fleet scan…'}</p>}
+          <p className="mt-1 text-[0.65rem] text-slate-400">The first scan reads every device's installed apps and can take a few minutes. Results appear here automatically — you don't need to refresh.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

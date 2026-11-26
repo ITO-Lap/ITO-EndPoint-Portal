@@ -4,18 +4,18 @@ import { api, type EndpointHealthLevel, type EndpointHealthScore, type MissingPa
 import { Modal } from '../components/ui/Modal'
 import type { UserToolRole } from '../types'
 import { hasPermission } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/permissionsHooks'
 
 const levelStyle: Record<EndpointHealthLevel, { label: string; color: string }> = {
   healthy: { label: 'Healthy', color: 'bg-emerald-100 text-emerald-700' },
   attention: { label: 'Attention', color: 'bg-amber-100 text-amber-700' },
-  high_risk: { label: 'High risk', color: 'bg-orange-100 text-orange-700' },
+  high_risk: { label: 'High risk', color: 'bg-indigo-100 text-indigo-700' },
   critical: { label: 'Critical', color: 'bg-red-100 text-red-700' },
 }
 
 const SEVERITY_STYLE: Record<MissingPatchSeverity, string> = {
   Critical: 'bg-red-50 text-red-700 border-red-200',
-  Important: 'bg-orange-50 text-orange-700 border-orange-200',
+  Important: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   Moderate: 'bg-amber-50 text-amber-700 border-amber-200',
   Low: 'bg-slate-50 text-slate-600 border-slate-200',
   Unrated: 'bg-slate-50 text-slate-500 border-slate-200',
@@ -84,7 +84,14 @@ export function PatchOperationsPage({ viewerRole, userEmail, onBack }: { viewerR
     catch (e) { setError(e instanceof Error ? e.message : 'Unable to load patch operations.') }
     finally { setLoading(false) }
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    api.fetchPatchOperations(false)
+      .then(d => { if (!cancelled) setData(d) })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Unable to load patch operations.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const critical = useMemo(() => data?.devices.filter(d => d.criticalPatchCount > 0) ?? [], [data])
   const permissions = usePermissions()
@@ -198,7 +205,7 @@ export function PatchOperationsPage({ viewerRole, userEmail, onBack }: { viewerR
           <div role="tablist" aria-label="Missing patch filters" className="mb-3 flex flex-wrap gap-1">
             {PATCH_VIEW_TABS.map(t => (
               <button key={t.view} type="button" role="tab" aria-selected={patchView === t.view} onClick={() => selectPatchView(t.view)}
-                className={`rounded-lg px-3 py-1 text-xs font-semibold ${patchView === t.view ? 'border border-orange-200 bg-orange-50 text-orange-700' : 'border border-transparent text-slate-500 hover:text-slate-700'}`}>
+                className={`rounded-lg px-3 py-1 text-xs font-semibold ${patchView === t.view ? 'border border-indigo-200 bg-indigo-50 text-indigo-700' : 'border border-transparent text-slate-500 hover:text-slate-700'}`}>
                 {t.label}
               </button>
             ))}

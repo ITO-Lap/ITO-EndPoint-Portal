@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { LoginPage } from '../../pages/LoginPage'
 import '../../pages/login.css'
+import { useAutoSignOut } from '../../hooks/useAutoSignOut'
 import { clearSession, fetchCurrentUser, getSession, installAuthFetch, takeRedirect, verifyToken, type SessionUser } from '../../api/session'
 
 type GateState = { status: 'checking' } | { status: 'signedOut' } | { status: 'signedIn'; user: SessionUser }
@@ -12,6 +13,14 @@ export function AuthGate({ children }: { children: (session: { user: SessionUser
   const [state, setState] = useState<GateState>(() => (redirect.token || getSession() ? { status: 'checking' } : { status: 'signedOut' }))
 
   const signOut = useCallback(() => { clearSession(); setState({ status: 'signedOut' }) }, [])
+
+  // Auto sign-out: inactivity (time set in Settings -> Security, default 60 min) or the 9-hour session limit.
+  const idleMinutes = state.status === 'signedIn' ? state.user.idleTimeoutMin : undefined
+  useAutoSignOut(state.status === 'signedIn', idleMinutes, reason => {
+    clearSession()
+    setLoginError(reason === 'idle' ? `You were signed out after ${idleMinutes ?? 15} minutes of inactivity. Please sign in again.` : 'Your session reached its 9-hour limit. Please sign in again.')
+    setState({ status: 'signedOut' })
+  })
 
   // Any 401 on a signed-in request (expired or revoked session) drops back to the login page.
   useEffect(() => installAuthFetch(() => setState({ status: 'signedOut' })), [])

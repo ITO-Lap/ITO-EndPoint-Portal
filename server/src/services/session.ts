@@ -1,4 +1,4 @@
-// Sign-in sessions for the ITO Endpoint portal: a signed token issued after
+// Sign-in sessions for the EndPoint+ portal: a signed token issued after
 // sign-in and verified on every /api request (middleware/requireSession.ts).
 //
 // People sign in with Microsoft (Entra ID, routes/auth.ts). Email-only sign-in is a
@@ -15,6 +15,7 @@ import { dataFile, legacyServerFile } from '../store/dataDir.js'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { chmodSync, readFileSync, writeFileSync } from 'fs'
 import jwt from 'jsonwebtoken'
+import { getIdleTimeoutMin } from '../store/sessionSettings.js'
 
 // SESSION_SECRET if set; otherwise a key generated once and kept in DATA_DIR/session-secret (git-ignored,
 // owner-only), so restarts do not sign everyone out or break a Microsoft sign-in that is in flight.
@@ -32,7 +33,10 @@ function loadSecret(): string {
 }
 
 export const SESSION_SECRET = loadSecret()
-export const SESSION_TTL_SECS = 8 * 60 * 60 // 8 hours
+// Hard limit: a session ends 9 hours after sign-in however active the person is, so everyone signs in again at least that often.
+export const SESSION_TTL_SECS = 9 * 60 * 60
+// Changes on every server start. It is stamped into each token, so a restart signs everyone out.
+export const BOOT_ID = randomBytes(12).toString('hex')
 // Who is Global Admin once Microsoft has verified them (and who may use email sign-in, when it is on).
 const DEFAULT_ALLOWED = 'avinash.verma@zinnia.com'
 
@@ -63,18 +67,44 @@ export function authenticate(emailInput: unknown, passwordInput?: unknown): Auth
     const passwordOk = typeof passwordInput === 'string' && timingSafeEqual(digest(passwordInput), digest(process.env['AUTH_PASSWORD']!))
     if (!allowed || !passwordOk) return { ok: false, status: 401, error: 'Incorrect email or password.' }
   } else if (!allowed) {
-    return { ok: false, status: 403, error: 'This email is not authorised to use ITO Endpoint.' }
+    return { ok: false, status: 403, error: 'This email is not authorised to use EndPoint+.' }
   }
   return { ok: true, claims: { email, displayName: displayNameFor(email), role: 'Global Admin' } }
 }
 
-export const signSession = (claims: SessionClaims): string => jwt.sign(claims, SESSION_SECRET, { expiresIn: SESSION_TTL_SECS })
+export const signSession = (claims: SessionClaims): string =>
+  jwt.sign({ ...claims, bid: BOOT_ID }, SESSION_SECRET, { expiresIn: SESSION_TTL_SECS })
+
+// Last time the person did something (not background polling), per token. Memory only: a restart
+// ends every session anyway, so nothing needs to survive one.
+const lastActive = new Map<string, number>()
+const tokenKey = (token: string): string => createHash('sha256').update(token).digest('hex')
+
+/** Records real user activity for this session. */
+export function touchSession(token: string, now = Date.now()): void { lastActive.set(tokenKey(token), now) }
+export function forgetSession(token: string): void { lastActive.delete(tokenKey(token)) }
+
+/** True when the person has been inactive for longer than the configured auto sign-out time. */
+export function isIdleExpired(token: string, now = Date.now()): boolean {
+  const key = tokenKey(token)
+  const seen = lastActive.get(key)
+  if (seen === undefined) { lastActive.set(key, now); return false } // first sight of a valid token counts as activity
+  return now - seen > getIdleTimeoutMin() * 60_000
+}
+
+/** Drops idle records of sessions that can no longer be valid (older than the hard limit). */
+export function pruneIdleRecords(now = Date.now()): void {
+  for (const [k, t] of lastActive) if (now - t > SESSION_TTL_SECS * 1000) lastActive.delete(k)
+}
 
 export function verifySession(token: string): SessionClaims | null {
   try {
-    const p = jwt.verify(token, SESSION_SECRET) as Partial<SessionClaims>
+    const p = jwt.verify(token, SESSION_SECRET) as Partial<SessionClaims> & { bid?: string }
+    if (p.bid !== BOOT_ID) return null // issued before the last server start
     return p.email && p.displayName && p.role ? { email: p.email, displayName: p.displayName, role: p.role } : null
   } catch {
     return null
   }
 }
+
+setInterval(() => pruneIdleRecords(), 60 * 60 * 1000).unref()

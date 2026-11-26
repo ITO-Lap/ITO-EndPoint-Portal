@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireAnyCapability } from '../middleware/requireRole.js'
 import { asyncHandler } from '../middleware/errorHandler.js'
 import { getPatchSystems, isPatchApiConfigured } from '../services/endpointCentralPatch.js'
 import { getPatchPrioritySummary } from '../services/patchPrioritySummary.js'
@@ -6,7 +7,7 @@ import { getPatchPrioritySummary } from '../services/patchPrioritySummary.js'
 const router = Router()
 
 // GET /api/patch/systems?platform=Mac&refresh=1
-router.get('/systems', asyncHandler(async (req, res) => {
+router.get('/systems', requireAnyCapability('pages.Patch Operations', 'pages.Mac Fleet Reports', 'pages.Reports & Analytics', 'pages.Security Posture'), asyncHandler(async (req, res) => {
   if (!isPatchApiConfigured()) {
     res.json({ success: true, data: { configured: false, systems: [] } })
     return

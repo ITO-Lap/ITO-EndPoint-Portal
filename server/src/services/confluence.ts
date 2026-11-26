@@ -2,16 +2,17 @@
 // Shares credentials with Jira (same Atlassian org). Returns an empty result
 // when unconfigured — never substitutes mock articles for real search results.
 
-const BASE_URL  = process.env.CONFLUENCE_BASE_URL ?? process.env.JIRA_BASE_URL
-const EMAIL     = process.env.JIRA_EMAIL
-const API_TOKEN = process.env.JIRA_API_TOKEN
+import { getConfluenceConfig } from '../store/atlassianConfig.js'
 
+// Read on every call, so credentials pushed from Settings -> Integrations apply immediately.
 export function isConfluenceConfigured(): boolean {
-  return !!(BASE_URL && EMAIL && API_TOKEN)
+  const c = getConfluenceConfig()
+  return !!(c.baseUrl && c.email && c.apiToken)
 }
 
 function authHeaders(): Record<string, string> {
-  const creds = Buffer.from(`${EMAIL}:${API_TOKEN}`).toString('base64')
+  const c = getConfluenceConfig()
+  const creds = Buffer.from(`${c.email}:${c.apiToken}`).toString('base64')
   return { Authorization: `Basic ${creds}`, 'Content-Type': 'application/json', Accept: 'application/json' }
 }
 
@@ -28,7 +29,7 @@ export async function searchConfluencePages(query: string): Promise<ConfluencePa
   if (!isConfluenceConfigured()) return []
 
   const cql = `type = page AND text ~ "${query}" ORDER BY lastmodified DESC`
-  const res = await fetch(`${BASE_URL}/wiki/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=10&expand=body.excerpt,space,history.lastUpdated`, { headers: authHeaders() })
+  const res = await fetch(`${getConfluenceConfig().baseUrl}/wiki/rest/api/content/search?cql=${encodeURIComponent(cql)}&limit=10&expand=body.excerpt,space,history.lastUpdated`, { headers: authHeaders() })
   if (!res.ok) throw new Error(`Confluence search error: ${res.status}`)
 
   const data = await res.json() as {

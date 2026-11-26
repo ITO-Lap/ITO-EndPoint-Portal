@@ -142,7 +142,7 @@ def build():
 
     # ── Cover banner ─────────────────────────────────────────────────────────
     banner_data = [[
-        Paragraph("ITO Endpoint AI Copilot", H_TITLE),
+        Paragraph("EndPoint+", H_TITLE),
         Paragraph("Product Feature Showcase", H_SUB),
         Paragraph("Enterprise IT endpoint management — connect Intune &amp; ManageEngine; "
                   "surface compliance, threats, and AI-powered remediation in one platform.", H_SUB),
@@ -263,7 +263,7 @@ def build():
     # ── Footer ────────────────────────────────────────────────────────────────
     story.append(Spacer(1, 10))
     story.append(Paragraph(
-        "ITO Endpoint AI Copilot  •  Zinnia Technology Platform  •  Confidential",
+        "EndPoint+  •  Verma Technology Platform  •  Confidential",
         FOOTER
     ))
 

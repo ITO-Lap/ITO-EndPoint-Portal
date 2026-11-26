@@ -18,7 +18,7 @@ export function SortableHeader({ label, sortKey, activeSortKey, direction, onSor
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className="inline-flex items-center gap-1 text-inherit hover:text-[#F46C00] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 rounded"
+        className="inline-flex items-center gap-1 text-inherit hover:text-[#4F46E5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
         title={`Sort by ${label}`}
       >
         {label}

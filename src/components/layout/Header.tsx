@@ -1,5 +1,5 @@
 import { Bell, ChevronDown, LogOut, Menu, Search, Settings } from 'lucide-react'
-import { ZinniaIcon } from '../ui/ZinniaLogo'
+import { EndpointPlusIcon } from '../ui/EndpointPlusLogo'
 import { useRef, useState, useEffect } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import type { NotificationItem } from '../../types'
@@ -32,7 +32,8 @@ export function Header({
   const [profileOpen, setProfileOpen]     = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
 
-  useEffect(() => { setSearchInput(searchValue) }, [searchValue])
+  const [prevSearchValue, setPrevSearchValue] = useState(searchValue)
+  if (searchValue !== prevSearchValue) { setPrevSearchValue(searchValue); setSearchInput(searchValue) }
 
   const notifRef   = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -56,7 +57,7 @@ export function Header({
       {/* Top gradient accent */}
       <div
         className="absolute top-0 left-0 right-0 h-[2px]"
-        style={{ background: 'linear-gradient(90deg, transparent, #FFC600 20%, #F46C00 50%, #0EA5E9 80%, transparent)' }}
+        style={{ background: 'linear-gradient(90deg, transparent, #22D3EE 20%, #4F46E5 50%, #0EA5E9 80%, transparent)' }}
       />
 
       <div className="flex h-14 items-center gap-3 px-4 md:px-5 overflow-visible">
@@ -71,9 +72,9 @@ export function Header({
           <Menu className="h-4 w-4" />
         </button>
 
-        {/* Zinnia icon — visible on mobile (when sidebar is hidden) */}
+        {/* Verma icon — visible on mobile (when sidebar is hidden) */}
         <div className="xl:hidden flex-shrink-0">
-          <ZinniaIcon className="h-7 w-auto" />
+          <EndpointPlusIcon className="h-7 w-auto" />
         </div>
 
         {/* Search — Apple-style command bar */}
@@ -130,7 +131,7 @@ export function Header({
               {unreadCount > 0 && (
                 <span
                   className="absolute -right-0.5 -top-0.5 grid h-4 w-4 place-items-center rounded-full text-[0.5rem] font-black text-white"
-                  style={{ background: 'linear-gradient(135deg, #F46C00, #FB471F)', boxShadow: '0 2px 8px rgba(244,108,0,0.40)' }}
+                  style={{ background: 'linear-gradient(135deg, #4F46E5, #06B6D4)', boxShadow: '0 2px 8px rgba(79,70,229,0.40)' }}
                 >
                   {unreadCount}
                 </span>
@@ -194,7 +195,7 @@ export function Header({
             >
               <div
                 className="grid h-6 w-6 place-items-center rounded-lg font-black flex-shrink-0 text-[0.62rem] text-white"
-                style={{ background: 'linear-gradient(135deg, #F46C00, #FB471F)', boxShadow: '0 2px 8px rgba(244,108,0,0.35)' }}
+                style={{ background: 'linear-gradient(135deg, #4F46E5, #06B6D4)', boxShadow: '0 2px 8px rgba(79,70,229,0.35)' }}
               >
                 {displayName ? displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'AV'}
               </div>

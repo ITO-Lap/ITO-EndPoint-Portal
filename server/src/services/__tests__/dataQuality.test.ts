@@ -18,6 +18,7 @@ import { buildUpdatesChecks } from '../appIntel/updateReport.js'
 import { getGraphCount, type GraphManagedDevice } from '../graphApi.js'
 import type { Device } from '../../types.js'
 import type { PatchSystemStatus } from '../endpointCentralPatch.js'
+import type { Json } from '../../test/json.js'
 
 const find = (checks: Array<{ label: string }>, label: string) => checks.find(c => c.label === label) as { status: string; detail: string } | undefined
 const dev = (o: Partial<Device>): Device => ({ deviceName: 'd', serialNumber: 'S', platform: 'Windows', managementSource: 'Microsoft Intune', lastCheckIn: new Date().toISOString(), ...o } as Device)
@@ -53,7 +54,7 @@ describe('dataNotesText', () => {
 describe('overview rendering', () => {
   const overview = { title: 'T', fields: [{ label: 'A', value: 1 }], action: 'Act', dataChecks: [warn('Source completeness', 'ManageEngine did not return data'), ok('Fine', '')] }
   it('adds a Data quality section to the Slack blocks and the email text', () => {
-    const { blocks } = buildOverviewMessage(overview, '2026-10-27') as { blocks: Array<Record<string, any>> }
+    const { blocks } = buildOverviewMessage(overview, '2026-10-27') as { blocks: Array<Record<string, Json>> }
     expect(blocks.map(b => b.type)).toEqual(['header', 'section', 'section', 'section', 'context'])
     expect(blocks[3]!.text.text).toContain('*Data quality*')
     expect(blocks[3]!.text.text).toContain('ManageEngine did not return data')

@@ -9,7 +9,7 @@ import { RequestDialog } from '../components/appIntel/RequestDialog'
 import { ConfidenceBadge, CveCell, InstallSourceBadge, PackagingBadge, ProviderBadge, StatusBadge } from '../components/appIntel/badges'
 import { timeAgo } from '../components/appIntel/format'
 import { hasPermission } from '../lib/permissions'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissions } from '../context/permissionsHooks'
 
 const PAGE_SIZE = 25
 const PACKAGING_ROW_STATUSES = ['Package required', 'Repackage required', 'Update available — existing package']
@@ -167,7 +167,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
       <div className={`flex flex-wrap items-start gap-3 ${embedded ? 'justify-end' : 'justify-between'}`}>
         {!embedded && (
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 rounded-2xl bg-orange-100 p-2.5"><Layers className="h-6 w-6 text-orange-600" /></div>
+            <div className="flex-shrink-0 rounded-2xl bg-indigo-100 p-2.5"><Layers className="h-6 w-6 text-indigo-600" /></div>
             <div>
               <h1 className="text-xl font-bold text-slate-900">App Intelligence</h1>
               <p className="mt-0.5 text-sm text-slate-500">Correlates Intune and ManageEngine app data with verified latest versions to decide what needs packaging. Read-only.</p>
@@ -179,7 +179,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
             {syncing ? 'Syncing…' : sync?.syncedAt ? `Last synced ${timeAgo(sync.syncedAt)} (${new Date(sync.syncedAt).toLocaleString()})` : 'Not synced yet'}
           </p>
           <button type="button" onClick={startSync} disabled={syncing}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
             <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />Sync now
           </button>
           {(['csv', 'xlsx'] as const).map(fmt => (
@@ -191,7 +191,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
           ))}
           {canWrite && (
             <button type="button" onClick={sendReport} disabled={syncing || noData}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
               <Send className="h-3.5 w-3.5" />Send report to Slack
             </button>
           )}
@@ -221,7 +221,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
         <button type="button" onClick={() => setShowSources(s => !s)} aria-expanded={showSources}
-          className="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
+          className="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
           <span>Data sources &amp; capabilities</span>
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showSources ? 'rotate-180' : ''}`} />
         </button>
@@ -232,7 +232,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
         <div role="tablist" aria-label="Platform" className="flex gap-1 rounded-2xl bg-slate-100 p-1">
           {(['windows', 'macOS'] as const).map(p => (
             <button key={p} type="button" role="tab" aria-selected={platform === p} onClick={() => changePlatform(p)}
-              className={`rounded-xl px-4 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${platform === p ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`rounded-xl px-4 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${platform === p ? 'is-selected' : 'text-slate-500 hover:text-slate-700'}`}>
               {p === 'windows' ? 'Windows' : 'macOS'}
             </button>
           ))}
@@ -243,7 +243,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
         {cards.map(c => (
           <button key={c.id} type="button" onClick={c.onClick ?? (() => applyStatus(c.status))} aria-pressed={c.pressed ?? (c.status !== null && status === c.status)}
             aria-label={`${c.label}: ${c.value ?? 'loading'}${c.status || c.onClick ? ' — filter the table' : ''}`}
-            className={`rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${(c.pressed ?? (c.status !== null && status === c.status)) ? 'border-orange-400 ring-2 ring-orange-200' : 'border-slate-200'}`}>
+            className={`rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${(c.pressed ?? (c.status !== null && status === c.status)) ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-200'}`}>
             <p className="text-xs font-semibold text-slate-600">{c.label}</p>
             <p className={`mt-1 text-3xl font-black tabular-nums ${c.tone}`}>{c.value === null ? '—' : c.value.toLocaleString()}</p>
             <p className="mt-0.5 text-[0.65rem] text-slate-400">{c.hint}</p>
@@ -256,7 +256,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
         {summary && <> Showing {summary.byInstallSource.custom.toLocaleString()} custom · {summary.byInstallSource.selfService.toLocaleString()} self-service · {summary.byInstallSource.manual.toLocaleString()} manual.</>}
       </p>
       {summary && summary.packageRequiredBreakdown.repackage > 0 && (
-        <button type="button" onClick={() => applyStatus('Repackage required')} className="-mt-3 self-start text-[0.7rem] font-semibold text-orange-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">
+        <button type="button" onClick={() => applyStatus('Repackage required')} className="-mt-3 self-start text-[0.7rem] font-semibold text-indigo-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
           Show {summary.packageRequiredBreakdown.repackage} app(s) that need a repackage
         </button>
       )}
@@ -267,7 +267,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
             <span className="sr-only">Search apps</span>
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search app, publisher or bundle id…"
-              className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-300" />
+              className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
           </label>
           <label className="text-[0.62rem] font-semibold text-slate-500">Provider
             <select value={provider} onChange={e => { setProvider(e.target.value as ProviderId | ''); setPage(1) }} className="mt-0.5 block rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-normal text-slate-700">
@@ -306,10 +306,10 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
             </select>
           </label>
           <label className="flex items-center gap-1.5 self-end pb-1.5 text-[0.7rem] font-semibold text-slate-600">
-            <input type="checkbox" checked={updateOnly} onChange={toggleUpdates} className="h-3.5 w-3.5 rounded border-slate-300 text-orange-500 focus:ring-orange-400" />
+            <input type="checkbox" checked={updateOnly} onChange={toggleUpdates} className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-500 focus:ring-indigo-400" />
             Only apps with an update available
           </label>
-          <button type="button" onClick={reset} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Reset</button>
+          <button type="button" onClick={reset} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Reset</button>
         </div>
       </div>
 
@@ -347,10 +347,10 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {list.rows.map(r => (
-                  <tr key={r.key} onClick={() => setSelected(r)} className="cursor-pointer align-top hover:bg-orange-50/40">
+                  <tr key={r.key} onClick={() => setSelected(r)} className="cursor-pointer align-top hover:bg-indigo-50/40">
                     <td className="px-3 py-2">
                       <button type="button" onClick={e => { e.stopPropagation(); setSelected(r) }} aria-label={`View details for ${r.app}`}
-                        className="text-left font-semibold text-slate-800 hover:text-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 rounded">{r.app}</button>
+                        className="text-left font-semibold text-slate-800 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">{r.app}</button>
                       <div className="mt-0.5"><ConfidenceBadge confidence={r.confidence} /></div>
                     </td>
                     <td className="px-3 py-2 text-slate-500">{r.publisher ?? '—'}</td>
@@ -375,7 +375,7 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
                     <td className="max-w-[14rem] px-3 py-2 text-slate-600">
                       {r.platform === 'macOS' && r.affectedDevices > 0 && r.latestVerifiedVersion ? (
                         <button type="button" onClick={e => { e.stopPropagation(); setSelected(r) }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-left text-[0.68rem] font-bold text-orange-700 hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-left text-[0.68rem] font-bold text-indigo-700 hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
                           <Package className="h-3.5 w-3.5" />Packaging needed <ExternalLink className="h-3 w-3" />
                         </button>
                       ) : r.action}
@@ -387,11 +387,11 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
                           {r.request?.slackAt && <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[0.6rem] font-bold text-sky-700" title={`Slack notified ${new Date(r.request.slackAt).toLocaleString()}`}>Slack sent</span>}
                           {canWrite && !r.request?.jiraKey && PACKAGING_ROW_STATUSES.includes(r.status) && (
                             <button type="button" onClick={e => { e.stopPropagation(); setDialog({ row: r, kind: 'jira' }) }} aria-label={`Create packaging request for ${r.app}`}
-                              className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-white px-1.5 py-0.5 text-[0.62rem] font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"><Package className="h-3 w-3" />Request</button>
+                              className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 text-[0.62rem] font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"><Package className="h-3 w-3" />Request</button>
                           )}
                           {canWrite && (
                             <button type="button" onClick={e => { e.stopPropagation(); setDialog({ row: r, kind: 'slack' }) }} aria-label={`Notify Slack about ${r.app}`}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[0.62rem] font-semibold text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"><Send className="h-3 w-3" />Slack</button>
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[0.62rem] font-semibold text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"><Send className="h-3 w-3" />Slack</button>
                           )}
                         </div>
                       )}
@@ -411,9 +411,9 @@ export function AppIntelligencePage({ viewerRole, userEmail, embedded = false }:
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
             <span>{list.total.toLocaleString()} app{list.total === 1 ? '' : 's'}</span>
             <div className="flex items-center gap-2">
-              <button type="button" disabled={list.page <= 1} onClick={() => setPage(list.page - 1)} className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Previous</button>
+              <button type="button" disabled={list.page <= 1} onClick={() => setPage(list.page - 1)} className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Previous</button>
               <span>Page {list.page} of {list.totalPages}</span>
-              <button type="button" disabled={list.page >= list.totalPages} onClick={() => setPage(list.page + 1)} className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">Next</button>
+              <button type="button" disabled={list.page >= list.totalPages} onClick={() => setPage(list.page + 1)} className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:bg-slate-50 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">Next</button>
             </div>
           </div>
         )}
