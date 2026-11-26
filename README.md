@@ -5,6 +5,27 @@ Internal web portal for Verma IT Operations: one place to see and act on Windows
 - **Stack:** React 19 · Vite · TypeScript · Tailwind 4 (client) · Express 5 · TypeScript (server) · optional PostgreSQL · IIS reverse proxy + Windows Service in production.
 - **Docs status:** the numbered documents below were written from the code (labels *Verified / Inferred / Not verified*). Start with the overview, and read [15](docs/15-known-gaps-and-verification-checklist.md) before relying on anything marked "Not verified".
 
+## Bring your own API keys (read this first)
+
+EndPoint+ ships **without any credentials**. With nothing configured it runs on built-in **mock data**, so the dashboards load but show sample devices only. To see your own fleet and use the AI features you must supply **your own** keys and tenant details; none are provided with the repository.
+
+1. Copy the template: `cp server/.env.example server/.env` (the server reads `server/.env` only).
+2. Fill in only the integrations you use, then restart the server:
+
+| To enable | Set in `server/.env` | Where to get it |
+|---|---|---|
+| Ocean / AI Copilot | `GEMINI_API_KEY` (and/or `OPENAI_API_KEY`) | Your own Google AI Studio or OpenAI account |
+| Microsoft Intune data | `INTUNE_TENANT_ID`, `INTUNE_CLIENT_ID`, `INTUNE_CLIENT_SECRET` | An app registration in **your** Entra tenant with the Graph permissions in [docs/13](docs/13-api-permission-matrix.md) |
+| Microsoft sign-in | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` | An Entra app registration for sign-in |
+| ManageEngine Endpoint Central | `MANAGEENGINE_CLIENT_ID`, `MANAGEENGINE_CLIENT_SECRET`, `MANAGEENGINE_REFRESH_TOKEN`, `MANAGEENGINE_API_DOMAIN` | Your ManageEngine API console |
+| Slack reports | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` (and channel IDs) | A Slack app in your workspace |
+| Jira / Confluence | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` | Your Atlassian account |
+| PostgreSQL (optional) | `DATABASE_URL` | Your own database |
+
+Every variable is documented in [docs/14 — Environment variable reference](docs/14-environment-variable-reference.md). Some integrations can also be set from **Settings → Integrations** inside the app.
+
+**Security:** never commit `server/.env` or paste keys into issues, pull requests or chat. Use your own least-privilege credentials and rotate any key that has been exposed.
+
 ## Quick start
 
 ```bash
